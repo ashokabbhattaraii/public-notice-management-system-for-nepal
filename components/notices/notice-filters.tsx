@@ -74,180 +74,98 @@ export function NoticeFilters({
   const hasActiveFilters = selectedCategory !== 'all' || selectedPriority !== 'all' || searchQuery;
 
   return (
-    <Card className="bg-card border border-border p-0 sticky top-20">
-      <div className="space-y-1">
-        {/* Search Section */}
-        <div className="border-b border-border">
+    <div className="space-y-4 animate-in fade-in duration-500">
+      {/* Main Search Bar - Google Style */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search notices by title, content, or organization..."
+          className="pl-12 pr-4 py-3 rounded-full border border-border/50 focus:border-primary/50 hover:border-border transition-all duration-300 shadow-sm hover:shadow-md focus:shadow-md focus:ring-0"
+          value={localSearch}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
+        {localSearch && (
           <button
-            onClick={() => toggleSection('search')}
-            className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
+            onClick={() => handleSearchChange('')}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
-              <Search className="w-4 h-4" />
-              Search
-            </h3>
-            {expandedSections.search ? (
-              <ChevronUp className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            )}
+            <X className="w-4 h-4" />
           </button>
-          {expandedSections.search && (
-            <div className="px-4 pb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by title or content..."
-                  className="pl-10 text-sm"
-                  value={localSearch}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                />
-              </div>
-              {localSearch && (
-                <button
-                  onClick={() => handleSearchChange('')}
-                  className="mt-2 text-xs text-primary hover:underline"
-                >
-                  Clear search
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Category Section */}
-        <div className="border-b border-border">
-          <button
-            onClick={() => toggleSection('category')}
-            className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
-          >
-            <h3 className="font-semibold text-sm text-foreground">Categories</h3>
-            {expandedSections.category ? (
-              <ChevronUp className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            )}
-          </button>
-          {expandedSections.category && (
-            <div className="px-4 pb-4 space-y-3">
-              <button
-                onClick={() => onCategoryChange('all')}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  selectedCategory === 'all'
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'hover:bg-muted text-foreground'
-                }`}
-              >
-                All Categories
-              </button>
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat.value}
-                  onClick={() => onCategoryChange(cat.value)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                    selectedCategory === cat.value
-                      ? 'bg-primary text-primary-foreground font-medium'
-                      : 'hover:bg-muted text-foreground'
-                  }`}
-                >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Priority Section */}
-        <div className="border-b border-border">
-          <button
-            onClick={() => toggleSection('priority')}
-            className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
-          >
-            <h3 className="font-semibold text-sm text-foreground">Priority</h3>
-            {expandedSections.priority ? (
-              <ChevronUp className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            )}
-          </button>
-          {expandedSections.priority && (
-            <div className="px-4 pb-4 space-y-3">
-              <button
-                onClick={() => onPriorityChange('all')}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  selectedPriority === 'all'
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'hover:bg-muted text-foreground'
-                }`}
-              >
-                All Priorities
-              </button>
-              {PRIORITIES.map(pri => (
-                <button
-                  key={pri.value}
-                  onClick={() => onPriorityChange(pri.value)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                    selectedPriority === pri.value
-                      ? 'bg-primary text-primary-foreground font-medium'
-                      : 'hover:bg-muted text-foreground'
-                  }`}
-                >
-                  <div className={`w-3 h-3 rounded-full ${pri.color.split(' ')[0]}`}></div>
-                  <span>{pri.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Reset Button */}
-        {hasActiveFilters && (
-          <div className="p-4 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              className="w-full text-sm"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Clear All Filters
-            </Button>
-          </div>
-        )}
-
-        {/* Active Filters Summary */}
-        {hasActiveFilters && (
-          <div className="px-4 pb-4 pt-2 border-t border-border bg-muted/30">
-            <p className="text-xs text-muted-foreground font-medium mb-2">Active Filters:</p>
-            <div className="flex flex-wrap gap-2">
-              {searchQuery && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
-                  Search: "{searchQuery}"
-                  <button onClick={() => handleSearchChange('')} className="hover:opacity-70">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {selectedCategory !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
-                  {CATEGORIES.find(c => c.value === selectedCategory)?.label}
-                  <button onClick={() => onCategoryChange('all')} className="hover:opacity-70">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {selectedPriority !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
-                  {PRIORITIES.find(p => p.value === selectedPriority)?.label}
-                  <button onClick={() => onPriorityChange('all')} className="hover:opacity-70">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
         )}
       </div>
-    </Card>
+
+      {/* Filter Chips */}
+      <div className="flex flex-wrap gap-2 animate-in fade-in duration-500 delay-100">
+        <div className="text-xs font-medium text-muted-foreground">Filter by:</div>
+        
+        {/* Category Buttons */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onCategoryChange('all')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
+              selectedCategory === 'all'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'bg-muted/50 text-foreground hover:bg-muted'
+            }`}
+          >
+            All
+          </button>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat.value}
+              onClick={() => onCategoryChange(cat.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md flex items-center gap-2 ${
+                selectedCategory === cat.value
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'bg-muted/50 text-foreground hover:bg-muted'
+              }`}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Priority Buttons */}
+        <div className="w-full flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
+          <div className="text-xs font-medium text-muted-foreground w-full">Priority:</div>
+          <button
+            onClick={() => onPriorityChange('all')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
+              selectedPriority === 'all'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'bg-muted/50 text-foreground hover:bg-muted'
+            }`}
+          >
+            All
+          </button>
+          {PRIORITIES.map(pri => (
+            <button
+              key={pri.value}
+              onClick={() => onPriorityChange(pri.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
+                selectedPriority === pri.value
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'bg-muted/50 text-foreground hover:bg-muted'
+              }`}
+            >
+              {pri.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Clear Filters Button */}
+      {hasActiveFilters && (
+        <Button
+          variant="outline"
+          onClick={handleReset}
+          className="w-full text-sm transition-all duration-300 hover:bg-destructive/10 hover:text-destructive"
+        >
+          <X className="w-4 h-4 mr-2" />
+          Clear All Filters
+        </Button>
+      )}
+    </div>
   );
 }

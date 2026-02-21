@@ -11,17 +11,8 @@ import { useAuth } from '@/lib/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty } from '@/components/ui/empty';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { AlertCircle, TrendingUp, Clock, Zap } from 'lucide-react';
-
-const CATEGORY_STATS = [
-  { category: 'exams', label: 'Exams', icon: '📝', color: 'bg-blue-50 dark:bg-blue-950' },
-  { category: 'vacancies', label: 'Vacancies', icon: '💼', color: 'bg-green-50 dark:bg-green-950' },
-  { category: 'tenders', label: 'Tenders', icon: '🏢', color: 'bg-purple-50 dark:bg-purple-950' },
-  { category: 'policy', label: 'Policies', icon: '📋', color: 'bg-amber-50 dark:bg-amber-950' },
-  { category: 'announcements', label: 'Announcements', icon: '📢', color: 'bg-cyan-50 dark:bg-cyan-950' },
-];
+import { Skeleton as AnimSkeleton } from '@/components/ui/skeleton';
+import { AlertCircle } from 'lucide-react';
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -54,151 +45,95 @@ export default function Home() {
     setIsModalOpen(true);
   };
 
-  const getCategoryCount = (category: string) => {
-    return MOCK_NOTICES.filter(n => n.category === category).length;
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
 
       <main className="flex-1">
-        {/* Hero Section - Enhanced */}
-        <section className="relative border-b border-border bg-gradient-to-r from-card via-card to-primary/5 overflow-hidden">
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full -mr-48 -mt-48"></div>
+        {/* Clean Google-like Search Interface */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Title Section with animation */}
+          <div className="pt-8 pb-6 animate-in fade-in slide-in-from-top-2 duration-500">
+            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
+              Government Notices
+            </h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
+              Search across all Nepal government agencies and institutions
+            </p>
           </div>
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-            <div className="max-w-3xl">
-              <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-3 text-pretty">
-                Nepal Government Notices Hub
-              </h1>
-              <p className="text-lg sm:text-xl text-muted-foreground mb-6 max-w-2xl">
-                Central gateway for government notifications from Public Service Commission, Tribhuvan University, Nepal Rastra Bank, Ministry of Foreign Affairs, and more.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button asChild variant="default" className="gap-2">
-                  <a href="#notices">
-                    <Zap className="w-4 h-4" />
-                    View Latest Notices
-                  </a>
-                </Button>
-                {!isAuthenticated && <Button asChild variant="outline">
-                  <a href="/login">Sign In for Saved Items</a>
-                </Button>}
-              </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Stats Section */}
-        <section className="border-b border-border bg-muted/30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              {CATEGORY_STATS.map(cat => (
-                <Card key={cat.category} className="p-4 text-center hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedCategory(cat.category)}>
-                  <div className={`text-3xl mb-2 ${cat.color} w-12 h-12 rounded-lg flex items-center justify-center mx-auto`}>
-                    {cat.icon}
-                  </div>
-                  <p className="text-sm font-medium text-foreground">{cat.label}</p>
-                  <p className="text-lg font-bold text-primary mt-1">{getCategoryCount(cat.category as any)}</p>
-                </Card>
-              ))}
-            </div>
+          {/* Filters Section */}
+          <div className="mb-8 animate-in fade-in slide-in-from-top duration-500 delay-100">
+            <NoticeFilters
+              onSearch={setSearchQuery}
+              onCategoryChange={setSelectedCategory}
+              onPriorityChange={setSelectedPriority}
+              selectedCategory={selectedCategory}
+              selectedPriority={selectedPriority}
+              searchQuery={searchQuery}
+            />
           </div>
-        </section>
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="notices">
           {/* Authentication Notice */}
           {!isAuthenticated && !isLoading && (
-            <Alert className="mb-6 border-primary/20 bg-primary/5">
+            <Alert className="mb-6 border-primary/20 bg-primary/5 animate-in fade-in slide-in-from-left duration-500 delay-150">
               <AlertCircle className="h-4 w-4 text-primary" />
-              <AlertDescription className="text-foreground">
-                <span className="font-medium">Pro Tip:</span> <a href="/login" className="font-medium text-primary underline hover:no-underline">Sign in</a> to bookmark notices and get personalized alerts.
+              <AlertDescription className="text-foreground text-sm">
+                <span className="font-medium">Tip:</span> <a href="/login" className="font-medium text-primary hover:underline transition-all">Sign in</a> to save notices and receive personalized alerts.
               </AlertDescription>
             </Alert>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar - Filters */}
-            <div className="lg:col-span-1">
-              <NoticeFilters
-                onSearch={setSearchQuery}
-                onCategoryChange={setSelectedCategory}
-                onPriorityChange={setSelectedPriority}
-                selectedCategory={selectedCategory}
-                selectedPriority={selectedPriority}
-                searchQuery={searchQuery}
-              />
+          {/* Results Section */}
+          <div className="mb-8">
+            {/* Results Header */}
+            <div className="mb-6 animate-in fade-in duration-500 delay-200">
+              <h2 className="text-lg font-semibold text-foreground">
+                {searchQuery 
+                  ? `Results for "${searchQuery}"` 
+                  : selectedCategory !== 'all' 
+                    ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Notices`
+                    : 'All Notices'}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                {filteredNotices.length} {filteredNotices.length === 1 ? 'result' : 'results'} found
+              </p>
             </div>
 
-            {/* Main Content - Notices List */}
-            <div className="lg:col-span-3">
-              {/* Results Header */}
-              <div className="mb-6 flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                    {searchQuery || selectedCategory !== 'all' || selectedPriority !== 'all'
-                      ? 'Search Results'
-                      : 'Latest Notices'}
-                    <span className="text-lg font-normal text-primary">{filteredNotices.length}</span>
-                  </h2>
-                  <p className="text-muted-foreground mt-1">
-                    {searchQuery && `Showing results for "${searchQuery}"`}
-                    {!searchQuery && selectedCategory !== 'all' && `Showing ${selectedCategory} notices`}
-                    {!searchQuery && !selectedCategory && `Total notices available`}
-                  </p>
-                </div>
+            {/* Loading State */}
+            {isLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <AnimSkeleton key={i} className="h-24 rounded-lg animate-pulse" />
+                ))}
               </div>
-
-              {/* Loading State */}
-              {isLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="space-y-3">
-                      <Skeleton className="h-32" />
-                    </div>
-                  ))}
-                </div>
-              ) : filteredNotices.length > 0 ? (
-                <>
-                  {/* Featured Notice (first high priority) */}
-                  {filteredNotices.find(n => n.priority === 'high') && (
-                    <div className="mb-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Zap className="w-4 h-4 text-red-500" />
-                        <h3 className="text-sm font-semibold text-foreground">Featured</h3>
-                      </div>
-                      <NoticeCard
-                        notice={filteredNotices.find(n => n.priority === 'high')!}
-                        onClick={() => handleNoticeClick(filteredNotices.find(n => n.priority === 'high')!)}
-                      />
-                    </div>
-                  )}
-
-                  {/* All Notices */}
-                  <div className="space-y-4">
-                    {filteredNotices.map((notice) => (
-                      <NoticeCard
-                        key={notice.id}
-                        notice={notice}
-                        onClick={() => handleNoticeClick(notice)}
-                      />
-                    ))}
+            ) : filteredNotices.length > 0 ? (
+              <div className="space-y-3 animate-in fade-in duration-500 delay-300">
+                {filteredNotices.map((notice, idx) => (
+                  <div
+                    key={notice.id}
+                    className="animate-in fade-in slide-in-from-bottom-2 duration-500"
+                    style={{ animationDelay: `${idx * 50}ms` }}
+                  >
+                    <NoticeCard
+                      notice={notice}
+                      onClick={() => handleNoticeClick(notice)}
+                    />
                   </div>
-                </>
-              ) : (
+                ))}
+              </div>
+            ) : (
+              <div className="animate-in fade-in duration-500">
                 <Empty
                   title="No notices found"
                   description={
                     searchQuery
-                      ? `No results for "${searchQuery}". Try different keywords.`
-                      : 'No notices matching your filters. Try adjusting your selection.'
+                      ? `No results for "${searchQuery}". Try different search terms.`
+                      : 'No notices match your filters. Try adjusting your selection.'
                   }
                 />
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </main>

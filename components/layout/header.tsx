@@ -3,19 +3,23 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Bell, Menu, X, LogOut, User as UserIcon } from 'lucide-react';
+import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from 'next-themes';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
 
 export function Header() {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [language, setLanguage] = useState('en');
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card shadow-sm">
@@ -46,9 +50,46 @@ export function Header() {
           </nav>
 
           {/* Right Section */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Theme Toggle */}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="hover:bg-muted transition-colors"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-5 h-5 text-yellow-500" />
+              ) : (
+                <Moon className="w-5 h-5 text-slate-700" />
+              )}
+            </Button>
+
+            {/* Language Switch */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="hover:bg-muted transition-colors">
+                  <Globe className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuCheckboxItem 
+                  checked={language === 'en'}
+                  onCheckedChange={() => setLanguage('en')}
+                >
+                  English
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem 
+                  checked={language === 'ne'}
+                  onCheckedChange={() => setLanguage('ne')}
+                >
+                  नेपाली
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative hover:bg-muted transition-colors">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
             </Button>

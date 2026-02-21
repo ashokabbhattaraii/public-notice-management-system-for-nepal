@@ -42,12 +42,12 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
 
   return (
     <Card
-      className="p-4 sm:p-6 hover:shadow-lg transition-all cursor-pointer group border border-border hover:border-primary/50"
+      className="p-4 sm:p-6 hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group border border-border hover:border-primary/40 hover:scale-[1.02] active:scale-[0.98]"
       onClick={onClick}
     >
       <div className="flex gap-4 flex-col sm:flex-row">
         {/* Category Icon/Badge */}
-        <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-2xl ${CATEGORY_COLORS[notice.category]} group-hover:scale-110 transition-transform`}>
+        <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-2xl ${CATEGORY_COLORS[notice.category]} group-hover:scale-125 transition-all duration-300 group-hover:-rotate-6`}>
           {notice.category === 'exams' && '📝'}
           {notice.category === 'vacancies' && '💼'}
           {notice.category === 'tenders' && '🏢'}
@@ -68,11 +68,11 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
           {/* Title and Priority */}
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex-1">
-              <h3 className="text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition line-clamp-2">
+              <h3 className="text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition-colors duration-300 line-clamp-2">
                 {notice.title}
               </h3>
             </div>
-            <Badge className={`flex-shrink-0 capitalize text-xs ${getPriorityColor(notice.priority)}`}>
+            <Badge className={`flex-shrink-0 capitalize text-xs transition-all duration-300 group-hover:scale-110 ${getPriorityColor(notice.priority)}`}>
               {notice.priority === 'high' ? '🔴 ' : ''}{notice.priority}
             </Badge>
           </div>
@@ -132,9 +132,9 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
                     e.stopPropagation();
                     setIsSaved(!isSaved);
                   }}
-                  className={isSaved ? 'text-primary' : 'text-muted-foreground hover:text-primary'}
+                  className={`transition-all duration-300 ${isSaved ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
                 >
-                  <Heart className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                  <Heart className={`w-4 h-4 transition-all duration-300 ${isSaved ? 'fill-current scale-125' : 'scale-100'}`} />
                 </Button>
               </div>
             </div>
