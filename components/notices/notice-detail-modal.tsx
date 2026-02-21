@@ -10,7 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Download, Heart, Share2, X } from 'lucide-react';
+import { FileText, Download, Heart, Share2, X, Calendar, User, Eye, Building2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface NoticeDetailModalProps {
@@ -58,22 +58,36 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
         <ScrollArea className="flex-1 overflow-y-auto">
           <div className="pr-4 space-y-6">
             {/* Meta Information */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground font-medium">Published</p>
-                <p className="text-foreground">{formatDate(notice.publishedDate)}</p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex items-start gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">Published</p>
+                  <p className="text-foreground font-medium">{formatDate(notice.publishedDate)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground font-medium">Last Updated</p>
-                <p className="text-foreground">{formatDate(notice.lastUpdated)}</p>
+              <div className="flex items-start gap-2">
+                <User className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">Author</p>
+                  <p className="text-foreground font-medium">{notice.author}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground font-medium">Author</p>
-                <p className="text-foreground">{notice.author}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground font-medium">Views</p>
-                <p className="text-foreground">{notice.views.toLocaleString()}</p>
+              {notice.organization && (
+                <div className="flex items-start gap-2">
+                  <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-muted-foreground text-xs font-medium mb-1">Organization</p>
+                    <p className="text-foreground font-medium">{notice.organization}</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <Eye className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">Views</p>
+                  <p className="text-foreground font-medium">{notice.views.toLocaleString()}</p>
+                </div>
               </div>
             </div>
 
