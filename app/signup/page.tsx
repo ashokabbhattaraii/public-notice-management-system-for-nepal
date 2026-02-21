@@ -18,16 +18,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { User, Mail, Lock, Users, ArrowRight } from 'lucide-react';
+import { User, Mail, Lock, Users, ArrowRight, Chrome } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signup, isLoading: authLoading } = useAuth();
+  const { signup, loginWithGoogle, isLoading: authLoading } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'student',
+    role: 'user',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,6 +66,31 @@ export default function SignupPage() {
             <p className="text-muted-foreground">
               Join to access personalized features
             </p>
+          </div>
+
+          {/* Google Sign Up */}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full mb-4"
+            onClick={async () => {
+              await loginWithGoogle();
+              router.push('/');
+            }}
+            disabled={isLoading || authLoading}
+          >
+            <Chrome className="w-5 h-5 mr-2" />
+            Continue with Google
+          </Button>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-card text-muted-foreground">Or create with email</span>
+            </div>
           </div>
 
           {/* Form */}
@@ -123,15 +148,14 @@ export default function SignupPage() {
 
             {/* Role */}
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Account Type</Label>
               <Select value={formData.role} onValueChange={(value) => handleChange('role', value)}>
                 <SelectTrigger className="pl-10">
                   <Users className="absolute left-3 w-4 h-4 text-muted-foreground" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="faculty">Faculty</SelectItem>
+                  <SelectItem value="user">Regular User</SelectItem>
                   <SelectItem value="admin">Administrator</SelectItem>
                 </SelectContent>
               </Select>
@@ -182,7 +206,7 @@ export default function SignupPage() {
 
           {/* Guest Browsing */}
           <Link href="/">
-            <Button variant="outline" className="w-full">
+            <Button variant="ghost" className="w-full">
               Continue as Guest
             </Button>
           </Link>

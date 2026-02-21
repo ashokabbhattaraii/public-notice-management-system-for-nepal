@@ -5,11 +5,12 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { DocumentCard } from '@/components/rag/document-card';
 import { RagQA } from '@/components/rag/rag-qa';
+import { DocumentUpload } from '@/components/rag/document-upload';
 import { MOCK_RAG_DOCUMENTS } from '@/lib/mock-data';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, BookOpen, Lightbulb } from 'lucide-react';
+import { BookOpen, Lightbulb } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function RagPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -45,8 +46,16 @@ export default function RagPage() {
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Documents */}
+            {/* Left Column - Documents & Upload */}
             <div className="lg:col-span-2 space-y-6">
+              <Tabs defaultValue="browse" className="w-full">
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                  <TabsTrigger value="browse">Browse Documents</TabsTrigger>
+                  <TabsTrigger value="upload">Upload & Manage</TabsTrigger>
+                </TabsList>
+
+                {/* Browse Tab */}
+                <TabsContent value="browse" className="space-y-6 mt-6">
               {/* Info Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card className="p-4 border border-primary/20 bg-primary/5">
@@ -103,6 +112,21 @@ export default function RagPage() {
                   <DocumentCard key={doc.id} {...doc} />
                 ))}
               </div>
+                </TabsContent>
+
+                {/* Upload Tab */}
+                <TabsContent value="upload" className="space-y-6 mt-6">
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">
+                      Upload Your Documents
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Upload documents to create embeddings and ask questions about them using our AI assistant.
+                    </p>
+                    <DocumentUpload />
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </div>
 
             {/* Right Column - AI Chat */}

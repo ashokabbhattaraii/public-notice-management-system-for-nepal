@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Send, Loader2, Copy, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Loader2, Copy, ThumbsUp, ThumbsDown, RotateCcw, Trash2 } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -16,7 +16,11 @@ interface Message {
   sources?: string[];
 }
 
-export function RagQA() {
+interface RagQAProps {
+  isWidget?: boolean;
+}
+
+export function RagQA({ isWidget = false }: RagQAProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -93,8 +97,53 @@ export function RagQA() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const clearChat = () => {
+    setMessages([
+      {
+        id: '1',
+        type: 'assistant',
+        content:
+          'Hello! I\'m your AI document assistant. I can help you find information from our institutional documents. Ask me anything about scholarships, campus facilities, admission procedures, or other academic matters.',
+        timestamp: new Date(),
+        sources: [],
+      },
+    ]);
+  };
+
+  const restartChat = () => {
+    clearChat();
+    setInput('');
+  };
+
   return (
-    <Card className="flex flex-col h-full max-h-[600px]">
+    <Card className={`flex flex-col h-full ${isWidget ? '' : 'max-h-[600px]'}`}>
+      {/* Header with Actions */}
+      {!isWidget && (
+        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+          <h3 className="font-semibold text-foreground">Chat with Documents</h3>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={restartChat}
+              className="h-8"
+            >
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              Restart
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearChat}
+              className="h-8"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
