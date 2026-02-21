@@ -29,13 +29,13 @@ export default function RagPage() {
       <main className="flex-1">
         {/* Hero Section */}
         <section className="border-b border-border bg-card">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 text-pretty">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2 text-balance">
                   Documents & AI Assistant
                 </h1>
-                <p className="text-muted-foreground text-lg max-w-2xl">
+                <p className="text-muted-foreground text-sm sm:text-base lg:text-lg max-w-2xl leading-relaxed">
                   Browse institutional documents and ask our AI assistant questions about scholarships, facilities, admissions, and more.
                 </p>
               </div>
@@ -44,42 +44,42 @@ export default function RagPage() {
         </section>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
             {/* Left Column - Documents & Upload */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 lg:space-y-6 order-2 lg:order-1">
               <Tabs defaultValue="browse" className="w-full">
                 <TabsList className="grid w-full max-w-md grid-cols-2">
-                  <TabsTrigger value="browse">Browse Documents</TabsTrigger>
-                  <TabsTrigger value="upload">Upload & Manage</TabsTrigger>
+                  <TabsTrigger value="browse" className="text-xs sm:text-sm">Browse</TabsTrigger>
+                  <TabsTrigger value="upload" className="text-xs sm:text-sm">Upload</TabsTrigger>
                 </TabsList>
 
                 {/* Browse Tab */}
-                <TabsContent value="browse" className="space-y-6 mt-6">
+                <TabsContent value="browse" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
               {/* Info Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card className="p-4 border border-primary/20 bg-primary/5">
-                  <div className="flex items-start gap-3">
-                    <BookOpen className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+                <Card className="p-3 lg:p-4 border border-primary/20 bg-primary/5">
+                  <div className="flex items-start gap-2 lg:gap-3">
+                    <BookOpen className="w-5 h-5 lg:w-6 lg:h-6 text-primary flex-shrink-0 mt-0.5" />
                     <div>
-                      <h3 className="font-semibold text-foreground mb-1">
+                      <h3 className="font-semibold text-foreground mb-1 text-sm lg:text-base">
                         {MOCK_RAG_DOCUMENTS.length} Documents
                       </h3>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs lg:text-sm text-muted-foreground leading-relaxed">
                         Browse and download official institutional documents
                       </p>
                     </div>
                   </div>
                 </Card>
 
-                <Card className="p-4 border border-accent/20 bg-accent/5">
-                  <div className="flex items-start gap-3">
-                    <Lightbulb className="w-6 h-6 text-accent flex-shrink-0 mt-0.5" />
+                <Card className="p-3 lg:p-4 border border-accent/20 bg-accent/5">
+                  <div className="flex items-start gap-2 lg:gap-3">
+                    <Lightbulb className="w-5 h-5 lg:w-6 lg:h-6 text-accent flex-shrink-0 mt-0.5" />
                     <div>
-                      <h3 className="font-semibold text-foreground mb-1">
+                      <h3 className="font-semibold text-foreground mb-1 text-sm lg:text-base">
                         AI-Powered Search
                       </h3>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs lg:text-sm text-muted-foreground leading-relaxed">
                         Ask questions and get instant answers from documents
                       </p>
                     </div>
@@ -89,15 +89,15 @@ export default function RagPage() {
 
               {/* Category Filter */}
               <div>
-                <h2 className="text-lg font-semibold text-foreground mb-3">
-                  Documents
+                <h2 className="text-base lg:text-lg font-semibold text-foreground mb-3">
+                  Browse Documents
                 </h2>
-                <div className="flex flex-wrap gap-2 mb-6">
+                <div className="flex flex-wrap gap-2 mb-4 lg:mb-6">
                   {categories.map((category) => (
                     <Badge
                       key={category}
                       variant={selectedCategory === category ? 'default' : 'outline'}
-                      className="cursor-pointer capitalize"
+                      className="cursor-pointer capitalize text-xs lg:text-sm"
                       onClick={() => setSelectedCategory(category)}
                     >
                       {category === 'all' ? 'All Documents' : category}
@@ -107,7 +107,7 @@ export default function RagPage() {
               </div>
 
               {/* Documents Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
                 {filteredDocs.map((doc) => (
                   <DocumentCard key={doc.id} {...doc} />
                 ))}
@@ -115,12 +115,12 @@ export default function RagPage() {
                 </TabsContent>
 
                 {/* Upload Tab */}
-                <TabsContent value="upload" className="space-y-6 mt-6">
-                  <Card className="p-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">
+                <TabsContent value="upload" className="space-y-4 lg:space-y-6 mt-4 lg:mt-6">
+                  <Card className="p-4 lg:p-6">
+                    <h3 className="text-base lg:text-lg font-semibold text-foreground mb-3 lg:mb-4">
                       Upload Your Documents
                     </h3>
-                    <p className="text-sm text-muted-foreground mb-6">
+                    <p className="text-sm text-muted-foreground mb-4 lg:mb-6 leading-relaxed">
                       Upload documents to create embeddings and ask questions about them using our AI assistant.
                     </p>
                     <DocumentUpload />
@@ -130,12 +130,14 @@ export default function RagPage() {
             </div>
 
             {/* Right Column - AI Chat */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-20">
+            <div className="lg:col-span-1 order-1 lg:order-2">
+              <div className="lg:sticky lg:top-20">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
-                  Ask a Question
+                  AI Assistant
                 </h2>
-                <RagQA />
+                <div className="h-[500px] lg:h-[600px]">
+                  <RagQA />
+                </div>
               </div>
             </div>
           </div>

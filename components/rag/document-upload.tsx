@@ -106,12 +106,12 @@ export function DocumentUpload() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <label className="flex flex-col items-center justify-center p-8 cursor-pointer">
-          <Upload className={`w-12 h-12 mb-3 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
-          <p className="text-sm font-medium text-foreground mb-1">
+        <label className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer">
+          <Upload className={`w-10 h-10 sm:w-12 sm:h-12 mb-3 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+          <p className="text-sm font-medium text-foreground mb-1 text-center">
             Drop files here or click to upload
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground text-center">
             PDF, DOC, DOCX, TXT up to 10MB
           </p>
           <input
@@ -126,36 +126,39 @@ export function DocumentUpload() {
 
       {/* Uploaded Files */}
       {files.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
             Uploaded Documents ({files.length})
           </h3>
           <div className="space-y-2">
             {files.map((file) => (
               <Card key={file.id} className="p-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <FileText className="w-5 h-5 text-primary flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">
                         {file.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatFileSize(file.size)}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(file.size)}
+                        </p>
+                        {file.embedded && (
+                          <Badge variant="default" className="text-xs h-5">
+                            <Check className="w-3 h-3 mr-1" />
+                            Embedded
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    {file.embedded && (
-                      <Badge variant="default" className="flex-shrink-0">
-                        <Check className="w-3 h-3 mr-1" />
-                        Embedded
-                      </Badge>
-                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 sm:flex-shrink-0">
                     <Button
                       size="sm"
                       variant={file.embedded ? 'secondary' : 'default'}
                       onClick={() => toggleEmbed(file.id)}
+                      className="flex-1 sm:flex-initial"
                     >
                       {file.embedded ? 'Unembed' : 'Embed'}
                     </Button>
@@ -163,6 +166,7 @@ export function DocumentUpload() {
                       size="sm"
                       variant="ghost"
                       onClick={() => removeFile(file.id)}
+                      className="px-2"
                     >
                       <X className="w-4 h-4" />
                     </Button>

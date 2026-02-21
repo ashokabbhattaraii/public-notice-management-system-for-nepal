@@ -116,37 +116,37 @@ export function RagQA({ isWidget = false }: RagQAProps) {
   };
 
   return (
-    <Card className={`flex flex-col h-full ${isWidget ? '' : 'max-h-[600px]'}`}>
+    <Card className="flex flex-col h-full">
       {/* Header with Actions */}
       {!isWidget && (
-        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
-          <h3 className="font-semibold text-foreground">Chat with Documents</h3>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between p-3 lg:p-4 border-b border-border bg-muted/30">
+          <h3 className="font-semibold text-foreground text-sm lg:text-base">Chat with Documents</h3>
+          <div className="flex items-center gap-1 lg:gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={restartChat}
-              className="h-8"
+              className="h-7 lg:h-8 px-2 lg:px-3"
             >
-              <RotateCcw className="w-4 h-4 mr-1.5" />
-              Restart
+              <RotateCcw className="w-3.5 h-3.5 lg:w-4 lg:h-4 lg:mr-1.5" />
+              <span className="hidden lg:inline">Restart</span>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={clearChat}
-              className="h-8"
+              className="h-7 lg:h-8 px-2 lg:px-3"
             >
-              <Trash2 className="w-4 h-4 mr-1.5" />
-              Clear
+              <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4 lg:mr-1.5" />
+              <span className="hidden lg:inline">Clear</span>
             </Button>
           </div>
         </div>
       )}
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 p-3 lg:p-4">
+        <div className="space-y-3 lg:space-y-4">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -155,13 +155,13 @@ export function RagQA({ isWidget = false }: RagQAProps) {
               }`}
             >
               <div
-                className={`max-w-xs lg:max-w-md xl:max-w-lg rounded-lg p-4 ${
+                className={`max-w-[85%] sm:max-w-[75%] lg:max-w-md xl:max-w-lg rounded-lg p-3 lg:p-4 ${
                   message.type === 'user'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-foreground'
                 }`}
               >
-                <p className="text-sm">{message.content}</p>
+                <p className="text-sm leading-relaxed break-words">{message.content}</p>
 
                 {message.sources && message.sources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-current border-opacity-20">
@@ -187,29 +187,29 @@ export function RagQA({ isWidget = false }: RagQAProps) {
                 )}
 
                 {message.type === 'assistant' && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-current border-opacity-20">
+                  <div className="flex flex-wrap gap-1 lg:gap-2 mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-current border-opacity-20">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2 text-xs"
+                      className="h-6 lg:h-7 px-2 text-xs"
                       onClick={() =>
                         copyToClipboard(message.id, message.content)
                       }
                     >
-                      <Copy className="w-3 h-3" />
-                      {copiedId === message.id ? 'Copied' : 'Copy'}
+                      <Copy className="w-3 h-3 mr-1" />
+                      <span className="hidden sm:inline">{copiedId === message.id ? 'Copied' : 'Copy'}</span>
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2"
+                      className="h-6 lg:h-7 px-2"
                     >
                       <ThumbsUp className="w-3 h-3" />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2"
+                      className="h-6 lg:h-7 px-2"
                     >
                       <ThumbsDown className="w-3 h-3" />
                     </Button>
@@ -230,19 +230,20 @@ export function RagQA({ isWidget = false }: RagQAProps) {
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-3 lg:p-4">
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Input
-            placeholder="Ask about scholarships, facilities, admissions..."
+            placeholder="Ask a question..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 text-sm"
           />
           <Button
             type="submit"
             disabled={isLoading || !input.trim()}
             size="icon"
+            className="h-9 w-9 flex-shrink-0"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
