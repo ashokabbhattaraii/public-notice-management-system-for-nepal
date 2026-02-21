@@ -179,7 +179,7 @@
   }
 
   .animate-in {
-    @apply animate-fadeInUp;
+    animation: fadeInUp 0.5s ease-out;
   }
 
   .slide-in-from-top {
