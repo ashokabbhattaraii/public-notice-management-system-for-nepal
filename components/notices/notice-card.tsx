@@ -15,7 +15,12 @@ import {
   Megaphone, 
   FileCheck,
   Paperclip,
-  Calendar
+  Calendar,
+  ArrowRight,
+  AlertTriangle,
+  Timer,
+  CalendarCheck,
+  Users
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -35,8 +40,15 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
     });
   };
 
+  const formatShortDate = (date: Date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
   const getCategoryIcon = (category: string) => {
-    const iconClass = "w-6 h-6";
+    const iconClass = "w-5 h-5";
     switch (category) {
       case 'exams':
         return <GraduationCap className={iconClass} />;
@@ -53,125 +65,179 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-gradient-to-br from-red-500/20 to-orange-500/20 text-red-600 border-red-500/30 dark:from-red-500/30 dark:to-orange-500/30 dark:text-red-400 shadow-sm';
-      case 'normal':
-        return 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 text-blue-600 border-blue-500/30 dark:from-blue-500/30 dark:to-purple-500/30 dark:text-blue-400 shadow-sm';
-      case 'low':
-        return 'bg-gradient-to-br from-gray-500/20 to-slate-500/20 text-gray-600 border-gray-500/30 dark:from-gray-500/30 dark:to-slate-500/30 dark:text-gray-400';
-      default:
-        return '';
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'exams': return 'Exam Notice';
+      case 'vacancies': return 'Job Vacancy';
+      case 'tenders': return 'Tender Notice';
+      case 'policy': return 'Policy Update';
+      case 'announcements': return 'Announcement';
+      default: return 'Notice';
     }
   };
 
-  const daysUntilDeadline = notice.deadline ? Math.ceil((notice.deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
-  const isUrgent = daysUntilDeadline && daysUntilDeadline <= 7 && daysUntilDeadline > 0;
+  const getPriorityConfig = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return {
+          classes: 'bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:border-red-400/20',
+          label: 'High Priority',
+        };
+      case 'normal':
+        return {
+          classes: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-400/20',
+          label: 'Normal',
+        };
+      case 'low':
+        return {
+          classes: 'bg-muted text-muted-foreground border-border',
+          label: 'Low Priority',
+        };
+      default:
+        return { classes: '', label: '' };
+    }
+  };
+
+  const now = new Date();
+  const daysUntilDeadline = notice.deadline 
+    ? Math.ceil((new Date(notice.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) 
+    : null;
+  const isExpired = daysUntilDeadline !== null && daysUntilDeadline < 0;
+  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 7 && daysUntilDeadline > 0;
+  const isDueToday = daysUntilDeadline === 0;
+
+  const getDeadlineStatus = () => {
+    if (!notice.deadline) return null;
+    if (isExpired) return { label: 'Expired', color: 'text-muted-foreground', bgColor: 'bg-muted', icon: Clock };
+    if (isDueToday) return { label: 'Due Today', color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-500/10 dark:bg-red-500/15', icon: AlertTriangle };
+    if (isUrgent) return { label: `${daysUntilDeadline} day${daysUntilDeadline! > 1 ? 's' : ''} left`, color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-500/10 dark:bg-orange-500/15', icon: Timer };
+    return { label: `Due ${formatShortDate(notice.deadline)}`, color: 'text-muted-foreground', bgColor: 'bg-muted/50', icon: Calendar };
+  };
+
+  const deadlineStatus = getDeadlineStatus();
+  const priorityConfig = getPriorityConfig(notice.priority);
+
+  // Extract key info summary based on category
+  const getKeySummary = () => {
+    const content = notice.content.toLowerCase();
+    const summaryItems: string[] = [];
+
+    if (notice.category === 'exams') {
+      const dateMatch = notice.content.match(/(?:exam\s*date|date)[:\s]*([^\n,]+)/i);
+      if (dateMatch) summaryItems.push(dateMatch[1].trim());
+    }
+    if (notice.category === 'vacancies') {
+      const posMatch = notice.content.match(/(\d+)\s*positions?/i);
+      if (posMatch) summaryItems.push(`${posMatch[1]} positions`);
+    }
+    if (notice.category === 'tenders') {
+      const idMatch = notice.content.match(/tender\s*id[:\s]*([^\n]+)/i);
+      if (idMatch) summaryItems.push(idMatch[1].trim());
+    }
+
+    return summaryItems;
+  };
+
+  const keySummary = getKeySummary();
 
   return (
     <Card
-      className="p-5 hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group border border-border/60 hover:border-primary/50 bg-card relative overflow-hidden"
+      className={`group relative overflow-hidden border border-border/60 hover:border-primary/40 bg-card hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 cursor-pointer ${isExpired ? 'opacity-70' : ''}`}
       onClick={onClick}
     >
-      {/* Gradient overlay on hover */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-      </div>
+      {/* Top urgency strip */}
+      {(isUrgent || isDueToday) && (
+        <div className={`h-1 w-full ${isDueToday ? 'bg-red-500' : 'bg-orange-500'}`} />
+      )}
 
-      <div className="flex gap-4 relative z-10">
-        {/* Category Icon */}
-        <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center ${CATEGORY_COLORS[notice.category]} group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm group-hover:shadow-lg`}>
-          {getCategoryIcon(notice.category)}
-        </div>
+      <div className="p-4 sm:p-5">
+        {/* Row 1: Category + Priority + Deadline Status */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="secondary" className={`text-xs font-medium gap-1.5 ${CATEGORY_COLORS[notice.category]}`}>
+              {getCategoryIcon(notice.category)}
+              {getCategoryLabel(notice.category)}
+            </Badge>
+            <Badge variant="outline" className={`text-xs font-medium ${priorityConfig.classes}`}>
+              {priorityConfig.label}
+            </Badge>
+          </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Organization */}
-          {notice.organization && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-              <Building2 className="w-3.5 h-3.5" />
-              <span className="font-medium">{notice.organization}</span>
+          {deadlineStatus && (
+            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${deadlineStatus.bgColor} ${deadlineStatus.color}`}>
+              <deadlineStatus.icon className="w-3.5 h-3.5" />
+              <span>{deadlineStatus.label}</span>
             </div>
           )}
+        </div>
 
-          {/* Title and Priority */}
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-snug">
-              {notice.title}
-            </h3>
-            <Badge 
-              variant="outline"
-              className={`flex-shrink-0 capitalize text-xs font-medium ${getPriorityColor(notice.priority)}`}
+        {/* Row 2: Organization */}
+        {notice.organization && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+            <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="font-medium truncate">{notice.organization}</span>
+          </div>
+        )}
+
+        {/* Row 3: Title */}
+        <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-snug mb-2">
+          {notice.title}
+        </h3>
+
+        {/* Row 4: Description / Summary */}
+        <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mb-3">
+          {notice.description}
+        </p>
+
+        {/* Row 5: Key Info Cards */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {notice.deadline && !isExpired && (
+            <div className="inline-flex items-center gap-1.5 text-xs bg-muted/60 dark:bg-muted/40 text-foreground/80 px-2.5 py-1.5 rounded-md border border-border/40">
+              <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="font-medium">Deadline: {formatDate(notice.deadline)}</span>
+            </div>
+          )}
+          {notice.attachments.length > 0 && (
+            <div className="inline-flex items-center gap-1.5 text-xs bg-muted/60 dark:bg-muted/40 text-foreground/80 px-2.5 py-1.5 rounded-md border border-border/40">
+              <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="font-medium">{notice.attachments.length} attachment{notice.attachments.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+          {keySummary.length > 0 && keySummary.map((item, i) => (
+            <div key={i} className="inline-flex items-center gap-1.5 text-xs bg-muted/60 dark:bg-muted/40 text-foreground/80 px-2.5 py-1.5 rounded-md border border-border/40">
+              <span className="font-medium">{item}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Row 6: Footer - Meta + Actions */}
+        <div className="flex items-center justify-between pt-3 border-t border-border/40">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="font-medium">{notice.author}</span>
+            <span className="text-border">|</span>
+            <span>{formatDate(notice.publishedDate)}</span>
+            <span className="text-border">|</span>
+            <div className="flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5" />
+              <span>{notice.views.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSaved(!isSaved);
+              }}
+              className={`h-7 w-7 p-0 transition-colors ${isSaved ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'}`}
             >
-              {notice.priority}
-            </Badge>
-          </div>
-
-          {/* Category & Metadata Badges */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            <Badge variant="secondary" className="capitalize text-xs font-medium">
-              {notice.category}
-            </Badge>
-            {isUrgent && (
-              <Badge className="bg-orange-500/10 text-orange-600 border-orange-500/20 text-xs font-medium dark:bg-orange-500/20 dark:text-orange-400">
-                <Clock className="w-3 h-3 mr-1" />
-                Urgent
-              </Badge>
-            )}
-            {notice.attachments.length > 0 && (
-              <Badge variant="outline" className="text-xs font-medium">
-                <Paperclip className="w-3 h-3 mr-1" />
-                {notice.attachments.length}
-              </Badge>
-            )}
-          </div>
-
-          {/* Description */}
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
-            {notice.description}
-          </p>
-
-          {/* Footer */}
-          <div className="flex flex-col gap-2.5">
-            {/* Deadline */}
-            {notice.deadline && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Calendar className="w-3.5 h-3.5" />
-                <span className="font-medium">
-                  {daysUntilDeadline && daysUntilDeadline > 0 
-                    ? `Due in ${daysUntilDeadline} day${daysUntilDeadline > 1 ? 's' : ''}`
-                    : formatDate(notice.deadline)
-                  }
-                </span>
-              </div>
-            )}
-
-            {/* Meta Info */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-border/50">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{notice.author}</span>
-                <span>•</span>
-                <span>{formatDate(notice.publishedDate)}</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5" />
-                  <span className="font-medium">{notice.views}</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsSaved(!isSaved);
-                  }}
-                  className={`h-7 w-7 p-0 transition-colors ${isSaved ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'}`}
-                >
-                  <Heart className={`w-4 h-4 transition-all ${isSaved ? 'fill-current' : ''}`} />
-                </Button>
-              </div>
+              <Heart className={`w-4 h-4 transition-all ${isSaved ? 'fill-current' : ''}`} />
+            </Button>
+            <div className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+              <span>View Details</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </div>
           </div>
         </div>
