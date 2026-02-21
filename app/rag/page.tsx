@@ -6,12 +6,13 @@ import { DocumentCard } from '@/components/rag/document-card';
 import { RagQA } from '@/components/rag/rag-qa';
 import { DocumentUpload } from '@/components/rag/document-upload';
 import { MOCK_RAG_DOCUMENTS } from '@/lib/mock-data';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useLanguage } from '@/lib/language-context';
 
 export default function RagPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const { t } = useLanguage();
 
   const filteredDocs =
     selectedCategory === 'all'
@@ -31,8 +32,8 @@ export default function RagPage() {
             <div className="lg:col-span-2 flex flex-col overflow-hidden">
               <Tabs defaultValue="browse" className="w-full flex flex-col overflow-hidden">
                 <TabsList className="grid w-full max-w-md grid-cols-2 flex-shrink-0">
-                  <TabsTrigger value="browse" className="text-xs sm:text-sm">Browse</TabsTrigger>
-                  <TabsTrigger value="upload" className="text-xs sm:text-sm">Upload</TabsTrigger>
+                  <TabsTrigger value="browse" className="text-xs sm:text-sm">{t('rag.browse')}</TabsTrigger>
+                  <TabsTrigger value="upload" className="text-xs sm:text-sm">{t('rag.upload')}</TabsTrigger>
                 </TabsList>
 
                 {/* Browse Tab */}
@@ -47,7 +48,7 @@ export default function RagPage() {
                           className="cursor-pointer capitalize text-xs"
                           onClick={() => setSelectedCategory(category)}
                         >
-                          {category === 'all' ? 'All' : category}
+                          {category === 'all' ? t('filters.allCategories') : category}
                         </Badge>
                       ))}
                     </div>
@@ -71,7 +72,7 @@ export default function RagPage() {
             {/* Right Column - AI Chat */}
             <div className="lg:col-span-1 flex flex-col overflow-hidden">
               <h2 className="text-base font-semibold text-foreground mb-3 flex-shrink-0">
-                AI Assistant
+                {t('rag.aiAssistant')}
               </h2>
               <div className="flex-1 overflow-hidden">
                 <RagQA />

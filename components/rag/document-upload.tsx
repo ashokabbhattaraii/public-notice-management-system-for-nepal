@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Upload, X, FileText, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useLanguage } from '@/lib/language-context';
 
 interface UploadedFile {
   id: string;
@@ -17,6 +18,7 @@ interface UploadedFile {
 export function DocumentUpload() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const { t } = useLanguage();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -109,10 +111,10 @@ export function DocumentUpload() {
         <label className="flex flex-col items-center justify-center p-6 sm:p-8 cursor-pointer">
           <Upload className={`w-10 h-10 sm:w-12 sm:h-12 mb-3 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
           <p className="text-sm font-medium text-foreground mb-1 text-center">
-            Drop files here or click to upload
+            {t('upload.dropFiles')}
           </p>
           <p className="text-xs text-muted-foreground text-center">
-            PDF, DOC, DOCX, TXT up to 10MB
+            {t('upload.fileTypes')}
           </p>
           <input
             type="file"
@@ -128,7 +130,7 @@ export function DocumentUpload() {
       {files.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Uploaded Documents ({files.length})
+            {t('upload.uploadedDocs')} ({files.length})
           </h3>
           <div className="space-y-2">
             {files.map((file) => (
@@ -147,7 +149,7 @@ export function DocumentUpload() {
                         {file.embedded && (
                           <Badge variant="default" className="text-xs h-5">
                             <Check className="w-3 h-3 mr-1" />
-                            Embedded
+                            {t('rag.embedded')}
                           </Badge>
                         )}
                       </div>
@@ -160,7 +162,7 @@ export function DocumentUpload() {
                       onClick={() => toggleEmbed(file.id)}
                       className="flex-1 sm:flex-initial"
                     >
-                      {file.embedded ? 'Unembed' : 'Embed'}
+                      {file.embedded ? t('rag.unembed') : t('rag.embed')}
                     </Button>
                     <Button
                       size="sm"

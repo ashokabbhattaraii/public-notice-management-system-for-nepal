@@ -5,10 +5,12 @@ import { MessageCircle, X, Minimize2, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { RagQA } from './rag-qa';
+import { useLanguage } from '@/lib/language-context';
 
 export function FloatingChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const { t } = useLanguage();
 
   if (!isOpen) {
     return (
@@ -28,7 +30,7 @@ export function FloatingChatWidget() {
       <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2 min-w-0">
           <MessageCircle className="w-5 h-5 text-primary flex-shrink-0" />
-          <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">Document Assistant</h3>
+          <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">{t('chat.docAssistant')}</h3>
         </div>
         <div className="flex items-center gap-1">
           <Button

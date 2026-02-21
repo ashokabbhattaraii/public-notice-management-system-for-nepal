@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { useAuth } from '@/lib/auth-context';
+import { useLanguage } from '@/lib/language-context';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { User, Mail, Lock, Users, ArrowRight, Chrome } from 'lucide-react';
 export default function SignupPage() {
   const router = useRouter();
   const { signup, loginWithGoogle, isLoading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -48,7 +50,7 @@ export default function SignupPage() {
       await signup(formData.name, formData.email, formData.password, formData.role);
       router.push('/');
     } catch (err) {
-      setError('Signup failed. Please try again.');
+      setError(t('signup.failed'));
     } finally {
       setIsLoading(false);
     }
@@ -62,9 +64,9 @@ export default function SignupPage() {
         <Card className="w-full max-w-md p-6 sm:p-8">
           {/* Header */}
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-foreground mb-2">Create Account</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">{t('signup.title')}</h1>
             <p className="text-muted-foreground">
-              Join to access personalized features
+              {t('signup.subtitle')}
             </p>
           </div>
 
@@ -80,7 +82,7 @@ export default function SignupPage() {
             disabled={isLoading || authLoading}
           >
             <Chrome className="w-5 h-5 mr-2" />
-            Continue with Google
+            {t('signup.google')}
           </Button>
 
           {/* Divider */}
@@ -89,7 +91,7 @@ export default function SignupPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card text-muted-foreground">Or create with email</span>
+              <span className="px-2 bg-card text-muted-foreground">{t('signup.orEmail')}</span>
             </div>
           </div>
 
@@ -97,7 +99,7 @@ export default function SignupPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name */}
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">{t('signup.fullName')}</Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -114,7 +116,7 @@ export default function SignupPage() {
 
             {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">{t('signup.email')}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -131,7 +133,7 @@ export default function SignupPage() {
 
             {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('signup.password')}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -148,15 +150,15 @@ export default function SignupPage() {
 
             {/* Role */}
             <div className="space-y-2">
-              <Label htmlFor="role">Account Type</Label>
+              <Label htmlFor="role">{t('signup.accountType')}</Label>
               <Select value={formData.role} onValueChange={(value) => handleChange('role', value)}>
                 <SelectTrigger className="pl-10">
                   <Users className="absolute left-3 w-4 h-4 text-muted-foreground" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">Regular User</SelectItem>
-                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="user">{t('signup.regularUser')}</SelectItem>
+                  <SelectItem value="admin">{t('signup.administrator')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -183,11 +185,11 @@ export default function SignupPage() {
               {isLoading || authLoading ? (
                 <>
                   <Spinner className="w-4 h-4 mr-2" />
-                  Creating account...
+                  {t('signup.creating')}
                 </>
               ) : (
                 <>
-                  Create Account
+                  {t('signup.create')}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </>
               )}
@@ -200,22 +202,22 @@ export default function SignupPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">Or</span>
+              <span className="px-2 bg-background text-muted-foreground">{t('signup.or')}</span>
             </div>
           </div>
 
           {/* Guest Browsing */}
           <Link href="/">
             <Button variant="ghost" className="w-full">
-              Continue as Guest
+              {t('signup.continueGuest')}
             </Button>
           </Link>
 
           {/* Login Link */}
           <p className="text-center text-sm text-muted-foreground mt-6">
-            Already have an account?{' '}
+            {t('signup.haveAccount')}{' '}
             <Link href="/login" className="font-medium text-primary hover:underline">
-              Sign in
+              {t('signup.signIn')}
             </Link>
           </p>
         </Card>

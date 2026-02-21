@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { Github, Mail, Linkedin, FileText } from 'lucide-react';
+import { useLanguage } from '@/lib/language-context';
 
 export function Footer() {
+  const { t } = useLanguage();
+
   return (
     <footer className="border-t border-border bg-card">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -14,30 +17,30 @@ export function Footer() {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <FileText className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-foreground">Nepal Notices</span>
+              <span className="font-bold text-foreground">{t('footer.brand')}</span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your centralized hub for government notices, documents, and official information.
+              {t('footer.description')}
             </p>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Quick Links</h3>
+            <h3 className="font-semibold text-foreground mb-4">{t('footer.quickLinks')}</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/" className="text-muted-foreground hover:text-primary transition">
-                  All Notices
+                  {t('footer.allNotices')}
                 </Link>
               </li>
               <li>
                 <Link href="/rag" className="text-muted-foreground hover:text-primary transition">
-                  Documents
+                  {t('footer.documents')}
                 </Link>
               </li>
               <li>
                 <Link href="/about" className="text-muted-foreground hover:text-primary transition">
-                  About Us
+                  {t('footer.aboutUs')}
                 </Link>
               </li>
             </ul>
@@ -45,21 +48,21 @@ export function Footer() {
 
           {/* Resources */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Resources</h3>
+            <h3 className="font-semibold text-foreground mb-4">{t('footer.resources')}</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#" className="text-muted-foreground hover:text-primary transition">
-                  Help Center
+                  {t('footer.helpCenter')}
                 </a>
               </li>
               <li>
                 <a href="#" className="text-muted-foreground hover:text-primary transition">
-                  Privacy Policy
+                  {t('footer.privacyPolicy')}
                 </a>
               </li>
               <li>
                 <a href="#" className="text-muted-foreground hover:text-primary transition">
-                  Terms of Service
+                  {t('footer.termsOfService')}
                 </a>
               </li>
             </ul>
@@ -67,9 +70,9 @@ export function Footer() {
 
           {/* Contact */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Contact</h3>
+            <h3 className="font-semibold text-foreground mb-4">{t('footer.contact')}</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Get in touch with us for support or inquiries.
+              {t('footer.contactDescription')}
             </p>
             <div className="flex gap-3">
               <a
@@ -100,16 +103,16 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-border pt-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-            <p>© 2024 NoticeBoard. All rights reserved.</p>
+            <p>{t('footer.copyright')}</p>
             <div className="flex gap-6">
               <Link href="#" className="hover:text-primary transition">
-                Privacy
+                {t('footer.privacy')}
               </Link>
               <Link href="#" className="hover:text-primary transition">
-                Terms
+                {t('footer.terms')}
               </Link>
               <Link href="#" className="hover:text-primary transition">
-                Cookies
+                {t('footer.cookies')}
               </Link>
             </div>
           </div>

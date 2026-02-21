@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText, Download, Heart, Share2, X, Calendar, User, Eye, Building2 } from 'lucide-react';
 import { useState } from 'react';
+import { useLanguage } from '@/lib/language-context';
 
 interface NoticeDetailModalProps {
   notice: Notice | null;
@@ -21,11 +22,12 @@ interface NoticeDetailModalProps {
 
 export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModalProps) {
   const [isSaved, setIsSaved] = useState(false);
+  const { t, language } = useLanguage();
 
   if (!notice) return null;
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
@@ -49,7 +51,7 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
                 >
                   {notice.category}
                 </Badge>
-                <Badge variant="outline">{notice.priority} priority</Badge>
+                <Badge variant="outline">{notice.priority} {t('modal.priority')}</Badge>
               </div>
             </div>
           </div>
@@ -62,14 +64,14 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
               <div className="flex items-start gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium mb-1">Published</p>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">{t('modal.published')}</p>
                   <p className="text-foreground font-medium">{formatDate(notice.publishedDate)}</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <User className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium mb-1">Author</p>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">{t('modal.author')}</p>
                   <p className="text-foreground font-medium">{notice.author}</p>
                 </div>
               </div>
@@ -77,7 +79,7 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
                 <div className="flex items-start gap-2">
                   <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground text-xs font-medium mb-1">Organization</p>
+                    <p className="text-muted-foreground text-xs font-medium mb-1">{t('modal.organization')}</p>
                     <p className="text-foreground font-medium">{notice.organization}</p>
                   </div>
                 </div>
@@ -85,7 +87,7 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
               <div className="flex items-start gap-2">
                 <Eye className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-muted-foreground text-xs font-medium mb-1">Views</p>
+                  <p className="text-muted-foreground text-xs font-medium mb-1">{t('modal.views')}</p>
                   <p className="text-foreground font-medium">{notice.views.toLocaleString()}</p>
                 </div>
               </div>
@@ -94,7 +96,7 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
             {/* Main Content */}
             <div className="border-t border-border pt-6">
               <h2 className="text-lg font-semibold text-foreground mb-3">
-                Details
+                {t('modal.details')}
               </h2>
               <div className="text-foreground whitespace-pre-wrap leading-relaxed text-sm">
                 {notice.content}
@@ -105,7 +107,7 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
             {notice.attachments.length > 0 && (
               <div className="border-t border-border pt-6">
                 <h2 className="text-lg font-semibold text-foreground mb-3">
-                  Attachments
+                  {t('modal.attachments')}
                 </h2>
                 <div className="space-y-2">
                   {notice.attachments.map((attachment, index) => (
@@ -138,11 +140,11 @@ export function NoticeDetailModal({ notice, isOpen, onClose }: NoticeDetailModal
             onClick={() => setIsSaved(!isSaved)}
           >
             <Heart className={`w-4 h-4 mr-2 ${isSaved ? 'fill-current' : ''}`} />
-            {isSaved ? 'Saved' : 'Save'}
+            {isSaved ? t('modal.saved') : t('modal.save')}
           </Button>
           <Button variant="outline" className="flex-1">
             <Share2 className="w-4 h-4 mr-2" />
-            Share
+            {t('modal.share')}
           </Button>
           <Button variant="outline" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />

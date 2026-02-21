@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Eye, Check, Loader2 } from 'lucide-react';
+import { useLanguage } from '@/lib/language-context';
 
 interface DocumentCardProps {
   id: string;
@@ -27,6 +28,7 @@ export function DocumentCard({
 }: DocumentCardProps) {
   const [isEmbedded, setIsEmbedded] = useState(false);
   const [isEmbedding, setIsEmbedding] = useState(false);
+  const { t, language } = useLanguage();
 
   useEffect(() => {
     const embedStatus = localStorage.getItem(`doc-embed-${id}`);
@@ -36,7 +38,7 @@ export function DocumentCard({
   }, [id]);
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
       month: 'short',
       day: 'numeric',
     });
@@ -88,7 +90,7 @@ export function DocumentCard({
             {isEmbedded && (
               <Badge variant="default" className="text-xs">
                 <Check className="w-3 h-3 mr-1" />
-                Embedded
+                {t('rag.embedded')}
               </Badge>
             )}
             <span className="text-xs text-muted-foreground">{size}</span>
@@ -112,9 +114,9 @@ export function DocumentCard({
                 {isEmbedding ? (
                   <Loader2 className="w-3 h-3 animate-spin mr-1" />
                 ) : isEmbedded ? (
-                  'Unembed'
+                  t('rag.unembed')
                 ) : (
-                  'Embed'
+                  t('rag.embed')
                 )}
               </Button>
               <Button
