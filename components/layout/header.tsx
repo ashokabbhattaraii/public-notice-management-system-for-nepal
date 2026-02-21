@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe, FileText } from 'lucide-react';
@@ -20,6 +20,11 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [language, setLanguage] = useState('en');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card shadow-sm">
@@ -44,6 +49,11 @@ export function Header() {
             <Link href="/rag" className="text-sm text-foreground hover:text-primary transition">
               Documents
             </Link>
+            {user && user.role === 'admin' && (
+              <Link href="/admin" className="text-sm text-foreground hover:text-primary transition">
+                Admin
+              </Link>
+            )}
             <Link href="/about" className="text-sm text-foreground hover:text-primary transition">
               About
             </Link>
@@ -58,7 +68,7 @@ export function Header() {
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="hover:bg-muted transition-colors h-9 w-9"
             >
-              {theme === 'dark' ? (
+              {mounted && theme === 'dark' ? (
                 <Sun className="w-[18px] h-[18px]" />
               ) : (
                 <Moon className="w-[18px] h-[18px]" />
@@ -156,6 +166,11 @@ export function Header() {
             <Link href="/rag" className="block py-2 text-sm text-foreground hover:text-primary">
               Documents
             </Link>
+            {user && user.role === 'admin' && (
+              <Link href="/admin" className="block py-2 text-sm text-foreground hover:text-primary">
+                Admin
+              </Link>
+            )}
             <Link href="/about" className="block py-2 text-sm text-foreground hover:text-primary">
               About
             </Link>
