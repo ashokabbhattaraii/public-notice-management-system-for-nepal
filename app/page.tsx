@@ -16,6 +16,7 @@ import { Empty } from '@/components/ui/empty';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton as AnimSkeleton } from '@/components/ui/skeleton';
 import { AlertCircle, Sparkles } from 'lucide-react';
+import { AlertCtaBanner } from '@/components/alerts/alert-cta-banner';
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -87,6 +88,11 @@ export default function Home() {
               selectedPriority={selectedPriority}
               searchQuery={searchQuery}
             />
+          </div>
+
+          {/* Alert System CTA */}
+          <div className="mb-8">
+            <AlertCtaBanner />
           </div>
 
           {/* Authentication Notice */}

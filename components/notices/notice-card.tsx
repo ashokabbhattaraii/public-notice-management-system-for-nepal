@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/lib/language-context';
+import { useAlerts, doesNoticeMatchRule } from '@/lib/alerts-context';
 import { 
   Eye, 
   Heart, 
@@ -21,6 +22,7 @@ import {
   AlertTriangle,
   Timer,
   CalendarCheck,
+  BellRing,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -32,6 +34,9 @@ interface NoticeCardProps {
 export function NoticeCard({ notice, onClick }: NoticeCardProps) {
   const [isSaved, setIsSaved] = useState(false);
   const { t, language } = useLanguage();
+  const { alerts } = useAlerts();
+
+  const matchesAlert = alerts.some((rule) => doesNoticeMatchRule(notice, rule));
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
@@ -161,6 +166,12 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
             <Badge variant="outline" className={`text-xs font-medium ${priorityConfig.classes}`}>
               {priorityConfig.label}
             </Badge>
+            {matchesAlert && (
+              <Badge variant="outline" className="text-xs font-medium gap-1 bg-primary/10 text-primary border-primary/20 dark:bg-primary/15 dark:text-primary dark:border-primary/25">
+                <BellRing className="w-3 h-3" />
+                {t('alerts.matchBadge')}
+              </Badge>
+            )}
           </div>
 
           {deadlineStatus && (

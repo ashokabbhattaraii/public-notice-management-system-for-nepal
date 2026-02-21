@@ -9,6 +9,8 @@ import { useLanguage } from '@/lib/language-context';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertsManager } from '@/components/alerts/alerts-manager';
+import { useAlerts } from '@/lib/alerts-context';
 import { 
   Bookmark, 
   Eye, 
@@ -22,7 +24,6 @@ import {
 import { 
   SAVED_NOTICES, 
   RECENT_ACTIVITY, 
-  SUBSCRIBED_CATEGORIES, 
   RECOMMENDED_NOTICES,
   USER_STATS 
 } from '@/lib/user-mock-data';
@@ -30,6 +31,7 @@ import {
 export default function UserDashboard() {
   const { user, isLoading } = useAuth();
   const { t, language } = useLanguage();
+  const { alerts: alertRules, matchedCount } = useAlerts();
   const router = useRouter();
 
   useEffect(() => {
@@ -119,7 +121,7 @@ export default function UserDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">{t('dashboard.activeAlerts')}</p>
-                  <p className="text-2xl font-bold text-foreground">{USER_STATS.activeSubscriptions}</p>
+                  <p className="text-2xl font-bold text-foreground">{alertRules.filter(a => a.enabled).length}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
                   <Bell className="w-6 h-6 text-orange-500" />
@@ -234,37 +236,9 @@ export default function UserDashboard() {
                 </div>
               </Card>
 
-              {/* Category Subscriptions */}
+              {/* Alert Rules Manager */}
               <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">{t('dashboard.alertPreferences')}</h2>
-                  <Button variant="ghost" size="sm">
-                    <Settings className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  {SUBSCRIBED_CATEGORIES.map((category) => (
-                    <div
-                      key={category.name}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${category.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
-                        <div>
-                          <p className="text-sm font-medium text-foreground capitalize">
-                            {category.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {category.count} {t('dashboard.newNotices')}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant={category.enabled ? 'default' : 'secondary'} className="text-xs">
-                        {category.enabled ? t('dashboard.active') : t('dashboard.paused')}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
+                <AlertsManager />
               </Card>
             </div>
           </div>

@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe, FileText } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from 'next-themes';
 import { useLanguage } from '@/lib/language-context';
+import { useAlerts } from '@/lib/alerts-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,17 +17,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 export function Header() {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
+  const { matchedCount, getAllMatchedNotices } = useAlerts();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const matchedNotices = mounted ? getAllMatchedNotices().slice(0, 5) : [];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-xl shadow-sm">
@@ -42,7 +52,7 @@ export function Header() {
             </div>
           </Link>
 
-            {/* Desktop Navigation */}
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex gap-8 items-center">
             <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
               <span>{t('header.notices')}</span>
@@ -73,8 +83,8 @@ export function Header() {
           {/* Right Section */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Theme Toggle */}
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="hover:bg-muted transition-colors h-9 w-9"
@@ -94,13 +104,13 @@ export function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuCheckboxItem 
+                <DropdownMenuCheckboxItem
                   checked={language === 'en'}
                   onCheckedChange={() => setLanguage('en')}
                 >
                   English
                 </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem 
+                <DropdownMenuCheckboxItem
                   checked={language === 'ne'}
                   onCheckedChange={() => setLanguage('ne')}
                 >
@@ -109,11 +119,57 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative hover:bg-muted transition-colors h-9 w-9">
-              <Bell className="w-[18px] h-[18px]" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-background" />
-            </Button>
+            {/* Notifications Bell with Alert Matches */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative hover:bg-muted transition-colors h-9 w-9">
+                  <Bell className="w-[18px] h-[18px]" />
+                  {mounted && matchedCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full ring-2 ring-background flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white leading-none">{matchedCount > 9 ? '9+' : matchedCount}</span>
+                    </span>
+                  )}
+                  {mounted && matchedCount === 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-muted-foreground/30 rounded-full ring-2 ring-background" />
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0">
+                <div className="p-3 border-b border-border">
+                  <h4 className="font-semibold text-sm text-foreground">{t('alerts.bellTitle')}</h4>
+                </div>
+                {matchedNotices.length > 0 ? (
+                  <div className="max-h-64 overflow-y-auto">
+                    {matchedNotices.map((notice) => (
+                      <Link
+                        key={notice.id}
+                        href="/"
+                        className="flex items-start gap-3 p-3 hover:bg-muted/50 transition-colors border-b border-border/40 last:border-0"
+                      >
+                        <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground line-clamp-1">{notice.title}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{notice.organization}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] flex-shrink-0 capitalize">{notice.category}</Badge>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center">
+                    <Bell className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">{t('alerts.bellEmpty')}</p>
+                  </div>
+                )}
+                {matchedCount > 5 && (
+                  <div className="p-2 border-t border-border">
+                    <Button variant="ghost" size="sm" className="w-full text-xs" asChild>
+                      <Link href="/dashboard">{t('alerts.viewAll')} ({matchedCount})</Link>
+                    </Button>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
 
             {/* Auth Menu */}
             {user ? (
