@@ -214,7 +214,3 @@
     animation-delay: 300ms;
   }
 }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
