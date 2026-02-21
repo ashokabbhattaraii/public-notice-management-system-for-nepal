@@ -23,12 +23,12 @@ export function FloatingChatWidget() {
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 w-[400px] h-[600px] shadow-2xl z-50 flex flex-col overflow-hidden">
+    <Card className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[400px] h-[500px] sm:h-[600px] shadow-2xl z-50 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-foreground">Document Assistant</h3>
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border bg-muted/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <MessageCircle className="w-5 h-5 text-primary flex-shrink-0" />
+          <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">Document Assistant</h3>
         </div>
         <div className="flex items-center gap-1">
           <Button
