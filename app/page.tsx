@@ -7,13 +7,14 @@ import { NoticeCard } from '@/components/notices/notice-card';
 import { NoticeFilters } from '@/components/notices/notice-filters';
 import { NoticeDetailModal } from '@/components/notices/notice-detail-modal';
 import { FloatingChatWidget } from '@/components/rag/floating-chat-widget';
+import { DecorativeBackground } from '@/components/ui/decorative-bg';
 import { MOCK_NOTICES, Notice } from '@/lib/mock-data';
 import { useAuth } from '@/lib/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty } from '@/components/ui/empty';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton as AnimSkeleton } from '@/components/ui/skeleton';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Sparkles } from 'lucide-react';
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -47,18 +48,23 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background relative">
+      <DecorativeBackground />
       <Header />
 
-      <main className="flex-1">
+      <main className="flex-1 relative z-10">
         {/* Clean Google-like Search Interface */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Title Section with animation */}
-          <div className="pt-10 pb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3 text-balance">
-              Government Notices & Announcements
+          <div className="pt-10 pb-8 animate-in">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 mb-4 animate-in delay-100">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium gradient-text">AI-Powered Search</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-3 text-balance animate-in delay-150">
+              Government Notices & <span className="gradient-text">Announcements</span>
             </h1>
-            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
+            <p className="text-muted-foreground text-base lg:text-lg leading-relaxed max-w-2xl animate-in delay-200">
               Search and discover official notices from Nepal government agencies and institutions
             </p>
           </div>
@@ -112,17 +118,18 @@ export default function Home() {
             {isLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
-                  <AnimSkeleton key={i} className="h-32 rounded-lg" />
+                  <AnimSkeleton key={i} className="h-32 rounded-xl animate-pulse" />
                 ))}
               </div>
             ) : filteredNotices.length > 0 ? (
               <div className="space-y-4">
-                {filteredNotices.map((notice) => (
-                  <NoticeCard
-                    key={notice.id}
-                    notice={notice}
-                    onClick={() => handleNoticeClick(notice)}
-                  />
+                {filteredNotices.map((notice, index) => (
+                  <div key={notice.id} className="animate-in" style={{ animationDelay: `${index * 50}ms` }}>
+                    <NoticeCard
+                      notice={notice}
+                      onClick={() => handleNoticeClick(notice)}
+                    />
+                  </div>
                 ))}
               </div>
             ) : (
