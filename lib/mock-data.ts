@@ -161,7 +161,7 @@ export const MOCK_NOTICES: Notice[] = [
     - Previous registration remains valid with migration
     - Training sessions scheduled at all customs offices
     
-    Queries: customs-helpline@customs.gov.np
+    Queries: customs-helpline@customs.gov.np`,
     publishedDate: new Date('2024-03-05'),
     lastUpdated: new Date('2024-03-10'),
     deadline: new Date('2025-01-01'),
