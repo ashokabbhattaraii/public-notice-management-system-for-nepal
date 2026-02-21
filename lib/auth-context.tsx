@@ -6,7 +6,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'admin' | 'faculty';
+  role: 'user' | 'admin';
   avatar?: string;
 }
 
@@ -15,6 +15,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  loginWithDemo: (type: 'admin' | 'user') => Promise<void>;
   signup: (name: string, email: string, password: string, role: string) => Promise<void>;
   logout: () => void;
 }
@@ -48,10 +50,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: '1',
         name: 'John Doe',
         email,
-        role: 'student',
+        role: 'user',
         avatar: 'https://avatar.vercel.sh/john',
       };
       
+      setUser(mockUser);
+      localStorage.setItem('user', JSON.stringify(mockUser));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      // Simulate Google OAuth flow
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const mockUser: User = {
+        id: 'google-' + Date.now(),
+        name: 'Google User',
+        email: 'user@gmail.com',
+        role: 'user',
+        avatar: 'https://avatar.vercel.sh/google-user',
+      };
+      
+      setUser(mockUser);
+      localStorage.setItem('user', JSON.stringify(mockUser));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithDemo = async (type: 'admin' | 'user') => {
+    setIsLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const demoUsers = {
+        admin: {
+          id: 'demo-admin',
+          name: 'Admin Demo',
+          email: 'admin@demo.com',
+          role: 'admin' as const,
+          avatar: 'https://avatar.vercel.sh/admin',
+        },
+        user: {
+          id: 'demo-user',
+          name: 'User Demo',
+          email: 'user@demo.com',
+          role: 'user' as const,
+          avatar: 'https://avatar.vercel.sh/user',
+        },
+      };
+      
+      const mockUser = demoUsers[type];
       setUser(mockUser);
       localStorage.setItem('user', JSON.stringify(mockUser));
     } finally {
@@ -68,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: '1',
         name,
         email,
-        role: role as 'student' | 'admin' | 'faculty',
+        role: role as 'user' | 'admin',
         avatar: `https://avatar.vercel.sh/${name}`,
       };
       
@@ -85,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, loginWithGoogle, loginWithDemo, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -11,11 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Chrome } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading: authLoading } = useAuth();
+  const { login, loginWithGoogle, loginWithDemo, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -50,11 +50,29 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Demo Login Info */}
-          <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg text-sm">
-            <p className="text-foreground font-medium mb-2">Demo Credentials:</p>
-            <p className="text-muted-foreground text-xs">Email: demo@example.com</p>
-            <p className="text-muted-foreground text-xs">Password: anything</p>
+          {/* Google Sign In */}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full mb-4"
+            onClick={async () => {
+              await loginWithGoogle();
+              router.push('/');
+            }}
+            disabled={isLoading || authLoading}
+          >
+            <Chrome className="w-5 h-5 mr-2" />
+            Continue with Google
+          </Button>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-card text-muted-foreground">Or sign in with email</span>
+            </div>
           </div>
 
           {/* Form */}
@@ -126,13 +144,39 @@ export default function LoginPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">Or</span>
+              <span className="px-2 bg-card text-muted-foreground">Demo Accounts</span>
             </div>
+          </div>
+
+          {/* Demo Accounts */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                await loginWithDemo('user');
+                router.push('/');
+              }}
+              disabled={isLoading || authLoading}
+            >
+              Demo User
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                await loginWithDemo('admin');
+                router.push('/');
+              }}
+              disabled={isLoading || authLoading}
+            >
+              Demo Admin
+            </Button>
           </div>
 
           {/* Guest Browsing */}
           <Link href="/">
-            <Button variant="outline" className="w-full">
+            <Button variant="ghost" className="w-full">
               Continue as Guest
             </Button>
           </Link>

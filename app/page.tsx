@@ -6,6 +6,7 @@ import { Footer } from '@/components/layout/footer';
 import { NoticeCard } from '@/components/notices/notice-card';
 import { NoticeFilters } from '@/components/notices/notice-filters';
 import { NoticeDetailModal } from '@/components/notices/notice-detail-modal';
+import { FloatingChatWidget } from '@/components/rag/floating-chat-widget';
 import { MOCK_NOTICES, Notice } from '@/lib/mock-data';
 import { useAuth } from '@/lib/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -144,6 +145,9 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
+
+      {/* Floating Chat Widget */}
+      <FloatingChatWidget />
 
       <Footer />
     </div>
