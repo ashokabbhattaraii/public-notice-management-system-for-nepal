@@ -56,11 +56,11 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
-        return 'bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/20 dark:text-red-400';
+        return 'bg-gradient-to-br from-red-500/20 to-orange-500/20 text-red-600 border-red-500/30 dark:from-red-500/30 dark:to-orange-500/30 dark:text-red-400 shadow-sm';
       case 'normal':
-        return 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400';
+        return 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 text-blue-600 border-blue-500/30 dark:from-blue-500/30 dark:to-purple-500/30 dark:text-blue-400 shadow-sm';
       case 'low':
-        return 'bg-gray-500/10 text-gray-600 border-gray-500/20 dark:bg-gray-500/20 dark:text-gray-400';
+        return 'bg-gradient-to-br from-gray-500/20 to-slate-500/20 text-gray-600 border-gray-500/30 dark:from-gray-500/30 dark:to-slate-500/30 dark:text-gray-400';
       default:
         return '';
     }
@@ -71,12 +71,17 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
 
   return (
     <Card
-      className="p-5 hover:shadow-lg transition-all duration-200 cursor-pointer group border border-border/60 hover:border-primary/50 bg-card"
+      className="p-5 hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group border border-border/60 hover:border-primary/50 bg-card relative overflow-hidden"
       onClick={onClick}
     >
-      <div className="flex gap-4">
+      {/* Gradient overlay on hover */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+      </div>
+
+      <div className="flex gap-4 relative z-10">
         {/* Category Icon */}
-        <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center ${CATEGORY_COLORS[notice.category]} group-hover:scale-105 transition-transform duration-200`}>
+        <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center ${CATEGORY_COLORS[notice.category]} group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm group-hover:shadow-lg`}>
           {getCategoryIcon(notice.category)}
         </div>
 

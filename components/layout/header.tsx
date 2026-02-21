@@ -27,12 +27,12 @@ export function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-card shadow-sm">
+    <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-xl shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition group">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-all group">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary via-secondary to-accent rounded-xl flex items-center justify-center shadow-md group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 gradient-animate">
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div className="hidden sm:block">
@@ -41,26 +41,31 @@ export function Header() {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
+            {/* Desktop Navigation */}
           <nav className="hidden md:flex gap-8 items-center">
-            <Link href="/" className="text-sm text-foreground hover:text-primary transition">
-              Notices
+            <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
+              <span>Notices</span>
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
-            <Link href="/rag" className="text-sm text-foreground hover:text-primary transition">
-              Documents
+            <Link href="/rag" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
+              <span>Documents</span>
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
             {user && user.role === 'user' && (
-              <Link href="/dashboard" className="text-sm text-foreground hover:text-primary transition">
-                Dashboard
+              <Link href="/dashboard" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
+                <span>Dashboard</span>
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </Link>
             )}
             {user && user.role === 'admin' && (
-              <Link href="/admin" className="text-sm text-foreground hover:text-primary transition">
-                Admin
+              <Link href="/admin" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
+                <span>Admin</span>
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </Link>
             )}
-            <Link href="/about" className="text-sm text-foreground hover:text-primary transition">
-              About
+            <Link href="/about" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
+              <span>About</span>
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
           </nav>
 
@@ -141,10 +146,10 @@ export function Header() {
               </DropdownMenu>
             ) : (
               <div className="hidden sm:flex gap-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="hover:border-primary/50 transition-all">
                   <Link href="/login">Login</Link>
                 </Button>
-                <Button size="sm">
+                <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:shadow-lg transition-all duration-300">
                   <Link href="/signup">Sign Up</Link>
                 </Button>
               </div>
