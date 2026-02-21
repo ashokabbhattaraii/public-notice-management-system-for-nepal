@@ -155,13 +155,13 @@ export function RagQA({ isWidget = false }: RagQAProps) {
               }`}
             >
               <div
-                className={`max-w-[85%] sm:max-w-[75%] lg:max-w-md xl:max-w-lg rounded-lg p-3 lg:p-4 ${
+                className={`max-w-[85%] sm:max-w-[75%] lg:max-w-md xl:max-w-lg rounded-lg p-3 lg:p-4 overflow-hidden ${
                   message.type === 'user'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-foreground'
                 }`}
               >
-                <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                <p className="text-sm leading-relaxed break-words overflow-wrap-anywhere">{message.content}</p>
 
                 {message.sources && message.sources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-current border-opacity-20">
@@ -177,7 +177,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
                               ? 'secondary'
                               : 'outline'
                           }
-                          className="text-xs"
+                          className="text-xs break-words max-w-full"
                         >
                           {source}
                         </Badge>
