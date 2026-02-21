@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { useAuth } from '@/lib/auth-context';
+import { useLanguage } from '@/lib/language-context';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { Mail, Lock, ArrowRight, Chrome } from 'lucide-react';
 export default function LoginPage() {
   const router = useRouter();
   const { login, loginWithGoogle, loginWithDemo, isLoading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +32,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/');
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(t('login.failed'));
     } finally {
       setIsLoading(false);
     }
@@ -44,9 +46,9 @@ export default function LoginPage() {
         <Card className="w-full max-w-md p-6 sm:p-8">
           {/* Header */}
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome Back</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">{t('login.title')}</h1>
             <p className="text-muted-foreground">
-              Sign in to your account to continue
+              {t('login.subtitle')}
             </p>
           </div>
 
@@ -62,7 +64,7 @@ export default function LoginPage() {
             disabled={isLoading || authLoading}
           >
             <Chrome className="w-5 h-5 mr-2" />
-            Continue with Google
+            {t('login.google')}
           </Button>
 
           {/* Divider */}
@@ -71,7 +73,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card text-muted-foreground">Or sign in with email</span>
+              <span className="px-2 bg-card text-muted-foreground">{t('login.orEmail')}</span>
             </div>
           </div>
 
@@ -79,7 +81,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">{t('login.email')}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -96,7 +98,7 @@ export default function LoginPage() {
 
             {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('login.password')}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -127,11 +129,11 @@ export default function LoginPage() {
               {isLoading || authLoading ? (
                 <>
                   <Spinner className="w-4 h-4 mr-2" />
-                  Signing in...
+                  {t('login.signingIn')}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {t('login.signIn')}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </>
               )}
@@ -144,7 +146,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card text-muted-foreground">Demo Accounts</span>
+              <span className="px-2 bg-card text-muted-foreground">{t('login.demoAccounts')}</span>
             </div>
           </div>
 
@@ -159,7 +161,7 @@ export default function LoginPage() {
               }}
               disabled={isLoading || authLoading}
             >
-              Demo User
+              {t('login.demoUser')}
             </Button>
             <Button
               type="button"
@@ -170,22 +172,22 @@ export default function LoginPage() {
               }}
               disabled={isLoading || authLoading}
             >
-              Demo Admin
+              {t('login.demoAdmin')}
             </Button>
           </div>
 
           {/* Guest Browsing */}
           <Link href="/">
             <Button variant="ghost" className="w-full">
-              Continue as Guest
+              {t('login.continueGuest')}
             </Button>
           </Link>
 
           {/* Sign Up Link */}
           <p className="text-center text-sm text-muted-foreground mt-6">
-            Don't have an account?{' '}
+            {t('login.noAccount')}{' '}
             <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up
+              {t('login.signUp')}
             </Link>
           </p>
         </Card>

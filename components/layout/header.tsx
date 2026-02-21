@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe, FileText } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from 'next-themes';
+import { useLanguage } from '@/lib/language-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,8 +19,8 @@ import {
 export function Header() {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [language, setLanguage] = useState('en');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -36,35 +37,35 @@ export function Header() {
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div className="hidden sm:block">
-              <span className="font-bold text-lg text-foreground block leading-tight">Nepal Notices</span>
-              <span className="text-xs text-muted-foreground font-medium">Government Hub</span>
+              <span className="font-bold text-lg text-foreground block leading-tight">{t('header.brand')}</span>
+              <span className="text-xs text-muted-foreground font-medium">{t('header.brandSub')}</span>
             </div>
           </Link>
 
             {/* Desktop Navigation */}
           <nav className="hidden md:flex gap-8 items-center">
             <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
-              <span>Notices</span>
+              <span>{t('header.notices')}</span>
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
             <Link href="/rag" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
-              <span>Documents</span>
+              <span>{t('header.documents')}</span>
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
             {user && user.role === 'user' && (
               <Link href="/dashboard" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
-                <span>Dashboard</span>
+                <span>{t('header.dashboard')}</span>
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </Link>
             )}
             {user && user.role === 'admin' && (
               <Link href="/admin" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
-                <span>Admin</span>
+                <span>{t('header.admin')}</span>
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </Link>
             )}
             <Link href="/about" className="text-sm font-medium text-foreground hover:text-primary transition-colors relative group">
-              <span>About</span>
+              <span>{t('header.about')}</span>
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
             </Link>
           </nav>
@@ -132,25 +133,25 @@ export function Header() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <UserIcon className="w-4 h-4 mr-2" />
-                    <span>Profile</span>
+                    <span>{t('header.profile')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <span>Saved Items</span>
+                    <span>{t('header.savedItems')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="text-destructive">
                     <LogOut className="w-4 h-4 mr-2" />
-                    <span>Logout</span>
+                    <span>{t('header.logout')}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <div className="hidden sm:flex gap-2">
                 <Button variant="outline" size="sm" className="hover:border-primary/50 transition-all">
-                  <Link href="/login">Login</Link>
+                  <Link href="/login">{t('header.login')}</Link>
                 </Button>
                 <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:shadow-lg transition-all duration-300">
-                  <Link href="/signup">Sign Up</Link>
+                  <Link href="/signup">{t('header.signup')}</Link>
                 </Button>
               </div>
             )}
@@ -171,31 +172,31 @@ export function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden pb-4 border-t border-border">
             <Link href="/" className="block py-2 text-sm text-foreground hover:text-primary">
-              Notices
+              {t('header.notices')}
             </Link>
             <Link href="/rag" className="block py-2 text-sm text-foreground hover:text-primary">
-              Documents
+              {t('header.documents')}
             </Link>
             {user && user.role === 'user' && (
               <Link href="/dashboard" className="block py-2 text-sm text-foreground hover:text-primary">
-                Dashboard
+                {t('header.dashboard')}
               </Link>
             )}
             {user && user.role === 'admin' && (
               <Link href="/admin" className="block py-2 text-sm text-foreground hover:text-primary">
-                Admin
+                {t('header.admin')}
               </Link>
             )}
             <Link href="/about" className="block py-2 text-sm text-foreground hover:text-primary">
-              About
+              {t('header.about')}
             </Link>
             {!user && (
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" size="sm" className="flex-1">
-                  <Link href="/login">Login</Link>
+                  <Link href="/login">{t('header.login')}</Link>
                 </Button>
                 <Button size="sm" className="flex-1">
-                  <Link href="/signup">Sign Up</Link>
+                  <Link href="/signup">{t('header.signup')}</Link>
                 </Button>
               </div>
             )}

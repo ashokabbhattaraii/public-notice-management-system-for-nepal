@@ -2,17 +2,9 @@
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card } from '@/components/ui/card';
 import { Search, X, GraduationCap, Briefcase, FileCheck, FileText, Megaphone, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
+import { useLanguage } from '@/lib/language-context';
 
 interface NoticeFiltersProps {
   onSearch: (query: string) => void;
@@ -23,20 +15,6 @@ interface NoticeFiltersProps {
   searchQuery: string;
 }
 
-const CATEGORIES = [
-  { value: 'exams', label: 'Exams', Icon: GraduationCap },
-  { value: 'vacancies', label: 'Vacancies', Icon: Briefcase },
-  { value: 'tenders', label: 'Tenders', Icon: FileCheck },
-  { value: 'policy', label: 'Policy Updates', Icon: FileText },
-  { value: 'announcements', label: 'Announcements', Icon: Megaphone },
-];
-
-const PRIORITIES = [
-  { value: 'high', label: 'High Priority', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
-  { value: 'normal', label: 'Normal', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
-  { value: 'low', label: 'Low Priority', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-];
-
 export function NoticeFilters({
   onSearch,
   onCategoryChange,
@@ -45,12 +23,22 @@ export function NoticeFilters({
   selectedPriority,
   searchQuery,
 }: NoticeFiltersProps) {
+  const { t } = useLanguage();
   const [localSearch, setLocalSearch] = useState(searchQuery);
-  const [expandedSections, setExpandedSections] = useState({
-    search: true,
-    category: true,
-    priority: true,
-  });
+
+  const CATEGORIES = [
+    { value: 'exams', labelKey: 'category.exams', Icon: GraduationCap },
+    { value: 'vacancies', labelKey: 'category.vacancies', Icon: Briefcase },
+    { value: 'tenders', labelKey: 'category.tenders', Icon: FileCheck },
+    { value: 'policy', labelKey: 'category.policy', Icon: FileText },
+    { value: 'announcements', labelKey: 'category.announcements', Icon: Megaphone },
+  ];
+
+  const PRIORITIES = [
+    { value: 'high', labelKey: 'filters.highPriority' },
+    { value: 'normal', labelKey: 'filters.normal' },
+    { value: 'low', labelKey: 'filters.lowPriority' },
+  ];
 
   const handleSearchChange = (value: string) => {
     setLocalSearch(value);
@@ -64,13 +52,6 @@ export function NoticeFilters({
     onPriorityChange('all');
   };
 
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
   const hasActiveFilters = selectedCategory !== 'all' || selectedPriority !== 'all' || searchQuery;
 
   return (
@@ -79,7 +60,7 @@ export function NoticeFilters({
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
         <Input
-          placeholder="Search notices by title, content, or organization..."
+          placeholder={t('filters.searchPlaceholder')}
           className="pl-12 pr-4 py-3 h-12 rounded-lg border-border/60 focus:border-primary/50 transition-all"
           value={localSearch}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -98,7 +79,7 @@ export function NoticeFilters({
       <div className="space-y-3">
         {/* Category Filters */}
         <div>
-          <label className="text-sm font-medium text-foreground mb-2.5 block">Category</label>
+          <label className="text-sm font-medium text-foreground mb-2.5 block">{t('filters.category')}</label>
           <div className="flex flex-wrap gap-2">
             <Button
               variant={selectedCategory === 'all' ? 'default' : 'outline'}
@@ -106,7 +87,7 @@ export function NoticeFilters({
               onClick={() => onCategoryChange('all')}
               className="h-9 rounded-lg"
             >
-              All Categories
+              {t('filters.allCategories')}
             </Button>
             {CATEGORIES.map(cat => {
               const Icon = cat.Icon;
@@ -119,7 +100,7 @@ export function NoticeFilters({
                   className="h-9 rounded-lg gap-2"
                 >
                   <Icon className="w-4 h-4" />
-                  <span>{cat.label}</span>
+                  <span>{t(cat.labelKey)}</span>
                 </Button>
               );
             })}
@@ -128,7 +109,7 @@ export function NoticeFilters({
 
         {/* Priority Filters */}
         <div>
-          <label className="text-sm font-medium text-foreground mb-2.5 block">Priority</label>
+          <label className="text-sm font-medium text-foreground mb-2.5 block">{t('filters.priority')}</label>
           <div className="flex flex-wrap gap-2">
             <Button
               variant={selectedPriority === 'all' ? 'default' : 'outline'}
@@ -136,7 +117,7 @@ export function NoticeFilters({
               onClick={() => onPriorityChange('all')}
               className="h-9 rounded-lg"
             >
-              All Priorities
+              {t('filters.allPriorities')}
             </Button>
             {PRIORITIES.map(pri => (
               <Button
@@ -147,7 +128,7 @@ export function NoticeFilters({
                 className="h-9 rounded-lg capitalize"
               >
                 <AlertCircle className="w-4 h-4 mr-1.5" />
-                {pri.label}
+                {t(pri.labelKey)}
               </Button>
             ))}
           </div>
@@ -162,7 +143,7 @@ export function NoticeFilters({
           className="w-full text-sm hover:bg-muted"
         >
           <X className="w-4 h-4 mr-2" />
-          Clear All Filters
+          {t('filters.clearAll')}
         </Button>
       )}
     </div>

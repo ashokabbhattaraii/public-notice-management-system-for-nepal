@@ -6,35 +6,45 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Zap, Users, BarChart3, Lock } from 'lucide-react';
 import { MOCK_NOTICES, MOCK_RAG_DOCUMENTS } from '@/lib/mock-data';
+import { useLanguage } from '@/lib/language-context';
 
 export default function AboutPage() {
+  const { t } = useLanguage();
+
   const features = [
     {
       icon: BarChart3,
-      title: 'Smart Notice Management',
-      description: 'Browse and filter notices by category, priority, and relevance with powerful search capabilities.',
+      title: t('about.feature1Title'),
+      description: t('about.feature1Desc'),
     },
     {
       icon: Zap,
-      title: 'AI-Powered Assistant',
-      description: 'Ask questions about institutional documents and get instant, contextual answers from our RAG system.',
+      title: t('about.feature2Title'),
+      description: t('about.feature2Desc'),
     },
     {
       icon: Users,
-      title: 'Community Focused',
-      description: 'Designed for students, faculty, and administrators to stay connected and informed.',
+      title: t('about.feature3Title'),
+      description: t('about.feature3Desc'),
     },
     {
       icon: Lock,
-      title: 'Works Anywhere',
-      description: 'Access as a guest or sign in to unlock personalized features like saving notices.',
+      title: t('about.feature4Title'),
+      description: t('about.feature4Desc'),
     },
   ];
 
   const stats = [
-    { label: 'Notices', value: MOCK_NOTICES.length },
-    { label: 'Documents', value: MOCK_RAG_DOCUMENTS.length },
-    { label: 'Categories', value: 5 },
+    { label: t('about.notices'), value: MOCK_NOTICES.length },
+    { label: t('about.documents'), value: MOCK_RAG_DOCUMENTS.length },
+    { label: t('about.categories'), value: 5 },
+  ];
+
+  const steps = [
+    { step: '1', title: t('about.step1Title'), description: t('about.step1Desc') },
+    { step: '2', title: t('about.step2Title'), description: t('about.step2Desc') },
+    { step: '3', title: t('about.step3Title'), description: t('about.step3Desc') },
+    { step: '4', title: t('about.step4Title'), description: t('about.step4Desc') },
   ];
 
   return (
@@ -46,10 +56,10 @@ export default function AboutPage() {
         <section className="border-b border-border bg-card">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
             <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 text-pretty">
-              About NoticeBoard
+              {t('about.title')}
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl">
-              Your centralized hub for institutional information, notices, and documents with intelligent document retrieval.
+              {t('about.subtitle')}
             </p>
           </div>
         </section>
@@ -74,7 +84,7 @@ export default function AboutPage() {
         <section className="border-b border-border bg-muted/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <h2 className="text-3xl font-bold text-foreground mb-12 text-center">
-              Powerful Features
+              {t('about.powerfulFeatures')}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {features.map((feature, index) => {
@@ -107,31 +117,10 @@ export default function AboutPage() {
         <section className="border-b border-border">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <h2 className="text-3xl font-bold text-foreground mb-8 text-center">
-              How It Works
+              {t('about.howItWorks')}
             </h2>
             <div className="space-y-6">
-              {[
-                {
-                  step: '1',
-                  title: 'Browse Notices',
-                  description: 'Explore institutional notices across multiple categories. Search, filter by priority, and find exactly what you need.',
-                },
-                {
-                  step: '2',
-                  title: 'Access Documents',
-                  description: 'Download official institutional documents including handbooks, guides, and academic catalogs.',
-                },
-                {
-                  step: '3',
-                  title: 'Ask Questions',
-                  description: 'Use our AI-powered assistant to ask questions about documents and get instant, contextual answers.',
-                },
-                {
-                  step: '4',
-                  title: 'Stay Informed',
-                  description: 'Sign in to save your favorite notices and personalize your experience across the platform.',
-                },
-              ].map((item, index) => (
+              {steps.map((item, index) => (
                 <div key={index} className="flex gap-6">
                   <div className="flex-shrink-0">
                     <Badge className="h-10 w-10 flex items-center justify-center text-base">
@@ -156,7 +145,7 @@ export default function AboutPage() {
         <section className="bg-muted/30">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <h2 className="text-3xl font-bold text-foreground mb-8 text-center">
-              Built With Modern Tech
+              {t('about.builtWith')}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {[

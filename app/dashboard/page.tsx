@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { useAuth } from '@/lib/auth-context';
+import { useLanguage } from '@/lib/language-context';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,6 @@ import {
   Bell, 
   TrendingUp,
   Clock,
-  Calendar,
   Download,
   Settings
 } from 'lucide-react';
@@ -29,6 +29,7 @@ import {
 
 export default function UserDashboard() {
   const { user, isLoading } = useAuth();
+  const { t, language } = useLanguage();
   const router = useRouter();
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function UserDashboard() {
   }
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -69,10 +70,10 @@ export default function UserDashboard() {
           {/* Welcome Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Welcome back, {user.name}
+              {t('dashboard.welcomeBack')} {user.name}
             </h1>
             <p className="text-muted-foreground">
-              Here's what's happening with your notices and documents
+              {t('dashboard.subtitle')}
             </p>
           </div>
 
@@ -81,7 +82,7 @@ export default function UserDashboard() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Saved Notices</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('dashboard.savedNotices')}</p>
                   <p className="text-2xl font-bold text-foreground">{USER_STATS.savedNotices}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -93,7 +94,7 @@ export default function UserDashboard() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Documents Viewed</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('dashboard.documentsViewed')}</p>
                   <p className="text-2xl font-bold text-foreground">{USER_STATS.documentsViewed}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
@@ -105,7 +106,7 @@ export default function UserDashboard() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Questions Asked</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('dashboard.questionsAsked')}</p>
                   <p className="text-2xl font-bold text-foreground">{USER_STATS.questionsAsked}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
@@ -117,7 +118,7 @@ export default function UserDashboard() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Active Alerts</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('dashboard.activeAlerts')}</p>
                   <p className="text-2xl font-bold text-foreground">{USER_STATS.activeSubscriptions}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
@@ -133,8 +134,8 @@ export default function UserDashboard() {
               {/* Saved Notices */}
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Saved Notices</h2>
-                  <Button variant="ghost" size="sm">View All</Button>
+                  <h2 className="text-lg font-semibold text-foreground">{t('dashboard.savedNotices')}</h2>
+                  <Button variant="ghost" size="sm">{t('dashboard.viewAll')}</Button>
                 </div>
                 <div className="space-y-3">
                   {SAVED_NOTICES.map((notice) => (
@@ -152,12 +153,12 @@ export default function UserDashboard() {
                           </Badge>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            Saved {formatDate(notice.savedDate)}
+                            {t('dashboard.saved')} {formatDate(notice.savedDate)}
                           </span>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
-                        <p className="text-xs text-muted-foreground">Deadline</p>
+                        <p className="text-xs text-muted-foreground">{t('dashboard.deadline')}</p>
                         <p className="text-sm font-medium text-foreground">
                           {formatDate(notice.deadline)}
                         </p>
@@ -172,7 +173,7 @@ export default function UserDashboard() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Recommended for You</h2>
+                    <h2 className="text-lg font-semibold text-foreground">{t('dashboard.recommended')}</h2>
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -194,7 +195,7 @@ export default function UserDashboard() {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <div className="text-xs font-medium text-green-500">
-                          {notice.relevance}% match
+                          {notice.relevance}% {t('dashboard.match')}
                         </div>
                       </div>
                     </div>
@@ -207,7 +208,7 @@ export default function UserDashboard() {
             <div className="space-y-6">
               {/* Recent Activity */}
               <Card className="p-6">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.recentActivity')}</h2>
                 <div className="space-y-4">
                   {RECENT_ACTIVITY.map((activity) => (
                     <div key={activity.id} className="flex gap-3">
@@ -236,7 +237,7 @@ export default function UserDashboard() {
               {/* Category Subscriptions */}
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Alert Preferences</h2>
+                  <h2 className="text-lg font-semibold text-foreground">{t('dashboard.alertPreferences')}</h2>
                   <Button variant="ghost" size="sm">
                     <Settings className="w-4 h-4" />
                   </Button>
@@ -254,12 +255,12 @@ export default function UserDashboard() {
                             {category.name}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {category.count} new notices
+                            {category.count} {t('dashboard.newNotices')}
                           </p>
                         </div>
                       </div>
                       <Badge variant={category.enabled ? 'default' : 'secondary'} className="text-xs">
-                        {category.enabled ? 'Active' : 'Paused'}
+                        {category.enabled ? t('dashboard.active') : t('dashboard.paused')}
                       </Badge>
                     </div>
                   ))}

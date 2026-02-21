@@ -4,9 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Send, Loader2, Copy, ThumbsUp, ThumbsDown, RotateCcw, Trash2 } from 'lucide-react';
+import { useLanguage } from '@/lib/language-context';
 
 interface Message {
   id: string;
@@ -21,12 +21,12 @@ interface RagQAProps {
 }
 
 export function RagQA({ isWidget = false }: RagQAProps) {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       type: 'assistant',
-      content:
-        'Hello! I\'m your AI document assistant. I can help you find information from our institutional documents. Ask me anything about scholarships, campus facilities, admission procedures, or other academic matters.',
+      content: t('chat.greeting'),
       timestamp: new Date(),
       sources: [],
     },
@@ -43,6 +43,19 @@ export function RagQA({ isWidget = false }: RagQAProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Update greeting when language changes
+  useEffect(() => {
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].id === '1') {
+        return [{
+          ...prev[0],
+          content: t('chat.greeting'),
+        }];
+      }
+      return prev;
+    });
+  }, [t]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,8 +169,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
       {
         id: '1',
         type: 'assistant',
-        content:
-          'Hello! I\'m your AI document assistant. I can help you find information from our institutional documents. Ask me anything about scholarships, campus facilities, admission procedures, or other academic matters.',
+        content: t('chat.greeting'),
         timestamp: new Date(),
         sources: [],
       },
@@ -174,7 +186,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
       {/* Header with Actions */}
       {!isWidget && (
         <div className="flex items-center justify-between p-3 lg:p-4 border-b border-border bg-muted/30 flex-shrink-0">
-          <h3 className="font-semibold text-foreground text-sm lg:text-base">Chat with Documents</h3>
+          <h3 className="font-semibold text-foreground text-sm lg:text-base">{t('rag.chatTitle')}</h3>
           <div className="flex items-center gap-1 lg:gap-2">
             <Button
               variant="ghost"
@@ -183,7 +195,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
               className="h-7 lg:h-8 px-2 lg:px-3"
             >
               <RotateCcw className="w-3.5 h-3.5 lg:w-4 lg:h-4 lg:mr-1.5" />
-              <span className="hidden lg:inline">Restart</span>
+              <span className="hidden lg:inline">{t('rag.restart')}</span>
             </Button>
             <Button
               variant="ghost"
@@ -192,7 +204,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
               className="h-7 lg:h-8 px-2 lg:px-3"
             >
               <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4 lg:mr-1.5" />
-              <span className="hidden lg:inline">Clear</span>
+              <span className="hidden lg:inline">{t('rag.clear')}</span>
             </Button>
           </div>
         </div>
@@ -220,7 +232,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
                 {message.sources && message.sources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-current border-opacity-20">
                     <p className="text-xs opacity-75 font-medium mb-2">
-                      Sources:
+                      {t('rag.sources')}:
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {message.sources.map((source, idx) => (
@@ -251,7 +263,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
                       }
                     >
                       <Copy className="w-3 h-3 mr-1" />
-                      <span className="hidden sm:inline">{copiedId === message.id ? 'Copied' : 'Copy'}</span>
+                      <span className="hidden sm:inline">{copiedId === message.id ? t('rag.copied') : t('rag.copy')}</span>
                     </Button>
                     <Button
                       size="sm"
@@ -288,7 +300,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
       <div className="border-t border-border p-3 lg:p-4 flex-shrink-0">
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Input
-            placeholder="Ask a question..."
+            placeholder={t('rag.askPlaceholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}

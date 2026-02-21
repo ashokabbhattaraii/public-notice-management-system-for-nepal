@@ -4,6 +4,7 @@ import { Notice, CATEGORY_COLORS } from '@/lib/mock-data';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/lib/language-context';
 import { 
   Eye, 
   Heart, 
@@ -20,7 +21,6 @@ import {
   AlertTriangle,
   Timer,
   CalendarCheck,
-  Users
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -31,9 +31,10 @@ interface NoticeCardProps {
 
 export function NoticeCard({ notice, onClick }: NoticeCardProps) {
   const [isSaved, setIsSaved] = useState(false);
+  const { t, language } = useLanguage();
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -41,7 +42,7 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
   };
 
   const formatShortDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString(language === 'ne' ? 'ne-NP' : 'en-US', {
       month: 'short',
       day: 'numeric',
     });
@@ -67,12 +68,12 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
-      case 'exams': return 'Exam Notice';
-      case 'vacancies': return 'Job Vacancy';
-      case 'tenders': return 'Tender Notice';
-      case 'policy': return 'Policy Update';
-      case 'announcements': return 'Announcement';
-      default: return 'Notice';
+      case 'exams': return t('card.examNotice');
+      case 'vacancies': return t('card.jobVacancy');
+      case 'tenders': return t('card.tenderNotice');
+      case 'policy': return t('card.policyUpdate');
+      case 'announcements': return t('card.announcement');
+      default: return t('card.notice');
     }
   };
 
@@ -81,17 +82,17 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
       case 'high':
         return {
           classes: 'bg-red-500/10 text-red-600 border-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:border-red-400/20',
-          label: 'High Priority',
+          label: t('card.highPriority'),
         };
       case 'normal':
         return {
           classes: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-400/20',
-          label: 'Normal',
+          label: t('card.normal'),
         };
       case 'low':
         return {
           classes: 'bg-muted text-muted-foreground border-border',
-          label: 'Low Priority',
+          label: t('card.lowPriority'),
         };
       default:
         return { classes: '', label: '' };
@@ -108,10 +109,10 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
 
   const getDeadlineStatus = () => {
     if (!notice.deadline) return null;
-    if (isExpired) return { label: 'Expired', color: 'text-muted-foreground', bgColor: 'bg-muted', icon: Clock };
-    if (isDueToday) return { label: 'Due Today', color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-500/10 dark:bg-red-500/15', icon: AlertTriangle };
-    if (isUrgent) return { label: `${daysUntilDeadline} day${daysUntilDeadline! > 1 ? 's' : ''} left`, color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-500/10 dark:bg-orange-500/15', icon: Timer };
-    return { label: `Due ${formatShortDate(notice.deadline)}`, color: 'text-muted-foreground', bgColor: 'bg-muted/50', icon: Calendar };
+    if (isExpired) return { label: t('card.expired'), color: 'text-muted-foreground', bgColor: 'bg-muted', icon: Clock };
+    if (isDueToday) return { label: t('card.dueToday'), color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-500/10 dark:bg-red-500/15', icon: AlertTriangle };
+    if (isUrgent) return { label: `${daysUntilDeadline} ${daysUntilDeadline! > 1 ? t('card.daysLeft') : t('card.dayLeft')}`, color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-500/10 dark:bg-orange-500/15', icon: Timer };
+    return { label: `${t('card.due')} ${formatShortDate(notice.deadline)}`, color: 'text-muted-foreground', bgColor: 'bg-muted/50', icon: Calendar };
   };
 
   const deadlineStatus = getDeadlineStatus();
@@ -119,7 +120,6 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
 
   // Extract key info summary based on category
   const getKeySummary = () => {
-    const content = notice.content.toLowerCase();
     const summaryItems: string[] = [];
 
     if (notice.category === 'exams') {
@@ -128,7 +128,7 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
     }
     if (notice.category === 'vacancies') {
       const posMatch = notice.content.match(/(\d+)\s*positions?/i);
-      if (posMatch) summaryItems.push(`${posMatch[1]} positions`);
+      if (posMatch) summaryItems.push(`${posMatch[1]} ${t('card.positions')}`);
     }
     if (notice.category === 'tenders') {
       const idMatch = notice.content.match(/tender\s*id[:\s]*([^\n]+)/i);
@@ -194,13 +194,13 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
           {notice.deadline && !isExpired && (
             <div className="inline-flex items-center gap-1.5 text-xs bg-muted/60 dark:bg-muted/40 text-foreground/80 px-2.5 py-1.5 rounded-md border border-border/40">
               <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="font-medium">Deadline: {formatDate(notice.deadline)}</span>
+              <span className="font-medium">{t('card.deadline')}: {formatDate(notice.deadline)}</span>
             </div>
           )}
           {notice.attachments.length > 0 && (
             <div className="inline-flex items-center gap-1.5 text-xs bg-muted/60 dark:bg-muted/40 text-foreground/80 px-2.5 py-1.5 rounded-md border border-border/40">
               <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="font-medium">{notice.attachments.length} attachment{notice.attachments.length > 1 ? 's' : ''}</span>
+              <span className="font-medium">{notice.attachments.length} {notice.attachments.length > 1 ? t('card.attachments') : t('card.attachment')}</span>
             </div>
           )}
           {keySummary.length > 0 && keySummary.map((item, i) => (
@@ -236,7 +236,7 @@ export function NoticeCard({ notice, onClick }: NoticeCardProps) {
               <Heart className={`w-4 h-4 transition-all ${isSaved ? 'fill-current' : ''}`} />
             </Button>
             <div className="hidden sm:flex items-center gap-1 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-              <span>View Details</span>
+              <span>{t('card.viewDetails')}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </div>
           </div>
