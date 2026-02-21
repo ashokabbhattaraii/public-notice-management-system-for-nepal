@@ -1,9 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, Download, Eye } from 'lucide-react';
+import { FileText, Download, Eye, Check, Loader2 } from 'lucide-react';
 
 interface DocumentCardProps {
   id: string;
@@ -24,6 +25,16 @@ export function DocumentCard({
   views,
   onClick,
 }: DocumentCardProps) {
+  const [isEmbedded, setIsEmbedded] = useState(false);
+  const [isEmbedding, setIsEmbedding] = useState(false);
+
+  useEffect(() => {
+    const embedStatus = localStorage.getItem(`doc-embed-${id}`);
+    if (embedStatus === 'true') {
+      setIsEmbedded(true);
+    }
+  }, [id]);
+
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
@@ -39,6 +50,19 @@ export function DocumentCard({
       financial: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
     };
     return colors[cat] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300';
+  };
+
+  const toggleEmbed = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEmbedding(true);
+    
+    // Simulate embedding process
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const newState = !isEmbedded;
+    setIsEmbedded(newState);
+    localStorage.setItem(`doc-embed-${id}`, String(newState));
+    setIsEmbedding(false);
   };
 
   return (
@@ -57,30 +81,51 @@ export function DocumentCard({
           <h3 className="font-semibold text-foreground group-hover:text-primary transition line-clamp-2">
             {title}
           </h3>
-          <div className="flex items-center gap-2 mt-2 mb-3">
+          <div className="flex items-center gap-2 mt-2 mb-3 flex-wrap">
             <Badge variant="secondary" className="text-xs capitalize">
               {category}
             </Badge>
+            {isEmbedded && (
+              <Badge variant="default" className="text-xs">
+                <Check className="w-3 h-3 mr-1" />
+                Embedded
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">{size}</span>
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{formatDate(uploadedDate)}</span>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
+            <span className="truncate">{formatDate(uploadedDate)}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="flex items-center gap-1">
                 <Eye className="w-3 h-3" />
                 {views}
               </span>
               <Button
                 size="sm"
+                variant={isEmbedded ? 'secondary' : 'default'}
+                onClick={toggleEmbed}
+                disabled={isEmbedding}
+                className="h-7 px-2 text-xs"
+              >
+                {isEmbedding ? (
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                ) : isEmbedded ? (
+                  'Unembed'
+                ) : (
+                  'Embed'
+                )}
+              </Button>
+              <Button
+                size="sm"
                 variant="ghost"
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
-                className="h-8 px-2"
+                className="h-7 px-2"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
