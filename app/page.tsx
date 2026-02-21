@@ -53,17 +53,17 @@ export default function Home() {
         {/* Clean Google-like Search Interface */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Title Section with animation */}
-          <div className="pt-8 pb-6 animate-in fade-in slide-in-from-top-2 duration-500">
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
-              Government Notices
+          <div className="pt-10 pb-8">
+            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3 text-balance">
+              Government Notices & Announcements
             </h1>
-            <p className="text-muted-foreground text-sm sm:text-base">
-              Search across all Nepal government agencies and institutions
+            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
+              Search and discover official notices from Nepal government agencies and institutions
             </p>
           </div>
 
           {/* Filters Section */}
-          <div className="mb-8 animate-in fade-in slide-in-from-top duration-500 delay-100">
+          <div className="mb-10">
             <NoticeFilters
               onSearch={setSearchQuery}
               onCategoryChange={setSelectedCategory}
@@ -76,63 +76,63 @@ export default function Home() {
 
           {/* Authentication Notice */}
           {!isAuthenticated && !isLoading && (
-            <Alert className="mb-6 border-primary/20 bg-primary/5 animate-in fade-in slide-in-from-left duration-500 delay-150">
-              <AlertCircle className="h-4 w-4 text-primary" />
-              <AlertDescription className="text-foreground text-sm">
-                <span className="font-medium">Tip:</span> <a href="/login" className="font-medium text-primary hover:underline transition-all">Sign in</a> to save notices and receive personalized alerts.
+            <Alert className="mb-8 border-blue-500/20 bg-blue-500/5">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-foreground text-sm leading-relaxed">
+                <a href="/login" className="font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors">Sign in</a> to bookmark notices and receive personalized alerts about new announcements.
               </AlertDescription>
             </Alert>
           )}
 
           {/* Results Section */}
-          <div className="mb-8">
+          <div className="mb-12">
             {/* Results Header */}
-            <div className="mb-6 animate-in fade-in duration-500 delay-200">
-              <h2 className="text-lg font-semibold text-foreground">
-                {searchQuery 
-                  ? `Results for "${searchQuery}"` 
-                  : selectedCategory !== 'all' 
-                    ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Notices`
-                    : 'All Notices'}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {filteredNotices.length} {filteredNotices.length === 1 ? 'result' : 'results'} found
-              </p>
+            <div className="mb-5">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-xl font-semibold text-foreground">
+                  {searchQuery 
+                    ? `Search Results` 
+                    : selectedCategory !== 'all' 
+                      ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Notices`
+                      : 'Recent Notices'}
+                </h2>
+                <p className="text-sm text-muted-foreground font-medium">
+                  {filteredNotices.length} {filteredNotices.length === 1 ? 'notice' : 'notices'}
+                </p>
+              </div>
+              {searchQuery && (
+                <p className="text-sm text-muted-foreground mt-1.5">
+                  Showing results for <span className="font-semibold text-foreground">"{searchQuery}"</span>
+                </p>
+              )}
             </div>
 
             {/* Loading State */}
             {isLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
-                  <AnimSkeleton key={i} className="h-24 rounded-lg animate-pulse" />
+                  <AnimSkeleton key={i} className="h-32 rounded-lg" />
                 ))}
               </div>
             ) : filteredNotices.length > 0 ? (
-              <div className="space-y-3 animate-in fade-in duration-500 delay-300">
-                {filteredNotices.map((notice, idx) => (
-                  <div
+              <div className="space-y-4">
+                {filteredNotices.map((notice) => (
+                  <NoticeCard
                     key={notice.id}
-                    className="animate-in fade-in slide-in-from-bottom-2 duration-500"
-                    style={{ animationDelay: `${idx * 50}ms` }}
-                  >
-                    <NoticeCard
-                      notice={notice}
-                      onClick={() => handleNoticeClick(notice)}
-                    />
-                  </div>
+                    notice={notice}
+                    onClick={() => handleNoticeClick(notice)}
+                  />
                 ))}
               </div>
             ) : (
-              <div className="animate-in fade-in duration-500">
-                <Empty
-                  title="No notices found"
-                  description={
-                    searchQuery
-                      ? `No results for "${searchQuery}". Try different search terms.`
-                      : 'No notices match your filters. Try adjusting your selection.'
-                  }
-                />
-              </div>
+              <Empty
+                title="No notices found"
+                description={
+                  searchQuery
+                    ? `No results match "${searchQuery}". Try different keywords or adjust your filters.`
+                    : 'No notices match your current filters. Try adjusting your selection.'
+                }
+              />
             )}
           </div>
         </div>

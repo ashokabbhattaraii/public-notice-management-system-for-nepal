@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe } from 'lucide-react';
+import { Bell, Menu, X, LogOut, User as UserIcon, Moon, Sun, Globe, FileText } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from 'next-themes';
 import {
@@ -26,13 +26,13 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">🇳🇵</span>
+          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition group">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+              <FileText className="w-5 h-5 text-white" />
             </div>
             <div className="hidden sm:block">
-              <span className="font-bold text-lg text-foreground block leading-none">Nepal Notices</span>
-              <span className="text-xs text-muted-foreground">Government Hub</span>
+              <span className="font-bold text-lg text-foreground block leading-tight">Nepal Notices</span>
+              <span className="text-xs text-muted-foreground font-medium">Government Hub</span>
             </div>
           </Link>
 
@@ -56,20 +56,20 @@ export function Header() {
               variant="ghost" 
               size="icon"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="hover:bg-muted transition-colors"
+              className="hover:bg-muted transition-colors h-9 w-9"
             >
               {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-yellow-500" />
+                <Sun className="w-[18px] h-[18px]" />
               ) : (
-                <Moon className="w-5 h-5 text-slate-700" />
+                <Moon className="w-[18px] h-[18px]" />
               )}
             </Button>
 
             {/* Language Switch */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hover:bg-muted transition-colors">
-                  <Globe className="w-5 h-5" />
+                <Button variant="ghost" size="icon" className="hover:bg-muted transition-colors h-9 w-9">
+                  <Globe className="w-[18px] h-[18px]" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -89,9 +89,9 @@ export function Header() {
             </DropdownMenu>
 
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative hover:bg-muted transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
+            <Button variant="ghost" size="icon" className="relative hover:bg-muted transition-colors h-9 w-9">
+              <Bell className="w-[18px] h-[18px]" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-background" />
             </Button>
 
             {/* Auth Menu */}

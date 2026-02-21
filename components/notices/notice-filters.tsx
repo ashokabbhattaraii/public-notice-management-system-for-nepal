@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card } from '@/components/ui/card';
-import { Search, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, X, GraduationCap, Briefcase, FileCheck, FileText, Megaphone, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 
 interface NoticeFiltersProps {
@@ -24,11 +24,11 @@ interface NoticeFiltersProps {
 }
 
 const CATEGORIES = [
-  { value: 'exams', label: 'Exams', icon: '📝' },
-  { value: 'vacancies', label: 'Vacancies & Admissions', icon: '💼' },
-  { value: 'tenders', label: 'Tenders', icon: '🏢' },
-  { value: 'policy', label: 'Policy Updates', icon: '📋' },
-  { value: 'announcements', label: 'Announcements', icon: '📢' },
+  { value: 'exams', label: 'Exams', Icon: GraduationCap },
+  { value: 'vacancies', label: 'Vacancies', Icon: Briefcase },
+  { value: 'tenders', label: 'Tenders', Icon: FileCheck },
+  { value: 'policy', label: 'Policy Updates', Icon: FileText },
+  { value: 'announcements', label: 'Announcements', Icon: Megaphone },
 ];
 
 const PRIORITIES = [
@@ -74,13 +74,13 @@ export function NoticeFilters({
   const hasActiveFilters = selectedCategory !== 'all' || selectedPriority !== 'all' || searchQuery;
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500">
-      {/* Main Search Bar - Google Style */}
+    <div className="space-y-4">
+      {/* Main Search Bar */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
         <Input
           placeholder="Search notices by title, content, or organization..."
-          className="pl-12 pr-4 py-3 rounded-full border border-border/50 focus:border-primary/50 hover:border-border transition-all duration-300 shadow-sm hover:shadow-md focus:shadow-md focus:ring-0"
+          className="pl-12 pr-4 py-3 h-12 rounded-lg border-border/60 focus:border-primary/50 transition-all"
           value={localSearch}
           onChange={(e) => handleSearchChange(e.target.value)}
         />
@@ -94,73 +94,72 @@ export function NoticeFilters({
         )}
       </div>
 
-      {/* Filter Chips */}
-      <div className="flex flex-wrap gap-2 animate-in fade-in duration-500 delay-100">
-        <div className="text-xs font-medium text-muted-foreground">Filter by:</div>
-        
-        {/* Category Buttons */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onCategoryChange('all')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
-              selectedCategory === 'all'
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'bg-muted/50 text-foreground hover:bg-muted'
-            }`}
-          >
-            All
-          </button>
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat.value}
-              onClick={() => onCategoryChange(cat.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md flex items-center gap-2 ${
-                selectedCategory === cat.value
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'bg-muted/50 text-foreground hover:bg-muted'
-              }`}
+      {/* Filter Section */}
+      <div className="space-y-3">
+        {/* Category Filters */}
+        <div>
+          <label className="text-sm font-medium text-foreground mb-2.5 block">Category</label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={selectedCategory === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onCategoryChange('all')}
+              className="h-9 rounded-lg"
             >
-              <span>{cat.icon}</span>
-              <span>{cat.label}</span>
-            </button>
-          ))}
+              All Categories
+            </Button>
+            {CATEGORIES.map(cat => {
+              const Icon = cat.Icon;
+              return (
+                <Button
+                  key={cat.value}
+                  variant={selectedCategory === cat.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onCategoryChange(cat.value)}
+                  className="h-9 rounded-lg gap-2"
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{cat.label}</span>
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Priority Buttons */}
-        <div className="w-full flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
-          <div className="text-xs font-medium text-muted-foreground w-full">Priority:</div>
-          <button
-            onClick={() => onPriorityChange('all')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
-              selectedPriority === 'all'
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'bg-muted/50 text-foreground hover:bg-muted'
-            }`}
-          >
-            All
-          </button>
-          {PRIORITIES.map(pri => (
-            <button
-              key={pri.value}
-              onClick={() => onPriorityChange(pri.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-md ${
-                selectedPriority === pri.value
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'bg-muted/50 text-foreground hover:bg-muted'
-              }`}
+        {/* Priority Filters */}
+        <div>
+          <label className="text-sm font-medium text-foreground mb-2.5 block">Priority</label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={selectedPriority === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onPriorityChange('all')}
+              className="h-9 rounded-lg"
             >
-              {pri.label}
-            </button>
-          ))}
+              All Priorities
+            </Button>
+            {PRIORITIES.map(pri => (
+              <Button
+                key={pri.value}
+                variant={selectedPriority === pri.value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => onPriorityChange(pri.value)}
+                className="h-9 rounded-lg capitalize"
+              >
+                <AlertCircle className="w-4 h-4 mr-1.5" />
+                {pri.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Clear Filters Button */}
+      {/* Clear Filters */}
       {hasActiveFilters && (
         <Button
-          variant="outline"
+          variant="ghost"
           onClick={handleReset}
-          className="w-full text-sm transition-all duration-300 hover:bg-destructive/10 hover:text-destructive"
+          className="w-full text-sm hover:bg-muted"
         >
           <X className="w-4 h-4 mr-2" />
           Clear All Filters

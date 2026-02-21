@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Github, Mail, Linkedin } from 'lucide-react';
+import { Github, Mail, Linkedin, FileText } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -12,12 +12,12 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">N</span>
+                <FileText className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-foreground">NoticeBoard</span>
+              <span className="font-bold text-foreground">Nepal Notices</span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Your centralized hub for institutional notices, documents, and information.
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your centralized hub for government notices, documents, and official information.
             </p>
           </div>
 
