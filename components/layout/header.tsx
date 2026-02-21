@@ -22,13 +22,14 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">N</span>
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">🇳🇵</span>
             </div>
-            <span className="font-bold text-lg hidden sm:inline text-foreground">
-              NoticeBoard
-            </span>
+            <div className="hidden sm:block">
+              <span className="font-bold text-lg text-foreground block leading-none">Nepal Notices</span>
+              <span className="text-xs text-muted-foreground">Government Hub</span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}

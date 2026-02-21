@@ -9,45 +9,57 @@ export interface Notice {
   views: number;
   priority: 'high' | 'normal' | 'low';
   author: string;
+  organization: string;
+  deadline?: Date;
   attachments: Array<{ name: string; url: string }>;
 }
 
 export const MOCK_NOTICES: Notice[] = [
   {
     id: '1',
-    title: 'Final Semester Exam Schedule - Spring 2024',
-    description: 'Important notice regarding final semester examinations scheduled for May-June 2024',
+    title: 'Nepal PSC Non-Technical Services Exam 2081 - Notice',
+    description: 'Official notification for the Non-Technical Services examination scheduled for 2081',
     category: 'exams',
-    content: `The final semester examinations will be conducted from May 15 to June 10, 2024.
+    organization: 'Public Service Commission Nepal',
+    content: `The Public Service Commission has announced the date for Non-Technical Services Examination 2081.
     
-    Detailed schedule:
-    - Semester 1: May 15-25
-    - Semester 2: May 28 - June 5
-    - Semester 3: June 8-10
+    Examination Details:
+    - Date: Chaitra 10-15, 2081 (March 23-28, 2025)
+    - Venue: Districts across Nepal
+    - Application Deadline: Falgun 20, 2081 (February 28, 2025)
     
-    All students must report 15 minutes before the scheduled examination time. Carry your ID card and admit card.`,
-    publishedDate: new Date('2024-03-01'),
-    lastUpdated: new Date('2024-03-10'),
-    views: 1250,
+    Eligible candidates must have bachelor's degree from a recognized university. Age limit: 18-35 years. Candidates from underprivileged sections will be given 5-year age relaxation.`,
+    publishedDate: new Date('2025-02-01'),
+    lastUpdated: new Date('2025-02-15'),
+    deadline: new Date('2025-02-28'),
+    views: 3420,
     priority: 'high',
-    author: 'Exam Controller',
+    author: 'PSC Office',
     attachments: [
-      { name: 'Exam_Schedule.pdf', url: '#' },
-      { name: 'Center_Allocation.xlsx', url: '#' }
+      { name: 'Exam_Notice_NTS_2081.pdf', url: '#' },
+      { name: 'Syllabus.pdf', url: '#' }
     ]
   },
   {
     id: '2',
-    title: 'Recruitment Drive - Software Developer Positions',
-    description: 'Multiple openings for software developers in our development team',
+    title: 'Faculty of Science, Tribhuvan University - Admission 2081 B.Sc. Programs',
+    description: 'Admission notification for Bachelor of Science programs in Faculty of Science',
     category: 'vacancies',
-    content: `We are hiring passionate software developers with 1-3 years of experience.
+    organization: 'Tribhuvan University',
+    content: `Tribhuvan University Faculty of Science invites applications for B.Sc. programs for the academic year 2081.
 
-    Requirements:
-    - Proficiency in JavaScript/TypeScript
-    - Experience with React and Node.js
-    - Knowledge of database design
-    - Excellent problem-solving skills
+    Available Programs:
+    - B.Sc. in Physics
+    - B.Sc. in Chemistry
+    - B.Sc. in Botany
+    - B.Sc. in Zoology
+    - B.Sc. in Microbiology
+    - B.Sc. in Mathematics
+    
+    Admission Criteria:
+    - Pass in NEB Class 12 or equivalent
+    - Minimum 50% marks in Science stream
+    - Application submission deadline: Chaitra 5, 2081 (March 18, 2025)
     
     Compensation: Competitive salary package with health insurance, flexible working hours, and professional development opportunities.
     
@@ -63,29 +75,31 @@ export const MOCK_NOTICES: Notice[] = [
   },
   {
     id: '3',
-    title: 'Campus Infrastructure Development Project - Tender Notice',
-    description: 'Open tender for construction and renovation of campus facilities',
+    title: 'Nepal Rastra Bank - Currency Printing Tender 2081',
+    description: 'Open tender for currency printing and security features development',
     category: 'tenders',
-    content: `Sealed tenders are invited for the development and renovation of campus infrastructure.
+    organization: 'Nepal Rastra Bank',
+    content: `Nepal Rastra Bank invites sealed tenders for currency printing and related security features.
 
     Scope of Work:
-    - New Library Complex (45,000 sq.ft)
-    - Renovation of existing dormitories
-    - IT Center upgrade
-    - Sports facility expansion
+    - Currency note printing (denominations: Rs. 10, 20, 50, 100, 500, 1000)
+    - Security features enhancement
+    - Substrate procurement
+    - Quality assurance testing
     
     Tender Details:
-    - Tender ID: TND/2024/001
-    - Submission Deadline: March 25, 2024
-    - Opening Date: March 28, 2024
-    - Project Duration: 24 months
+    - Tender ID: NRB/2081/CURR/001
+    - Submission Deadline: Chaitra 10, 2081 (March 23, 2025)
+    - Opening Date: Chaitra 12, 2081 (March 25, 2025)
+    - Project Duration: 18 months
     
-    Interested contractors should obtain the tender documents from the administration office or online portal.`,
+    Interested vendors must be registered with Nepal Rastra Bank and have ISO certification.`,
     publishedDate: new Date('2024-02-25'),
     lastUpdated: new Date('2024-03-02'),
+    deadline: new Date('2025-03-23'),
     views: 450,
     priority: 'high',
-    author: 'Administration',
+    author: 'Procurement Officer',
     attachments: [
       { name: 'Tender_Document.pdf', url: '#' },
       { name: 'Technical_Specifications.pdf', url: '#' },
@@ -94,207 +108,243 @@ export const MOCK_NOTICES: Notice[] = [
   },
   {
     id: '4',
-    title: 'New Academic Integrity Policy - Effective April 2024',
-    description: 'Updated policies regarding academic conduct and plagiarism',
-    category: 'policy',
-    content: `Effective from April 1, 2024, the following academic integrity policies will be in force:
+    title: 'Ministry of Foreign Affairs - Diplomatic Service Recruitment',
+    description: 'Recruitment for Foreign Service Officers and Administrative positions',
+    category: 'vacancies',
+    organization: 'Ministry of Foreign Affairs Nepal',
+    content: `The Ministry of Foreign Affairs Nepal is recruiting Foreign Service Officers and Administrative Staff for various positions.
 
-    1. Plagiarism Policy:
-       - All assignments must be original work
-       - Proper citation required for all sources
-       - Turnitin similarity check for all submissions
+    Positions Available:
+    - Foreign Service Officer (15 positions)
+    - Administrative Officer (8 positions)
+    - Translator/Interpreter (5 positions)
+    - Protocol Officer (3 positions)
     
-    2. Examination Conduct:
-       - No electronic devices allowed (except as specified)
-       - Malpractice will result in disciplinary action
-       - Question papers remain confidential
+    Qualifications:
+    - Bachelor's degree from recognized university
+    - Fluency in English and one additional language
+    - Knowledge of international relations and diplomacy
+    - Age: 21-40 years
     
-    3. Disciplinary Action:
-       - First offense: Warning + 10 marks deduction
-       - Second offense: Suspension from exams
-       - Third offense: Expulsion from institution
+    Application Deadline: Chaitra 5, 2081 (March 18, 2025)
+    Written test and interview will be conducted for shortlisted candidates.
     
-    For detailed guidelines, refer to the attached complete policy document.`,
-    publishedDate: new Date('2024-03-05'),
-    lastUpdated: new Date('2024-03-10'),
-    views: 750,
-    priority: 'normal',
-    author: 'Academic Affairs',
+    Apply through: recruitment.mofa.gov.np`,
+    publishedDate: new Date('2024-02-20'),
+    lastUpdated: new Date('2024-03-05'),
+    deadline: new Date('2025-03-18'),
+    views: 2100,
+    priority: 'high',
+    author: 'HR Section',
     attachments: [
-      { name: 'Complete_Policy.pdf', url: '#' }
+      { name: 'Job_Description.pdf', url: '#' },
+      { name: 'Recruitment_Notice.pdf', url: '#' }
     ]
   },
   {
     id: '5',
-    title: 'Annual Sports Festival 2024 - Registration Open',
-    description: 'Register your team for the upcoming annual sports festival',
-    category: 'announcements',
-    content: `The Annual Sports Festival 2024 will be held from April 15-20, 2024.
+    title: 'Updated Foreign Trade Policy - 2081',
+    description: 'New regulations for import-export procedures and customs duties',
+    category: 'policy',
+    organization: 'Department of Customs Nepal',
+    content: `The Department of Customs Nepal has announced updated foreign trade policies effective from Falgun 1, 2081.
 
-    Events:
-    - Football (Men & Women)
-    - Basketball (Men & Women)
-    - Badminton (Singles & Doubles)
-    - Tennis (Men & Women)
-    - Track & Field
-    - Cricket (Men's & Women's)
-    - Volleyball
+    Key Changes:
+    - Revised import duty rates for electronic items (reduced by 5%)
+    - New export promotion scheme for agricultural products
+    - Simplified documentation for priority goods
+    - Enhanced e-commerce monitoring procedures
+    - Introduction of single-window clearance system
     
-    Registration:
-    - Deadline: March 30, 2024
-    - Registration Fee: Rs. 5000 per team
-    - Minimum 8 players per team
+    Compliance:
+    - All traders must register with new system by Falgun 15, 2081
+    - Previous registration remains valid with migration
+    - Training sessions scheduled at all customs offices
     
-    Venue: Central Sports Complex
-    For more details, contact the Sports Office.`,
-    publishedDate: new Date('2024-03-08'),
+    Queries: customs-helpline@customs.gov.np
+    publishedDate: new Date('2024-03-05'),
     lastUpdated: new Date('2024-03-10'),
-    views: 620,
+    deadline: new Date('2025-01-01'),
+    views: 750,
     priority: 'normal',
-    author: 'Sports Department',
+    author: 'Trade Division',
     attachments: [
-      { name: 'Festival_Guidelines.pdf', url: '#' },
-      { name: 'Team_Registration_Form.xlsx', url: '#' }
+      { name: 'Complete_Policy_2081.pdf', url: '#' }
     ]
   },
   {
     id: '6',
-    title: 'Library Renovation - Temporary Closure',
-    description: 'Main library will be closed for renovation from March 15-April 15',
+    title: 'Office of PM - Independence Day Celebration - Volunteer Recruitment',
+    description: 'Recruiting volunteers for National Independence Day celebrations',
     category: 'announcements',
-    content: `The main library will undergo renovation and expansion from March 15 to April 15, 2024.
+    organization: 'Office of PM and Council of Ministers Nepal',
+    content: `The Office of the Prime Minister is recruiting volunteers for the 81st National Independence Day celebrations.
 
-    During this period:
-    - Main library will be closed to students
-    - Emergency reference services available at temporary location (East Building, 2nd Floor)
-    - Book issuance/return at temporary desk
-    - Online resources remain fully accessible
+    Volunteer Opportunities:
+    - Event Coordination (50 volunteers)
+    - Security & Safety (30 volunteers)
+    - Media & Communications (20 volunteers)
+    - Logistics & Transportation (40 volunteers)
+    - Guest Relations (25 volunteers)
     
-    We apologize for any inconvenience. The expanded library will offer additional seating and modern facilities.`,
-    publishedDate: new Date('2024-03-07'),
-    lastUpdated: new Date('2024-03-09'),
-    views: 540,
-    priority: 'normal',
-    author: 'Library Services',
-    attachments: []
+    Requirements:
+    - Nepalese citizen, age 18-45 years
+    - Good communication skills
+    - Willing to work full day
+    - No criminal record
+    
+    Dates: Baishakh 15-20, 2081 (April 29 - May 4, 2025)
+    Venue: Kathmandu and district headquarters
+    Stipend: Rs. 500 per day + meals
+    
+    Application Deadline: Falgun 28, 2081 (March 10, 2025)`,
+    publishedDate: new Date('2024-02-15'),
+    lastUpdated: new Date('2024-02-20'),
+    deadline: new Date('2025-03-10'),
+    views: 1850,
+    priority: 'high',
+    author: 'Events Management',
+    attachments: [
+      { name: 'Volunteer_Application_Form.pdf', url: '#' }
+    ]
   },
   {
     id: '7',
-    title: 'Scholarship Opportunity - Merit-Based Awards',
-    description: 'Apply for merit-based scholarships worth Rs. 1-2 lakhs',
+    title: 'TU Scholarship for Economically Disadvantaged Students - 2081',
+    description: 'Full scholarship opportunities for economically disadvantaged students',
     category: 'announcements',
-    content: `The institution is offering merit-based scholarships for the academic year 2024-25.
+    organization: 'Tribhuvan University',
+    content: `Tribhuvan University announces merit-based scholarships for economically disadvantaged students.
 
     Eligibility:
-    - CGPA: 8.0 or above
-    - No disciplinary record
-    - Financial need (case-by-case basis)
+    - Annual family income below Rs. 2,50,000
+    - CGPA: 3.0 or above (minimum)
+    - Currently enrolled students preferred
+    - No other scholarship recipients
     
-    Award Amount:
-    - Full Scholarship: Rs. 2,00,000
-    - Partial Scholarship: Rs. 1,00,000
-    - Book & Exam Fee: Rs. 50,000
+    Award Details:
+    - Full Tuition Scholarship
+    - Monthly stipend: Rs. 3,000
+    - Book allowance: Rs. 5,000 per semester
+    - Hostel fee assistance (if applicable)
     
     Application Process:
-    - Apply through student portal
-    - Submit along with financial statement
-    - Interview round for shortlisted candidates
+    - Apply through university portal
+    - Submit income certificate from VDC
+    - Recommendation letter from faculty adviser
+    - Interview round for final selection
     
-    Deadline: April 10, 2024`,
-    publishedDate: new Date('2024-03-06'),
-    lastUpdated: new Date('2024-03-08'),
-    views: 680,
-    priority: 'normal',
-    author: 'Admissions Office',
+    Deadline: Chaitra 15, 2081 (March 28, 2025)`,
+    publishedDate: new Date('2024-02-18'),
+    lastUpdated: new Date('2024-02-25'),
+    deadline: new Date('2025-03-28'),
+    views: 2340,
+    priority: 'high',
+    author: 'Scholarship Cell',
     attachments: [
-      { name: 'Scholarship_Guidelines.pdf', url: '#' }
+      { name: 'Scholarship_Guidelines_2081.pdf', url: '#' }
     ]
   },
   {
     id: '8',
-    title: 'Internship Program - Company Partnerships',
-    description: 'New internship opportunities with leading tech and finance companies',
-    category: 'vacancies',
-    content: `We are partnering with leading companies to offer internship opportunities for the Summer 2024.
+    title: 'PSC Technical Services Examination - 2081 Admit Card Release',
+    description: 'Admit cards for Technical Services examination now available',
+    category: 'exams',
+    organization: 'Public Service Commission Nepal',
+    content: `Admit cards for the Technical Services Examination 2081 are now available for download.
 
-    Participating Companies:
-    - TechCore Solutions (6 positions)
-    - FinanceHub Advisors (4 positions)
-    - ConsultPro Inc. (5 positions)
-    - Digital Marketing Pro (3 positions)
+    Important Information:
+    - Download from: psc.gov.np/admitcard
+    - Exam Date: Chaitra 8-10, 2081 (March 21-23, 2025)
+    - Time: 1:00 PM - 3:00 PM
+    - Total Questions: 100 (MCQ format)
+    - Negative Marking: 0.25 marks per wrong answer
     
-    Eligibility:
-    - 2nd and 3rd year students
-    - CGPA: 6.5+
-    - Duration: 8-12 weeks
-    - Stipend: Rs. 15,000-25,000 per month
+    Required Documents:
+    - Admit Card (printed)
+    - Valid ID (Citizenship/Passport)
+    - Black/Blue pen and pencil
     
-    Application deadline: March 20, 2024`,
-    publishedDate: new Date('2024-03-04'),
-    lastUpdated: new Date('2024-03-07'),
-    views: 920,
+    Note: Report 30 minutes before exam time. Examination centers will be assigned district-wise.`,
+    publishedDate: new Date('2024-03-01'),
+    lastUpdated: new Date('2024-03-10'),
+    deadline: new Date('2025-03-21'),
+    views: 5680,
     priority: 'high',
-    author: 'Career Services',
+    author: 'Examination Division',
     attachments: [
-      { name: 'Company_Details.pdf', url: '#' }
+      { name: 'Exam_Instructions.pdf', url: '#' },
+      { name: 'Test_Centers.pdf', url: '#' }
     ]
   },
   {
     id: '9',
-    title: 'Mid-Semester Exam Notification',
-    description: 'Schedule for mid-semester examinations in April 2024',
-    category: 'exams',
-    content: `Mid-semester examinations for all programs will be conducted in April 2024.
+    title: 'NRB - New Notes & Coins Issued - Information Campaign',
+    description: 'Public awareness campaign for newly issued currency denominations',
+    category: 'announcements',
+    organization: 'Nepal Rastra Bank',
+    content: `Nepal Rastra Bank has issued new currency notes and coins with enhanced security features.
 
-    Key Dates:
-    - Exam Period: April 2-12, 2024
-    - Time Slot: 10:00 AM - 1:00 PM
-    - Duration: 2 hours per paper
+    New Features:
+    - Enhanced holograms and color-shifting inks
+    - Improved anti-counterfeiting measures
+    - Better durability and texture
+    - Accessibility features for visually impaired
     
-    Preparation:
-    - Syllabus coverage up to March 31, 2024
-    - Revision classes will continue until April 1
-    - Previous year papers available in library
+    Denominations Released:
+    - Notes: Rs. 10, 20, 50, 100, 500, 1000, 2000
+    - Coins: Rs. 1, 2, 5, 10, 25, 50
     
-    Marking:
-    - Each paper: 50 marks
-    - 25% of final grade
+    Exchange:
+    - Old currency can be exchanged at any commercial bank
+    - No deadline for exchange
+    - Both old and new notes are legal tender
     
-    Note: No requests for exam date change will be entertained after March 25.`,
-    publishedDate: new Date('2024-03-02'),
-    lastUpdated: new Date('2024-03-06'),
-    views: 1100,
-    priority: 'high',
-    author: 'Exam Controller',
+    For counterfeiting reports: nrb-security@nrb.org.np`,
+    publishedDate: new Date('2024-02-28'),
+    lastUpdated: new Date('2024-03-08'),
+    views: 1250,
+    priority: 'normal',
+    author: 'Communications',
     attachments: [
-      { name: 'Mid_Sem_Schedule.pdf', url: '#' }
+      { name: 'New_Currency_Details.pdf', url: '#' }
     ]
   },
   {
     id: '10',
-    title: 'Campus WiFi Upgrade - Downtime Notice',
-    description: 'Internet services will be interrupted for network upgrade',
+    title: 'MOFA - Diplomatic Passport Application - New Online System',
+    description: 'Diplomatic passport application process now available online',
     category: 'announcements',
-    content: `Campus WiFi network will be upgraded to 5G technology from March 12-14, 2024.
+    organization: 'Ministry of Foreign Affairs Nepal',
+    content: `The Ministry of Foreign Affairs has launched an online system for diplomatic passport applications.
 
-    Expected Downtime:
-    - March 12: 10:00 PM - 6:00 AM (March 13)
-    - March 13: 10:00 PM - 6:00 AM (March 14)
-    - March 14: 10:00 PM - 2:00 AM (March 15)
+    Key Features:
+    - Online application submission
+    - Real-time status tracking
+    - Reduced processing time (15 days)
+    - Digital verification system
     
-    Benefits of Upgrade:
-    - 10x faster internet speed
-    - Better coverage in all areas
-    - Improved security features
-    - Support for more simultaneous connections
+    Eligible Applicants:
+    - Government officials on foreign postings
+    - Diplomatic personnel
+    - Authorized government representatives
     
-    Please plan your work accordingly. Wired connections will remain active during the maintenance.`,
-    publishedDate: new Date('2024-03-03'),
-    lastUpdated: new Date('2024-03-05'),
-    views: 380,
+    Process:
+    1. Create account on mofa.gov.np
+    2. Fill application form with required documents
+    3. Pay processing fee (Rs. 5,000)
+    4. Schedule biometric appointment
+    5. Collect passport within 15 days
+    
+    Support: passport-support@mofa.gov.np`,
+    publishedDate: new Date('2024-03-05'),
+    lastUpdated: new Date('2024-03-09'),
+    views: 890,
     priority: 'normal',
-    author: 'IT Department',
-    attachments: []
+    author: 'Passport Division',
+    attachments: [
+      { name: 'Online_System_Guide.pdf', url: '#' }
+    ]
   }
 ];
 
