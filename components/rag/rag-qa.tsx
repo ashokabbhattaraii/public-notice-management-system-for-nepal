@@ -48,11 +48,13 @@ export function RagQA({ isWidget = false }: RagQAProps) {
     e.preventDefault();
     if (!input.trim()) return;
 
+    const userQuery = input;
+
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
-      content: input,
+      content: userQuery,
       timestamp: new Date(),
     };
 
@@ -60,44 +62,87 @@ export function RagQA({ isWidget = false }: RagQAProps) {
     setInput('');
     setIsLoading(true);
 
-    // Simulate API call
+    // Simulate RAG pipeline with realistic delays
     setTimeout(() => {
-      const mockResponses: Record<string, string> = {
-        scholarship:
-          'Based on our Financial Aid & Scholarships Guide, we offer merit-based scholarships ranging from Rs. 50,000 to Rs. 2,00,000 per year. Eligibility requires a CGPA of 8.0 or above with no disciplinary records. The application deadline for 2024-25 is April 10, 2024.',
-        facilities:
-          'According to the Campus Map & Facilities Guide, our institution offers a state-of-the-art library, computer labs, sports complex, hostel facilities, medical center, and a cafeteria. Most facilities are open 24/7 during academic sessions.',
-        admission:
-          'Our admission process is detailed in the Course Catalog. We offer various undergraduate and postgraduate programs. The general admission timeline is typically from May to July each year.',
-        default:
-          'I found relevant information in our documents. To get more specific details, please ask about scholarships, facilities, admissions, or course offerings.',
-      };
+      // Get embedded documents from localStorage
+      const storedDocs = localStorage.getItem('rag-documents');
+      const embeddedDocs = storedDocs ? JSON.parse(storedDocs).filter((d: any) => d.embedded) : [];
 
-      let response = mockResponses.default;
-      const lowerInput = input.toLowerCase();
+      // Simulate semantic search over documents
+      const query = userQuery.toLowerCase();
+      const keywords = ['scholarship', 'aid', 'facility', 'campus', 'hostel', 'admission', 'apply', 'course', 'exam', 'fee'];
+      
+      // Find relevant keywords in query
+      const relevantKeywords = keywords.filter(kw => query.includes(kw));
+      
+      // Mock document chunks (simulating vector database retrieval)
+      const documentChunks = [
+        {
+          content: 'We offer merit-based scholarships ranging from Rs. 50,000 to Rs. 2,00,000 per year. Eligibility requires a CGPA of 8.0 or above with no disciplinary records. The application deadline for 2024-25 is April 10, 2024.',
+          source: 'Financial Aid & Scholarships Guide',
+          relevance: query.includes('scholarship') || query.includes('aid') ? 0.95 : 0.1
+        },
+        {
+          content: 'Our institution offers a state-of-the-art library with 50,000+ books, 24/7 computer labs with high-speed internet, an Olympic-size swimming pool, tennis courts, basketball courts, modern hostel facilities with single and double occupancy rooms, a well-equipped medical center, and multiple cafeterias serving diverse cuisines.',
+          source: 'Campus Map & Facilities Guide',
+          relevance: query.includes('facility') || query.includes('campus') || query.includes('hostel') ? 0.92 : 0.15
+        },
+        {
+          content: 'The admission process begins with an online application submission between May 1 and June 30. Eligible candidates must appear for an entrance examination. Results are declared within 2 weeks, followed by counseling sessions for seat allocation.',
+          source: 'Admission Procedures 2024',
+          relevance: query.includes('admission') || query.includes('apply') ? 0.88 : 0.12
+        },
+        {
+          content: 'We offer undergraduate programs in Engineering, Business Administration, Computer Science, and Liberal Arts. Postgraduate programs include MBA, M.Tech, and specialized master degrees. Course duration ranges from 3-5 years depending on the program.',
+          source: 'Course Catalog 2024',
+          relevance: query.includes('course') || query.includes('program') ? 0.85 : 0.2
+        }
+      ];
 
-      if (lowerInput.includes('scholarship') || lowerInput.includes('aid'))
-        response = mockResponses.scholarship;
-      else if (
-        lowerInput.includes('facility') ||
-        lowerInput.includes('campus') ||
-        lowerInput.includes('hostel')
-      )
-        response = mockResponses.facilities;
-      else if (lowerInput.includes('admission') || lowerInput.includes('apply'))
-        response = mockResponses.admission;
+      // Add user-uploaded documents to search space
+      embeddedDocs.forEach((doc: any) => {
+        documentChunks.push({
+          content: `Information from uploaded document: ${doc.name}`,
+          source: doc.name,
+          relevance: relevantKeywords.length > 0 ? 0.5 : 0.3
+        });
+      });
+
+      // Retrieve top 2 most relevant chunks
+      const retrievedChunks = documentChunks
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, 2);
+
+      // Generate response using retrieved context
+      let response = '';
+      const sources: string[] = [];
+
+      if (retrievedChunks[0].relevance > 0.5) {
+        // High relevance - provide detailed answer
+        response = `Based on the retrieved documents, ${retrievedChunks[0].content}`;
+        sources.push(retrievedChunks[0].source);
+        
+        if (retrievedChunks[1] && retrievedChunks[1].relevance > 0.4) {
+          response += `\n\nAdditionally, ${retrievedChunks[1].content}`;
+          sources.push(retrievedChunks[1].source);
+        }
+      } else {
+        // Low relevance - general response
+        response = `I found some information in our documents, but it may not directly answer your question. ${retrievedChunks[0].content}\n\nFor more specific information, please ask about scholarships, facilities, admissions, courses, or upload relevant documents and embed them for better results.`;
+        sources.push(retrievedChunks[0].source);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
         content: response,
         timestamp: new Date(),
-        sources: ['Financial Aid & Scholarships Guide', 'Student Handbook 2024'],
+        sources: sources,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
       setIsLoading(false);
-    }, 1000);
+    }, 1500);
   };
 
   const copyToClipboard = (id: string, content: string) => {
@@ -125,10 +170,10 @@ export function RagQA({ isWidget = false }: RagQAProps) {
   };
 
   return (
-    <Card className="flex flex-col h-full">
+    <Card className="flex flex-col h-full overflow-hidden">
       {/* Header with Actions */}
       {!isWidget && (
-        <div className="flex items-center justify-between p-3 lg:p-4 border-b border-border bg-muted/30">
+        <div className="flex items-center justify-between p-3 lg:p-4 border-b border-border bg-muted/30 flex-shrink-0">
           <h3 className="font-semibold text-foreground text-sm lg:text-base">Chat with Documents</h3>
           <div className="flex items-center gap-1 lg:gap-2">
             <Button
@@ -154,7 +199,7 @@ export function RagQA({ isWidget = false }: RagQAProps) {
       )}
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-3 lg:p-4">
+      <div className="flex-1 overflow-y-auto p-3 lg:p-4">
         <div className="space-y-3 lg:space-y-4">
           {messages.map((message) => (
             <div
@@ -237,10 +282,10 @@ export function RagQA({ isWidget = false }: RagQAProps) {
           )}
           <div ref={messagesEndRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input */}
-      <div className="border-t border-border p-3 lg:p-4">
+      <div className="border-t border-border p-3 lg:p-4 flex-shrink-0">
         <form onSubmit={handleSendMessage} className="flex gap-2">
           <Input
             placeholder="Ask a question..."
