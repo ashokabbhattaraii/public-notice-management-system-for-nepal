@@ -1,0 +1,231 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.002 230);
+  --foreground: oklch(0.15 0.02 230);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 230);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 230);
+  --primary: oklch(0.45 0.18 240);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.96 0.008 230);
+  --secondary-foreground: oklch(0.25 0.015 230);
+  --muted: oklch(0.96 0.005 230);
+  --muted-foreground: oklch(0.5 0.015 230);
+  --accent: oklch(0.94 0.02 230);
+  --accent-foreground: oklch(0.25 0.015 230);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.008 230);
+  --input: oklch(0.92 0.008 230);
+  --ring: oklch(0.45 0.18 240);
+  --chart-1: oklch(0.45 0.18 240);
+  --chart-2: oklch(0.55 0.15 200);
+  --chart-3: oklch(0.5 0.12 160);
+  --chart-4: oklch(0.6 0.1 280);
+  --chart-5: oklch(0.65 0.08 60);
+  --sidebar: oklch(0.98 0.003 230);
+  --sidebar-foreground: oklch(0.15 0.02 230);
+  --sidebar-primary: oklch(0.45 0.18 240);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.94 0.02 230);
+  --sidebar-accent-foreground: oklch(0.25 0.015 230);
+  --sidebar-border: oklch(0.92 0.008 230);
+  --sidebar-ring: oklch(0.45 0.18 240);
+}
+
+.dark {
+  --background: oklch(0.13 0.015 230);
+  --foreground: oklch(0.95 0.005 230);
+  --card: oklch(0.17 0.015 230);
+  --card-foreground: oklch(0.95 0.005 230);
+  --popover: oklch(0.17 0.015 230);
+  --popover-foreground: oklch(0.95 0.005 230);
+  --primary: oklch(0.6 0.16 240);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.22 0.015 230);
+  --secondary-foreground: oklch(0.9 0.005 230);
+  --muted: oklch(0.22 0.015 230);
+  --muted-foreground: oklch(0.65 0.015 230);
+  --accent: oklch(0.24 0.025 230);
+  --accent-foreground: oklch(0.9 0.005 230);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.6 0.16 240);
+  --chart-1: oklch(0.6 0.16 240);
+  --chart-2: oklch(0.65 0.12 200);
+  --chart-3: oklch(0.55 0.1 160);
+  --chart-4: oklch(0.6 0.1 280);
+  --chart-5: oklch(0.7 0.08 60);
+  --sidebar: oklch(0.15 0.015 230);
+  --sidebar-foreground: oklch(0.95 0.005 230);
+  --sidebar-primary: oklch(0.6 0.16 240);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.24 0.025 230);
+  --sidebar-accent-foreground: oklch(0.9 0.005 230);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.6 0.16 240);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Gradient utilities */
+.gradient-primary {
+  background: oklch(0.35 0.12 240);
+}
+
+.gradient-hero {
+  background: oklch(0.15 0.02 230);
+}
+
+.glass {
+  background: oklch(1 0 0 / 5%);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(1 0 0 / 10%);
+}
+
+.dark .glass {
+  background: oklch(1 0 0 / 5%);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(1 0 0 / 8%);
+}
+
+.gradient-text {
+  color: oklch(0.45 0.18 240);
+}
+
+.gradient-border {
+  border-color: oklch(0.45 0.18 240);
+}
+
+/* CPU Architecture animations */
+.cpu-architecture {
+  offset-anchor: 10px 0px;
+  animation: animation-path;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.75, -0.01, 0, 0.99);
+}
+
+.cpu-line-1 {
+  offset-path: path("M 10 20 h 79.5 q 5 0 5 5 v 30");
+  animation-duration: 5s;
+  animation-delay: 1s;
+}
+
+.cpu-line-2 {
+  offset-path: path("M 180 10 h -69.7 q -5 0 -5 5 v 40");
+  animation-delay: 6s;
+  animation-duration: 2s;
+}
+
+.cpu-line-3 {
+  offset-path: path("M 130 20 v 21.8 q 0 5 -5 5 h -25");
+  animation-delay: 4s;
+  animation-duration: 6s;
+}
+
+.cpu-line-4 {
+  offset-path: path("M 170 80 v -21.8 q 0 -5 -5 -5 h -65");
+  animation-delay: 3s;
+  animation-duration: 3s;
+}
+
+.cpu-line-5 {
+  offset-path: path("M 135 65 h 15 q 5 0 5 5 v 10 q 0 5 -5 5 h -39.8 q -5 0 -5 -5 v -35");
+  animation-delay: 9s;
+  animation-duration: 4s;
+}
+
+.cpu-line-6 {
+  offset-path: path("M 94.8 95 v -46");
+  animation-delay: 3s;
+  animation-duration: 7s;
+}
+
+.cpu-line-7 {
+  offset-path: path("M 88 88 v -15 q 0 -5 -5 -5 h -10 q -5 0 -5 -5 v -5 q 0 -5 5 -5 h 28");
+  animation-delay: 4s;
+  animation-duration: 4s;
+}
+
+.cpu-line-8 {
+  offset-path: path("M 30 30 h 25 q 5 0 5 5 v 6.5 q 0 5 5 5 h 35");
+  animation-delay: 3s;
+  animation-duration: 3s;
+}
+
+@keyframes animation-path {
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+/* Animate-in for scroll animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(2rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
