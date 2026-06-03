@@ -56,11 +56,11 @@ __pycache__/
 venv/
 ENV/
 
+# Turbo
+.turbo/
+
 # Misc
 *.pem
 *.p12
 *.log
 *.sqlite
-
-# Git
-.gitignore

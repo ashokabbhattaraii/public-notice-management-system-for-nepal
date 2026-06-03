@@ -1,0 +1,10 @@
+{
+  "name": "@pnm/ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": ".venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+    "build": "echo 'No build step for Python service'",
+    "lint": ".venv/bin/python -m ruff check app/"
+  }
+}
