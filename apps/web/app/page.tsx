@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
-import { Search, FileText, Bell, Sparkles, ArrowRight, BookOpen, Shield, Zap } from "lucide-react"
+import { Search, FileText, Bell, ArrowRight, BookOpen, Shield, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -399,10 +399,9 @@ export default function HomePage() {
 
         <div className="relative z-10 max-w-5xl mx-auto">
           <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 border border-primary/20 rounded-full px-3.5 py-1.5 mb-4">
-              <Sparkles className="size-3.5 text-primary" />
-              <span className="text-xs font-semibold text-primary">AI-Powered Engine</span>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
+              How the AI works
+            </p>
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               Built on Production-Grade AI Infrastructure
             </h2>

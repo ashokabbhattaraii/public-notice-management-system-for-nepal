@@ -2,8 +2,8 @@
 
 import React, { useRef, useEffect } from "react"
 import { Layers, ScanText, Bell, Wifi } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Sparkles } from "lucide-react"
+
+
 import gsap from "gsap"
 
 const solutions = [
@@ -12,7 +12,7 @@ const solutions = [
     icon: Layers,
     problem: "Scattered portals",
     title: "One Feed. Every Source.",
-    body: "GovNotice automatically aggregates notices from all major government portals — Public Service Commission, Ministry of Finance, Judicial Service Commission, and more — into a single, unified, always-updated feed.",
+    body: "Suchana AI automatically aggregates notices from all major government portals — Public Service Commission, Ministry of Finance, Judicial Service Commission, and more — into a single, unified, always-updated feed.",
     tag: "Centralized Aggregation",
   },
   {
@@ -154,15 +154,15 @@ export function SolutionSection() {
       <div className="relative max-w-4xl mx-auto">
         {/* Heading */}
         <div ref={headingRef} className="text-center mb-12">
-          <Badge variant="outline" className="mb-4 border-primary/20">
-            <Sparkles className="size-3 mr-1" /> The Solution
-          </Badge>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
+            What we did about it
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             One platform that fixes{" "}
             <span className="text-primary">all four problems.</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            GovNotice addresses each failure in Nepal&apos;s public information system with a targeted, AI-powered layer.
+            Suchana AI addresses each failure in Nepal&apos;s public information system with a targeted, AI-powered layer.
           </p>
         </div>
 

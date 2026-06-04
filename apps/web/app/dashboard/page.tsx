@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   Eye, Bookmark, Bell, Clock, TrendingUp, FileText, Search,
   ArrowRight, AlertCircle, Zap, CheckCircle, FolderOpen,
-  Building2, CalendarClock, Sparkles, Activity, BarChart3,
+  Building2, CalendarClock, Activity, BarChart3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -296,7 +296,7 @@ export default function DashboardPage() {
               <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Sparkles className="size-4 text-primary" /> Recommended for You
+                    <TrendingUp className="size-4 text-primary" /> Recommended for You
                   </h3>
                   <Link href="/notices">
                     <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">

@@ -42,9 +42,9 @@ export default function AdminAlertChannelsPage() {
       fields: [
         { key: "host", label: "SMTP Host", value: "smtp.gmail.com", placeholder: "smtp.example.com" },
         { key: "port", label: "SMTP Port", value: "587", placeholder: "587" },
-        { key: "username", label: "Username", value: "notices@govnotice.np", placeholder: "user@example.com" },
+        { key: "username", label: "Username", value: "notices@suchana.ai", placeholder: "user@example.com" },
         { key: "password", label: "Password", value: "••••••••", placeholder: "App password" },
-        { key: "from", label: "From Address", value: "notices@govnotice.np", placeholder: "noreply@example.com" },
+        { key: "from", label: "From Address", value: "notices@suchana.ai", placeholder: "noreply@example.com" },
       ],
     },
     {

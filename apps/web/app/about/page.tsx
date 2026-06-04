@@ -22,7 +22,7 @@ export default function AboutPage() {
 
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-16">
         <div className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 border-primary/20">About GovNotice</Badge>
+          <Badge variant="outline" className="mb-4 border-primary/20">About Suchana AI</Badge>
           <h1 className="text-4xl font-bold mb-4">
             Nepal&apos;s <span className="gradient-text">Public Notice</span> Repository
           </h1>
@@ -37,7 +37,7 @@ export default function AboutPage() {
             <CardContent className="p-8">
               <h2 className="text-xl font-semibold mb-4">Our Mission</h2>
               <p className="text-muted-foreground leading-relaxed mb-4">
-                GovNotice was created to bridge the gap between government institutions and citizens.
+                Suchana AI was created to bridge the gap between government institutions and citizens.
                 In a country where important notices are scattered across hundreds of websites, notice boards,
                 and newspapers, finding relevant information has always been a challenge.
               </p>
@@ -48,7 +48,7 @@ export default function AboutPage() {
               </p>
               <p className="text-muted-foreground leading-relaxed">
                 Whether you&apos;re a job seeker looking for vacancy announcements, a contractor tracking
-                tenders, or a student preparing for competitive exams, GovNotice ensures you never miss
+                tenders, or a student preparing for competitive exams, Suchana AI ensures you never miss
                 an important update.
               </p>
             </CardContent>
@@ -99,7 +99,7 @@ export default function AboutPage() {
         <div className="text-center mt-16">
           <h3 className="text-lg font-semibold mb-2">Contact</h3>
           <p className="text-sm text-muted-foreground">
-            For inquiries, contact us at <span className="text-primary">info@govnotice.gov.np</span>
+            For inquiries, contact us at <span className="text-primary">info@suchana.ai</span>
           </p>
         </div>
       </div>

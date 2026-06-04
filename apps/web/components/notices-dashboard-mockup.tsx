@@ -93,7 +93,7 @@ export function NoticesDashboardMockup() {
         {/* Window title */}
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <FileText className="size-3.5" />
-          GovNotice — Dashboard
+          Suchana AI — Dashboard
         </div>
 
         {/* Spacer */}

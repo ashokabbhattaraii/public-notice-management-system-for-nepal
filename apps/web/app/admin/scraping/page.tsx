@@ -45,7 +45,7 @@ export default function AdminScrapingPage() {
     maxRetries: 3,
     retryDelay: 15,
     concurrentJobs: 2,
-    userAgent: "GovNotice-Scraper/1.0",
+    userAgent: "SuchanaAI-Scraper/1.0",
     respectRobotsTxt: true,
     rateLimitDelay: 2,
     maxItemsPerRun: 100,

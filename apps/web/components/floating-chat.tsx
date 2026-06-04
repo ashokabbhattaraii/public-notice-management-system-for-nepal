@@ -99,7 +99,7 @@ export function FloatingChat() {
                 <Bot className="size-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold">GovNotice AI</p>
+                <p className="text-sm font-semibold">Suchana AI</p>
                 <p className="text-[10px] text-muted-foreground">Ask about any government notice</p>
               </div>
             </div>

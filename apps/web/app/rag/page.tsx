@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react"
 import {
   FileText, Search, Send, Upload, Bot, User, Eye,
-  Sparkles, MessageSquare, Database, ChevronRight,
+  Cpu, MessageSquare, Database, ChevronRight,
   LayoutPanelLeft, BookOpen, Copy, Trash2,
   ThumbsUp, ThumbsDown, RefreshCw, CheckCircle,
   Clock, BarChart3, Unlink, ToggleLeft, ToggleRight,
@@ -163,7 +163,7 @@ export default function RagPage() {
   const [docs, setDocs] = useState<DocWithState[]>(enrichedDocs)
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: "sys-1", role: "assistant",
-    content: "Hello! I'm GovNotice Document AI — ask me anything about Nepal's indexed government documents.",
+    content: "Hello! I'm Suchana AI Document Intelligence — ask me anything about Nepal's indexed government documents.",
     timestamp: new Date().toISOString(),
   }])
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({})
@@ -273,7 +273,7 @@ export default function RagPage() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Sparkles className="size-4 text-primary" />
+            <Cpu className="size-4 text-primary" />
           </div>
           <div>
             <p className="text-sm font-semibold leading-none">Document AI</p>
@@ -394,7 +394,7 @@ export default function RagPage() {
         <div className="flex items-center justify-between gap-4 shrink-0 flex-wrap">
           <div className="flex items-center gap-2.5">
             <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Sparkles className="size-4 text-primary" />
+              <Cpu className="size-4 text-primary" />
             </div>
             <div>
               <div className="flex items-center gap-2">

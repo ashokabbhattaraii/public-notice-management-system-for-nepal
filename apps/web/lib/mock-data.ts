@@ -4,7 +4,7 @@ export const mockUsers: User[] = [
   {
     id: "1",
     username: "admin",
-    email: "admin@govnotice.np",
+    email: "admin@suchana.ai",
     role: "admin",
     createdAt: "2024-01-15T00:00:00Z",
     lastLogin: "2026-06-02T08:30:00Z",

@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useRef, useEffect } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Sparkles, type LucideIcon } from "lucide-react"
+
+import { type LucideIcon } from "lucide-react"
 import gsap from "gsap"
 
 interface Feature {
@@ -193,9 +193,9 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
       <div className="max-w-5xl mx-auto relative">
         {/* Heading */}
         <div ref={headingRef} className="text-center mb-10">
-          <Badge variant="outline" className="mb-4 border-primary/20">
-            <Sparkles className="size-3 mr-1" /> Platform Features
-          </Badge>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
+            Everything in one place
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Everything you need for <span className="text-primary">public notices</span>
           </h2>

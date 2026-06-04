@@ -23,12 +23,12 @@ export default function SignupPage() {
             </div>
           </Link>
           <CardTitle className="text-2xl">Create an account</CardTitle>
-          <CardDescription>GovNotice uses Google sign-in only; no email/password signup is required.</CardDescription>
+          <CardDescription>Suchana AI uses Google sign-in only; no email/password signup is required.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             <p className="text-sm text-muted-foreground">
-              Authentication is handled through Google only. Click the button below to sign in and begin using GovNotice.
+              Authentication is handled through Google only. Click the button below to sign in and begin using Suchana AI.
             </p>
             <Button
               variant="outline"

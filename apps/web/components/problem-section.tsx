@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useRef, useEffect } from "react"
-import { Globe, FileX, BellOff, MapPin, ShieldAlert } from "lucide-react"
+import { Globe, FileX, BellOff, MapPin } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import gsap from "gsap"
 
@@ -199,9 +199,9 @@ export function ProblemSection() {
       <div className="max-w-5xl mx-auto relative">
         {/* Heading */}
         <div ref={headingRef} className="text-center mb-10">
-          <Badge variant="outline" className="mb-4 border-primary/20">
-            <ShieldAlert className="size-3 mr-1" /> The Problem
-          </Badge>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
+            Why we built this
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Nepal&apos;s public information system{" "}
             <span className="text-primary">is broken.</span>

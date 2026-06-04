@@ -409,7 +409,7 @@ function NoticeDetail({
                     <div className="mr-auto max-w-[90%] bg-muted/60 border border-border/60 rounded-xl rounded-bl-sm px-3 py-2">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <Sparkles className="size-3 text-primary" />
-                        <span className="text-[10px] font-semibold text-primary">GovNotice AI</span>
+                        <span className="text-[10px] font-semibold text-primary">Suchana AI</span>
                       </div>
                       <p className="text-xs leading-relaxed">{item.a}</p>
                     </div>

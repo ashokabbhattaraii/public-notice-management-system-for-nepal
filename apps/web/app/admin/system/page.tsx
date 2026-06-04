@@ -221,7 +221,7 @@ export default function AdminSystemPage() {
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Site Title</label>
-                  <Input defaultValue="GovNotice - Nepal Public Notice Repository" />
+                  <Input defaultValue="Suchana AI - Nepal Public Notice Management System" />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Site Description</label>

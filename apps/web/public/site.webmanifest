@@ -1,7 +1,7 @@
 {
-  "name": "GovNotice",
-  "short_name": "GovNotice",
-  "description": "Nepal's unified public notice platform",
+  "name": "Suchana AI",
+  "short_name": "Suchana AI",
+  "description": "AI-Powered Cloud-Based Public Notice Management System for Nepal",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

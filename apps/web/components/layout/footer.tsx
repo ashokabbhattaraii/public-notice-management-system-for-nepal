@@ -37,13 +37,15 @@ export function Footer() {
           {/* Brand column */}
           <div className="md:col-span-2">
             <Link href="/" className="inline-flex items-center mb-5">
-              <Image
-                src="/images/logo1.png"
-                alt="GovNotice"
-                width={110}
-                height={38}
-                className="h-8 w-auto object-contain opacity-90 dark:opacity-80"
-              />
+              <div className="dark:bg-white dark:rounded-lg dark:px-2 dark:py-1">
+                <Image
+                  src="/images/logo1.png"
+                  alt="Suchana AI"
+                  width={140}
+                  height={49}
+                  className="h-9 w-auto object-contain"
+                />
+              </div>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
               An AI-powered, cloud-based platform aggregating Nepal&apos;s public government
@@ -91,7 +93,7 @@ export function Footer() {
         <div className="mt-12 pt-6 border-t border-border/60 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex flex-col md:flex-row items-center gap-2 text-center md:text-left">
             <p className="text-xs text-muted-foreground">
-              &copy; 2025 GovNotice — AI-Powered Public Notice Management System for Nepal.
+              &copy; 2025 Suchana AI — AI-Powered Public Notice Management System for Nepal.
             </p>
             <span className="hidden md:inline text-muted-foreground/40 text-xs">·</span>
             <p className="text-xs text-muted-foreground">

@@ -33,14 +33,16 @@ export function Header() {
         {/* Logo + Nav */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center shrink-0 group">
-            <Image
-              src="/images/logo1.png"
-              alt="GovNotice — Nepal Public Notice Platform"
-              width={130}
-              height={45}
-              priority
-              className="h-9 w-auto object-contain transition-opacity group-hover:opacity-80"
-            />
+            <div className="dark:bg-white dark:rounded-lg dark:px-2 dark:py-1 transition-all">
+              <Image
+                src="/images/logo1.png"
+                alt="Suchana AI — Nepal Public Notice Platform"
+                width={160}
+                height={56}
+                priority
+                className="h-10 w-auto object-contain transition-opacity group-hover:opacity-80"
+              />
+            </div>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">

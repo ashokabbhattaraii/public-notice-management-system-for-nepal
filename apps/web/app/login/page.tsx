@@ -38,7 +38,7 @@ export default function LoginPage() {
             </div>
           </Link>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in with Google to access GovNotice</CardDescription>
+          <CardDescription>Sign in with Google to access Suchana AI</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -102,7 +102,7 @@ export default function LoginPage() {
             </Button>
 
             <p className="text-sm text-muted-foreground">
-              GovNotice only supports Google login. No username or password is required.
+              Suchana AI only supports Google login. No username or password is required.
             </p>
 
             {error && (
@@ -110,7 +110,7 @@ export default function LoginPage() {
             )}
 
             <p className="text-center text-sm text-muted-foreground mt-2">
-              New to GovNotice? Just use Google to sign in — no separate signup needed.
+              New to Suchana AI? Just use Google to sign in — no separate signup needed.
             </p>
           </div>
         </CardContent>
