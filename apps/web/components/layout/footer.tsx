@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { Sun, Moon, Github } from "lucide-react"
+import { Logo } from "@/components/ui/logo"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 
@@ -36,17 +36,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-10">
           {/* Brand column */}
           <div className="md:col-span-2">
-            <Link href="/" className="inline-flex items-center mb-5">
-              <div className="dark:bg-white dark:rounded-lg dark:px-2 dark:py-1">
-                <Image
-                  src="/images/logo1.png"
-                  alt="Suchana AI"
-                  width={140}
-                  height={49}
-                  className="h-9 w-auto object-contain"
-                />
-              </div>
-            </Link>
+            <div className="mb-5">
+              <Logo size="md" showSubtitle />
+            </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
               An AI-powered, cloud-based platform aggregating Nepal&apos;s public government
               notices into a single searchable, accessible repository — classified and

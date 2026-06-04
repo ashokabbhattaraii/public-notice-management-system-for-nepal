@@ -2,8 +2,8 @@
 
 import React, { useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { Logo } from "@/components/ui/logo"
 import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, Sun, Moon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
@@ -27,23 +27,13 @@ export function Header() {
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 backdrop-blur-xl bg-background/80">
+    <>
+    <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border/50 backdrop-blur-xl bg-background/80">
       <div className="max-w-7xl mx-auto flex items-center justify-between h-16 px-4 md:px-6">
 
         {/* Logo + Nav */}
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center shrink-0 group">
-            <div className="dark:bg-white dark:rounded-lg dark:px-2 dark:py-1 transition-all">
-              <Image
-                src="/images/logo1.png"
-                alt="Suchana AI — Nepal Public Notice Platform"
-                width={160}
-                height={56}
-                priority
-                className="h-10 w-auto object-contain transition-opacity group-hover:opacity-80"
-              />
-            </div>
-          </Link>
+          <Logo size="md" />
 
           <nav className="hidden md:flex items-center gap-1">
             {navLinks.map((link) => (
@@ -199,5 +189,8 @@ export function Header() {
         </div>
       )}
     </header>
+    {/* Spacer so page content starts below the fixed header */}
+    <div className="h-16 shrink-0" aria-hidden="true" />
+    </>
   )
 }

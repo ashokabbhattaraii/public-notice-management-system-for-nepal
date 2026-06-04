@@ -165,7 +165,7 @@ export default function HomePage() {
 
 
   return (
-    <div className="min-h-screen w-full bg-background relative overflow-hidden">
+    <div className="min-h-screen w-full bg-background relative overflow-x-hidden">
       <Header />
 
       {/* Hero Section — Advanced GSAP with particles, glow, grid, floating badges */}
