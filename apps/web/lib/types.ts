@@ -25,6 +25,15 @@ export interface Notice {
   author: string
   status: "published" | "draft"
   attachments?: string[]
+  // AI-pipeline fields (set by scraper + AI service)
+  sourceUrl?: string
+  sourcePortal?: string
+  isOcr?: boolean
+  aiSummary?: string
+  keyFacts?: string[]
+  scrapedAt?: string
+  ocrConfidence?: number
+  tags?: string[]
 }
 
 export type NoticeCategory = "exams" | "vacancies" | "tenders" | "policy" | "announcements"

@@ -21,6 +21,12 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
     if (!sectionRef.current || !cardsRef.current) return
 
     const ctx = gsap.context(() => {
+      // Set initial hidden states via GSAP (not inline JSX so content is visible if JS fails)
+      if (headingRef.current) {
+        gsap.set(headingRef.current.children, { opacity: 0, y: 30, filter: "blur(8px)" })
+      }
+      gsap.set(cardsRef.current?.querySelectorAll(".feature-card") ?? [], { opacity: 0, y: 60, rotateX: 15, scale: 0.9 })
+
       // Animate background orbs
       if (glowOrbs.current) {
         const orbs = glowOrbs.current.querySelectorAll(".glow-orb")
@@ -181,36 +187,19 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
   }, [])
 
   return (
-    <section ref={sectionRef} className="py-24 px-4 relative overflow-hidden">
-      {/* Background decorative elements */}
-      <div ref={glowOrbs} className="absolute inset-0 pointer-events-none">
-        <div className="glow-orb absolute top-20 left-[10%] w-72 h-72 rounded-full bg-primary/5 blur-3xl" />
-        <div className="glow-orb absolute bottom-20 right-[15%] w-80 h-80 rounded-full bg-sky-500/5 blur-3xl" />
-        <div className="glow-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-primary/3 blur-3xl" />
-      </div>
+    <section ref={sectionRef} className="py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
+      <div ref={glowOrbs} className="absolute inset-0 pointer-events-none" />
 
-      {/* Grid pattern */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="features-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#features-grid)" />
-        </svg>
-      </div>
-
-      <div className="max-w-6xl mx-auto relative">
+      <div className="max-w-5xl mx-auto relative">
         {/* Heading */}
-        <div ref={headingRef} className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 border-primary/20" style={{ opacity: 0 }}>
+        <div ref={headingRef} className="text-center mb-10">
+          <Badge variant="outline" className="mb-4 border-primary/20">
             <Sparkles className="size-3 mr-1" /> Platform Features
           </Badge>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4" style={{ opacity: 0 }}>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Everything you need for <span className="text-primary">public notices</span>
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto" style={{ opacity: 0 }}>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
             A comprehensive platform designed for transparency, efficiency, and accessibility in government communication.
           </p>
         </div>
@@ -223,14 +212,14 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
               <div
                 key={i}
                 className="feature-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex gap-4 cursor-pointer overflow-hidden"
-                style={{ transformStyle: "preserve-3d", opacity: 0 }}
+                style={{ transformStyle: "preserve-3d" }}
               >
                 {/* Hover glow */}
-                <div className="card-glow absolute w-40 h-40 rounded-full bg-primary/10 blur-2xl pointer-events-none opacity-0" />
+                <div className="card-glow absolute w-40 h-40 rounded-full bg-foreground/5 blur-2xl pointer-events-none opacity-0" />
 
-                {/* Animated border gradient on hover */}
+                {/* Animated border highlight on hover */}
                 <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{ background: "linear-gradient(135deg, transparent, oklch(0.45 0.18 240 / 0.1), transparent)" }}
+                  style={{ background: "linear-gradient(135deg, transparent, hsl(var(--muted-foreground) / 0.05), transparent)" }}
                 />
 
                 {/* Icon */}

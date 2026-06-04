@@ -19,7 +19,7 @@ const CpuArchitecture = ({
   className,
   width = "100%",
   height = "100%",
-  text = "PNM",
+  text = "GOV",
   showCpuConnections = true,
   animateText = true,
   lineMarkerSize = 18,

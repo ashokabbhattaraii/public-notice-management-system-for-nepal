@@ -7,8 +7,26 @@ import { Providers } from "./providers"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "GovNotice - Nepal Public Notice Repository",
-  description: "Nepal's centralized repository for all government and public sector notices. Search, filter, and access authenticated documents efficiently.",
+  title: "GovNotice — Nepal's AI-Powered Public Notice Platform",
+  description:
+    "GovNotice aggregates public notices across Nepal's government portals into one searchable platform. AI-powered OCR, NLP classification, and RAG document intelligence — built for every Nepali citizen.",
+  keywords: [
+    "Nepal government notices",
+    "public notice management",
+    "PSC notices",
+    "Nepal tenders",
+    "job vacancies Nepal",
+    "AI document search",
+    "RAG Nepal",
+    "e-governance Nepal",
+  ],
+  openGraph: {
+    title: "GovNotice — Nepal's AI-Powered Public Notice Platform",
+    description:
+      "One centralized repository for every government notice across Nepal — searched, classified, and summarized by AI.",
+    type: "website",
+    images: [{ url: "/og/og-image.png", width: 1200, height: 630 }],
+  },
 }
 
 export default function RootLayout({

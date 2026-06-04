@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "setup": "python3 -m venv .venv && .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install -r requirements.txt",
+    "predev": "[ -d .venv ] || pnpm run setup",
+    "prelint": "[ -d .venv ] || pnpm run setup",
     "dev": ".venv/bin/python -m uvicorn app.main:app --reload --port 8000",
     "build": "echo 'No build step for Python service'",
     "lint": ".venv/bin/python -m ruff check app/"
