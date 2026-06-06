@@ -4,8 +4,7 @@ import React, { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Logo } from "@/components/ui/logo"
-import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, Sun, Moon } from "lucide-react"
-import { useTheme } from "next-themes"
+import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
@@ -15,7 +14,6 @@ import { cn } from "@/lib/utils"
 export function Header() {
   const { user, logout } = useAuth()
   const { language, setLanguage, t } = useLanguage()
-  const { theme, setTheme } = useTheme()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -55,17 +53,6 @@ export function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            aria-label="Toggle theme"
-            className="size-9"
-          >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          </Button>
-
           <Button
             variant="ghost"
             size="sm"

@@ -157,7 +157,7 @@ export function AlertCTASection() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="relative py-24 px-4 overflow-hidden bg-muted/20">
+    <section ref={sectionRef} className="relative py-16 md:py-24 px-4 overflow-hidden bg-muted/20">
 
       {/* SVG decorative circuit lines — drawn on scroll, full-width */}
       <svg

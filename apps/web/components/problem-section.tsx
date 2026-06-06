@@ -183,7 +183,7 @@ export function ProblemSection() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
+    <section ref={sectionRef} className="py-14 md:py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
       {/* Faint grid texture */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
         <svg width="100%" height="100%">
@@ -222,7 +222,7 @@ export function ProblemSection() {
             return (
               <div
                 key={i}
-                className="problem-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex gap-4 cursor-default overflow-hidden"
+                className="problem-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex flex-col sm:flex-row gap-4 cursor-default overflow-hidden"
                 style={{ transformStyle: "preserve-3d" }}
               >
                 {/* Hover glow */}

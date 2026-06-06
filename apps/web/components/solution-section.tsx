@@ -138,7 +138,7 @@ export function SolutionSection() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="relative py-20 px-4 md:px-8 bg-background border-t border-border/40 overflow-hidden">
+    <section ref={sectionRef} className="relative py-14 md:py-20 px-4 md:px-8 bg-background border-t border-border/40 overflow-hidden">
       {/* Faint grid lines */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
         <svg width="100%" height="100%">

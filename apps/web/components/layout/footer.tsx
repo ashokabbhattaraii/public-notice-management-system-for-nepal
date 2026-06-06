@@ -1,9 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Sun, Moon, Github } from "lucide-react"
+import { Github } from "lucide-react"
 import { Logo } from "@/components/ui/logo"
-import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 
 const footerLinks = {
@@ -28,14 +27,12 @@ const footerLinks = {
 }
 
 export function Footer() {
-  const { theme, setTheme } = useTheme()
-
   return (
     <footer className="border-t border-border/60 bg-muted/30">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-14">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 md:gap-10">
           {/* Brand column */}
-          <div className="md:col-span-2">
+          <div className="sm:col-span-2">
             <div className="mb-5">
               <Logo size="md" showSubtitle />
             </div>
@@ -92,18 +89,6 @@ export function Footer() {
               B.Sc. (Hons) IT Cloud Engineering — Asia Pacific University
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="gap-2 h-8 px-3 text-xs shrink-0"
-            aria-label="Toggle theme"
-          >
-            <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="dark:hidden">Light mode</span>
-            <span className="hidden dark:inline">Dark mode</span>
-          </Button>
         </div>
       </div>
     </footer>

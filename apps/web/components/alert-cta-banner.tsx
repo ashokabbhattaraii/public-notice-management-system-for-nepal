@@ -20,13 +20,13 @@ export function AlertCtaBanner() {
     if (bannerRef.current && !dismissed) {
       gsap.fromTo(bannerRef.current,
         { y: 100, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.5, ease: "power3.out", delay: 2 }
+        { y: 0, opacity: 1, duration: 0.5, ease: "power3.out", delay: 5 }
       )
     }
   }, [dismissed])
 
   // Don't show on admin pages, dashboard, login/signup, or if user already has alerts
-  const hideOnPaths = ["/admin", "/dashboard", "/login", "/signup"]
+  const hideOnPaths = ["/admin", "/dashboard", "/login", "/signup", "/rag"]
   const shouldHide = hideOnPaths.some(p => pathname.startsWith(p))
   if (shouldHide) return null
   if (dismissed) return null

@@ -23,7 +23,7 @@ export default function AboutPage() {
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-16">
         <div className="text-center mb-16">
           <Badge variant="outline" className="mb-4 border-primary/20">About Suchana AI</Badge>
-          <h1 className="text-4xl font-bold mb-4">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-4">
             Nepal&apos;s <span className="gradient-text">Public Notice</span> Repository
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">

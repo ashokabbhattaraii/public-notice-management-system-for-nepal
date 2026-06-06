@@ -171,7 +171,7 @@ export default function HomePage() {
       {/* Hero Section — Advanced GSAP with particles, glow, grid, floating badges */}
       <section
         ref={heroRef}
-        className="relative w-full overflow-hidden flex items-center justify-center py-24 md:py-32"
+        className="relative w-full overflow-hidden flex items-center justify-center py-16 sm:py-20 md:py-24 lg:py-32"
       >
         {/* Animated Background Grid */}
         <div className="absolute inset-0 opacity-30 pointer-events-none">
@@ -189,7 +189,7 @@ export default function HomePage() {
         {/* Subtle ambient orb */}
         <div
           ref={glowRef}
-          className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full blur-3xl pointer-events-none opacity-20"
+          className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(700px,90vw)] h-[min(700px,90vw)] rounded-full blur-3xl pointer-events-none opacity-20"
           style={{
             background: "radial-gradient(circle, hsl(var(--muted-foreground) / 0.12), transparent)",
           }}
@@ -303,7 +303,7 @@ export default function HomePage() {
 
         {/* Hero Content — two column */}
         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center">
+          <div className="grid lg:grid-cols-2 gap-8 md:gap-12 xl:gap-20 items-center">
 
             {/* Left — copy */}
             <div className="space-y-7">
@@ -314,7 +314,7 @@ export default function HomePage() {
 
               <h1
                 ref={titleRef}
-                className="text-foreground text-4xl md:text-5xl xl:text-6xl font-bold leading-[1.1] tracking-tight"
+                className="text-foreground text-3xl sm:text-4xl md:text-5xl xl:text-6xl font-bold leading-[1.1] tracking-tight"
               >
                 Transparent.
                 <br />Accessible.
@@ -323,7 +323,7 @@ export default function HomePage() {
 
               <p
                 ref={subtitleRef}
-                className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-md"
+                className="text-muted-foreground text-sm sm:text-base md:text-lg leading-relaxed max-w-md"
               >
                 Every government notice across Nepal — aggregated from official portals,
                 classified by AI, and made instantly searchable for every citizen.
@@ -356,7 +356,7 @@ export default function HomePage() {
               </div>
 
               {/* Trust indicators */}
-              <div className="flex items-center gap-6 pt-1">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-1">
                 {[
                   ["50+", "Government Sources"],
                   ["OCR", "Scanned PDF Support"],
@@ -392,7 +392,7 @@ export default function HomePage() {
       <FeaturesSection features={features} />
 
       {/* AI Intelligence Section */}
-      <section className="relative py-20 px-4 overflow-hidden bg-background border-t border-border/40">
+      <section className="relative py-14 md:py-20 px-4 overflow-hidden bg-background border-t border-border/40">
         <div className="absolute inset-0 opacity-[0.06] pointer-events-none grayscale">
           <CpuArchitecture />
         </div>

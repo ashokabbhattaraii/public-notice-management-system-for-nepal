@@ -187,7 +187,7 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
   }, [])
 
   return (
-    <section ref={sectionRef} className="py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
+    <section ref={sectionRef} className="py-14 md:py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
       <div ref={glowOrbs} className="absolute inset-0 pointer-events-none" />
 
       <div className="max-w-5xl mx-auto relative">
@@ -211,7 +211,7 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
             return (
               <div
                 key={i}
-                className="feature-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex gap-4 cursor-pointer overflow-hidden"
+                className="feature-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex flex-col sm:flex-row gap-4 cursor-pointer overflow-hidden"
                 style={{ transformStyle: "preserve-3d" }}
               >
                 {/* Hover glow */}

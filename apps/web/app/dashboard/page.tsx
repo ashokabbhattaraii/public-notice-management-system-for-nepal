@@ -212,7 +212,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   {wizardStep === 0 && (
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[
                         { id: "keyword" as const, label: "Keywords", icon: Search, desc: "Match by text" },
                         { id: "category" as const, label: "Category", icon: FolderOpen, desc: "Filter by type" },
