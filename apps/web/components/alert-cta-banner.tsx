@@ -9,6 +9,8 @@ import { useAlerts } from "@/lib/alerts-context"
 import { usePathname } from "next/navigation"
 import gsap from "gsap"
 
+const DISMISS_STORAGE_KEY = "alertCtaDismissed"
+
 export function AlertCtaBanner() {
   const { user } = useAuth()
   const { alerts } = useAlerts()
@@ -16,9 +18,20 @@ export function AlertCtaBanner() {
   const [dismissed, setDismissed] = useState(false)
   const bannerRef = useRef<HTMLDivElement>(null)
 
+  // Load dismissed state once (prevents remount/reset issues)
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(DISMISS_STORAGE_KEY)
+      if (v === "1") setDismissed(true)
+    } catch {
+      // ignore
+    }
+  }, [])
+
   useEffect(() => {
     if (bannerRef.current && !dismissed) {
-      gsap.fromTo(bannerRef.current,
+      gsap.fromTo(
+        bannerRef.current,
         { y: 100, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.5, ease: "power3.out", delay: 5 }
       )
@@ -40,7 +53,14 @@ export function AlertCtaBanner() {
       <div className="rounded-xl border border-primary/20 bg-card/95 backdrop-blur-xl shadow-2xl p-4 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent pointer-events-none" />
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => {
+            setDismissed(true)
+            try {
+              window.localStorage.setItem(DISMISS_STORAGE_KEY, "1")
+            } catch {
+              // ignore
+            }
+          }}
           className="absolute top-2 right-2 size-6 rounded-full bg-accent/60 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="size-3" />

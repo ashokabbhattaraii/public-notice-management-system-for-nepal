@@ -17,7 +17,8 @@ export default function LoginPage() {
   const demoLogin = async (role: "admin" | "user") => {
     setError("")
     setLoading(true)
-    const success = await loginWithGoogle()
+    const success = await loginWithGoogle(role)
+
     if (success) {
       router.push(role === "admin" ? "/admin" : "/dashboard")
     } else {
