@@ -24,7 +24,7 @@ const sidebarItems = [
   { icon: Home, label: "Home", href: "/" },
   { icon: Newspaper, label: "Notices", href: "/notices", active: true },
   { icon: Search, label: "Search", href: "/rag" },
-  { icon: Bell, label: "Alerts", href: "/signup" },
+  { icon: Bell, label: "Alerts", href: "/login" },
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
 ]
 
@@ -107,8 +107,8 @@ export function NoticesDashboardMockup() {
         <div className="hidden sm:flex w-44 flex-col border-r border-border bg-muted/20 shrink-0">
           {/* App logo */}
           <div className="flex items-center gap-2 px-4 py-3.5 border-b border-border">
-            <div className="size-6 rounded-md bg-primary flex items-center justify-center">
-              <FileText className="size-3.5 text-primary-foreground" />
+            <div className="size-6 rounded-md bg-indigo-500 flex items-center justify-center">
+              <FileText className="size-3.5 text-indigo-500-foreground" />
             </div>
             <span className="text-sm font-semibold">GovNotice</span>
           </div>
@@ -122,7 +122,7 @@ export function NoticesDashboardMockup() {
                   key={item.label}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors ${
                     item.active
-                      ? "bg-primary/10 text-primary font-medium"
+                      ? "bg-indigo-500/10 text-indigo-500 font-medium"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   }`}
                 >
@@ -203,7 +203,7 @@ export function NoticesDashboardMockup() {
                       )}
                       <span className="text-[10px] text-muted-foreground truncate">{notice.organization}</span>
                     </div>
-                    <p className="text-xs font-medium truncate group-hover:text-primary transition-colors">
+                    <p className="text-xs font-medium truncate group-hover:text-indigo-500 transition-colors">
                       {notice.title}
                     </p>
                   </div>
@@ -220,7 +220,7 @@ export function NoticesDashboardMockup() {
                     </span>
                   </div>
 
-                  <ChevronRight className="size-3.5 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
+                  <ChevronRight className="size-3.5 text-muted-foreground/40 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
                 </div>
               </Link>
             ))}
@@ -232,7 +232,7 @@ export function NoticesDashboardMockup() {
               Showing {recentNotices.length} of {mockNotices.length} notices
             </span>
             <Link href="/notices">
-              <span className="text-[10px] text-primary hover:underline cursor-pointer font-medium">
+              <span className="text-[10px] text-indigo-500 hover:underline cursor-pointer font-medium">
                 View all →
               </span>
             </Link>

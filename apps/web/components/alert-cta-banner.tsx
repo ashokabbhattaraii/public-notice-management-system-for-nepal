@@ -39,7 +39,7 @@ export function AlertCtaBanner() {
   }, [dismissed])
 
   // Don't show on admin pages, dashboard, login/signup, or if user already has alerts
-  const hideOnPaths = ["/admin", "/dashboard", "/login", "/signup", "/rag"]
+  const hideOnPaths = ["/admin", "/dashboard", "/login", "/login", "/rag"]
   const shouldHide = hideOnPaths.some(p => pathname.startsWith(p))
   if (shouldHide) return null
   if (dismissed) return null
@@ -74,7 +74,7 @@ export function AlertCtaBanner() {
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               Get alerts for jobs, exams & tenders — straight to your phone or email.
             </p>
-            <Link href={user ? "/dashboard/alerts" : "/signup"}>
+            <Link href={user ? "/dashboard/alerts" : "/login"}>
               <Button size="sm" className="mt-3 gap-1.5 h-8 text-xs">
                 Set Up Alert <ArrowRight className="size-3" />
               </Button>

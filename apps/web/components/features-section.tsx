@@ -20,113 +20,102 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
   useEffect(() => {
     if (!sectionRef.current || !cardsRef.current) return
 
-    const ctx = gsap.context(() => {
-      // Set initial hidden states via GSAP (not inline JSX so content is visible if JS fails)
-      if (headingRef.current) {
-        gsap.set(headingRef.current.children, { opacity: 0, y: 30, filter: "blur(8px)" })
-      }
-      gsap.set(cardsRef.current?.querySelectorAll(".feature-card") ?? [], { opacity: 0, y: 60, rotateX: 15, scale: 0.9 })
+    const heading = headingRef.current
+    const cards = cardsRef.current?.querySelectorAll(".feature-card")
+    const icons = cardsRef.current?.querySelectorAll(".feature-icon")
+    const lines = cardsRef.current?.querySelectorAll(".animated-line")
 
-      // Animate background orbs
-      if (glowOrbs.current) {
-        const orbs = glowOrbs.current.querySelectorAll(".glow-orb")
-        gsap.to(orbs, {
-          y: "random(-20, 20)",
-          x: "random(-15, 15)",
-          duration: "random(3, 5)",
-          repeat: -1,
-          yoyo: true,
-          ease: "sine.inOut",
-          stagger: { each: 0.5, from: "random" },
+    const reset = () => {
+      gsap.killTweensOf([heading?.children, cards, icons, lines])
+      if (heading) {
+        gsap.set(heading.children, { opacity: 0, y: 30, filter: "blur(8px)" })
+      }
+      gsap.set(cards ?? [], { opacity: 0, y: 60, rotateX: 15, scale: 0.9 })
+      gsap.set(icons ?? [], { scale: 0, rotation: -180 })
+      gsap.set(lines ?? [], { scaleX: 0 })
+    }
+
+    const play = () => {
+      // Heading animation
+      if (heading) {
+        gsap.to(heading.children, {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.4,
+          stagger: 0.08,
+          ease: "power3.out",
         })
       }
 
-      // Scroll-triggered heading reveal
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              // Heading animation
-              if (headingRef.current) {
-                gsap.fromTo(
-                  headingRef.current.children,
-                  { opacity: 0, y: 30, filter: "blur(8px)" },
-                  {
-                    opacity: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                    duration: 0.8,
-                    stagger: 0.15,
-                    ease: "power3.out",
-                  }
-                )
-              }
+      // Cards stagger in
+      gsap.to(cards ?? [], {
+        opacity: 1,
+        y: 0,
+        rotateX: 0,
+        scale: 1,
+        duration: 0.5,
+        stagger: 0.06,
+        ease: "back.out(1.2)",
+      })
 
-              // Cards stagger in with 3D rotation
-              const cards = cardsRef.current?.querySelectorAll(".feature-card")
-              if (cards) {
-                gsap.fromTo(
-                  cards,
-                  {
-                    opacity: 0,
-                    y: 60,
-                    rotateX: 15,
-                    scale: 0.9,
-                  },
-                  {
-                    opacity: 1,
-                    y: 0,
-                    rotateX: 0,
-                    scale: 1,
-                    duration: 0.9,
-                    stagger: 0.12,
-                    ease: "back.out(1.2)",
-                  }
-                )
+      // Icons
+      gsap.to(icons ?? [], {
+        scale: 1,
+        rotation: 0,
+        duration: 0.4,
+        stagger: 0.12,
+        delay: 0.15,
+        ease: "back.out(2)",
+      })
 
-                // Animate icon containers
-                const icons = cardsRef.current?.querySelectorAll(".feature-icon")
-                if (icons) {
-                  gsap.fromTo(
-                    icons,
-                    { scale: 0, rotation: -180 },
-                    {
-                      scale: 1,
-                      rotation: 0,
-                      duration: 0.7,
-                      stagger: 0.12,
-                      delay: 0.3,
-                      ease: "back.out(2)",
-                    }
-                  )
-                }
+      // Lines
+      gsap.to(lines ?? [], {
+        scaleX: 1,
+        duration: 0.4,
+        stagger: 0.12,
+        delay: 0.25,
+        ease: "power2.out",
+      })
+    }
 
-                // Animated lines inside cards
-                const lines = cardsRef.current?.querySelectorAll(".animated-line")
-                if (lines) {
-                  gsap.fromTo(
-                    lines,
-                    { scaleX: 0 },
-                    {
-                      scaleX: 1,
-                      duration: 0.8,
-                      stagger: 0.12,
-                      delay: 0.6,
-                      ease: "power2.out",
-                    }
-                  )
-                }
-              }
+    reset()
 
-              observer.disconnect()
-            }
-          })
-        },
-        { threshold: 0.2 }
-      )
+    // Animate background orbs
+    if (glowOrbs.current) {
+      const orbs = glowOrbs.current.querySelectorAll(".glow-orb")
+      gsap.to(orbs, {
+        y: "random(-20, 20)",
+        x: "random(-15, 15)",
+        duration: "random(3, 5)",
+        repeat: -1,
+        yoyo: true,
+        ease: "sine.inOut",
+        stagger: { each: 0.5, from: "random" },
+      })
+    }
 
-      observer.observe(sectionRef.current!)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            play()
+          } else {
+            reset()
+          }
+        })
+      },
+      { threshold: 0.15 }
+    )
 
+    observer.observe(sectionRef.current!)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!sectionRef.current || !cardsRef.current) return
+
+    const ctx = gsap.context(() => {
       // 3D tilt on hover
       const cards = cardsRef.current?.querySelectorAll(".feature-card")
       cards?.forEach((card) => {
@@ -187,52 +176,88 @@ export function FeaturesSection({ features }: { features: Feature[] }) {
   }, [])
 
   return (
-    <section ref={sectionRef} className="py-14 md:py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
+    <section ref={sectionRef} className="py-12 md:py-20 lg:py-24 px-6 md:px-8 lg:px-12 relative overflow-hidden bg-background">
       <div ref={glowOrbs} className="absolute inset-0 pointer-events-none" />
 
-      <div className="max-w-5xl mx-auto relative">
-        {/* Heading */}
-        <div ref={headingRef} className="text-center mb-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
-            Everything in one place
-          </p>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Everything you need for <span className="text-primary">public notices</span>
+      {/* Technical grid */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.02]">
+        <svg width="100%" height="100%">
+          <defs>
+            <pattern id="feature-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2 2" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#feature-grid)" />
+        </svg>
+      </div>
+
+      <div className="max-w-[1480px] mx-auto relative">
+        {/* Tactical header */}
+        <div ref={headingRef} className="mb-12 border-l-2 border-indigo-500 pl-5 relative">
+          <div className="absolute -left-[2px] top-0 w-4 h-px bg-indigo-500" />
+          <div className="absolute -left-[2px] bottom-0 w-4 h-px bg-indigo-500" />
+
+          <div className="flex items-center gap-2 mb-4">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full rounded-sm bg-indigo-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex size-2 rounded-sm bg-indigo-500" />
+            </span>
+            <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-indigo-400">
+              [CORE_CAPABILITIES // PLATFORM_OVERVIEW]
+            </span>
+          </div>
+
+          <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-5 leading-tight uppercase tracking-tight">
+            Everything you need for <span className="text-indigo-400">public notices</span>
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            A comprehensive platform designed for transparency, efficiency, and accessibility in government communication.
-          </p>
+
+          <div className="flex gap-4 items-center mt-6">
+            <div className="h-0.5 w-16 bg-indigo-500/30 overflow-hidden relative">
+              <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
+            </div>
+            <p className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-2xl font-normal">
+              A comprehensive platform designed for transparency, efficiency, and accessibility in government communication.
+            </p>
+          </div>
         </div>
 
-        {/* Cards grid */}
-        <div ref={cardsRef} className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ perspective: "1000px" }}>
+        {/* Tactical feature cards */}
+        <div ref={cardsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ perspective: "1000px" }}>
           {features.map((feature, i) => {
             const Icon = feature.icon
             return (
               <div
                 key={i}
-                className="feature-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex flex-col sm:flex-row gap-4 cursor-pointer overflow-hidden"
+                className="feature-card relative group bg-card backdrop-blur-xl p-6 flex flex-col sm:flex-row gap-5 cursor-pointer overflow-hidden transition-all duration-300 hover:bg-card"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {/* Hover glow */}
-                <div className="card-glow absolute w-40 h-40 rounded-full bg-foreground/5 blur-2xl pointer-events-none opacity-0" />
+                {/* Tactical border */}
+                <div className="absolute inset-0 border border-border pointer-events-none" />
+                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
 
-                {/* Animated border highlight on hover */}
-                <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{ background: "linear-gradient(135deg, transparent, hsl(var(--muted-foreground) / 0.05), transparent)" }}
-                />
+                {/* Module label */}
+                <div className="absolute top-2 right-2 text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">
+                  MOD_{String(i + 1).padStart(2, '0')}
+                </div>
+
+                {/* Hover scan */}
+                <div className="card-glow absolute w-40 h-40 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none opacity-0" />
+                <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
                 {/* Icon */}
-                <div className="feature-icon size-12 rounded-xl bg-primary flex items-center justify-center shrink-0 relative">
-                  <Icon className="size-6 text-primary-foreground relative z-10" />
-                  <div className="absolute inset-0 rounded-xl bg-primary/20 animate-ping opacity-0 group-hover:opacity-100" style={{ animationDuration: "2s" }} />
+                <div className="feature-icon size-12 flex items-center justify-center shrink-0 relative bg-indigo-500/10 border border-indigo-500/20">
+                  <Icon className="size-6 text-indigo-400 relative z-10" />
+                  <div className="absolute inset-0 bg-indigo-500/20 animate-ping opacity-0 group-hover:opacity-100" style={{ animationDuration: "2s" }} />
                 </div>
 
                 {/* Content */}
-                <div className="relative z-10">
-                  <h3 className="font-semibold text-lg mb-1">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
-                  <div className="animated-line h-0.5 mt-3 bg-gradient-to-r from-primary/40 to-transparent origin-left" style={{ transform: "scaleX(0)" }} />
+                <div className="relative z-10 flex-1">
+                  <h3 className="font-semibold text-base uppercase tracking-wide mb-2 text-foreground">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed font-normal">{feature.description}</p>
+                  <div className="animated-line h-px mt-4 bg-gradient-to-r from-indigo-500/50 via-transparent to-transparent origin-left" style={{ transform: "scaleX(0)" }} />
                 </div>
               </div>
             )

@@ -51,29 +51,29 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
   const errorSources = mockScrapingSources.filter(s => s.status === "error").length
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Brand + back */}
-      <div className="px-3 pt-3 pb-2 border-b border-border/60">
+    <div className="flex flex-col h-full bg-background">
+      {/* Tactical brand + back */}
+      <div className="px-3 pt-3 pb-2 border-b border-border">
         <div className="px-1 py-1.5 mb-1">
           <Logo size="sm" />
           <div className="flex items-center gap-1.5 mt-1.5 pl-0.5">
-            <Shield className="size-3 text-primary" />
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Admin Panel</p>
+            <Shield className="size-3 text-red-400" />
+            <p className="text-[9px] font-mono font-semibold text-muted-foreground uppercase tracking-[0.15em]">Admin Panel</p>
           </div>
         </div>
         <Link href="/" onClick={onLinkClick}>
-          <Button variant="ghost" size="sm" className="gap-2 w-full justify-start text-muted-foreground hover:text-foreground h-7 text-[11px]">
+          <Button variant="ghost" size="sm" className="gap-2 w-full justify-start text-muted-foreground hover:text-indigo-500 hover:bg-accent h-7 text-[10px] font-mono uppercase tracking-wide">
             <ArrowLeft className="size-3" />
             Back to Site
           </Button>
         </Link>
       </div>
 
-      {/* Nav */}
+      {/* Tactical nav */}
       <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
         {navGroups.map((group) => (
           <div key={group.label}>
-            <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            <p className="px-3 mb-1 text-[9px] font-mono font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">
               {group.label}
             </p>
             <div className="space-y-0.5">
@@ -87,16 +87,16 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
                     href={link.href}
                     onClick={onLinkClick}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all group",
+                      "flex items-center gap-3 px-3 py-2 text-xs transition-all group relative",
                       isActive
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                        ? "bg-red-500/10 text-red-400 font-semibold border-l-2 border-red-500"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-l-2 border-transparent"
                     )}
                   >
                     <Icon className="size-4 shrink-0" />
-                    <span className="flex-1">{link.label}</span>
+                    <span className="flex-1 font-mono uppercase tracking-wide">{link.label}</span>
                     {hasError && (
-                      <Badge className="h-4 px-1.5 text-[9px] rounded-full bg-destructive text-destructive-foreground">
+                      <Badge className="h-4 px-1.5 text-[9px] font-mono bg-destructive/20 text-destructive border border-destructive/30">
                         {errorSources}
                       </Badge>
                     )}
@@ -121,7 +121,7 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{user.username}</p>
               <div className="flex items-center gap-1 mt-0.5">
-                <span className="size-1.5 rounded-full bg-emerald-500" />
+                <span className="size-1.5 rounded-full bg-red-500" />
                 <p className="text-[10px] text-muted-foreground">Admin</p>
               </div>
             </div>

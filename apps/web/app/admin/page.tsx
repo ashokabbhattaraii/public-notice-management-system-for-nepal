@@ -38,8 +38,8 @@ function MiniSparkline({ data, color = "stroke-primary" }: { data: number[]; col
 function PulseDot({ active }: { active: boolean }) {
   return (
     <span className="relative flex size-2">
-      {active && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />}
-      <span className={`relative inline-flex rounded-full size-2 ${active ? "bg-emerald-500" : "bg-destructive"}`} />
+      {active && <span className="animate-ping absolute inline-flex h-full w-full bg-red-400 opacity-75" />}
+      <span className={`relative inline-flex size-2 border ${active ? "bg-indigo-500 border-red-400" : "bg-destructive border-red-300"}`} />
     </span>
   )
 }
@@ -49,17 +49,27 @@ function MetricCard({ icon: Icon, label, value, spark, color, trend, trendUp }: 
   spark: number[]; color: string; trend: string; trendUp: boolean
 }) {
   return (
-    <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4">
-      <div className="flex items-start justify-between mb-3">
-        <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Icon className="size-4 text-primary" />
+    <div className="cmd-card bg-card backdrop-blur-xl p-4 relative group hover:bg-card transition-all duration-300">
+      {/* Tactical border */}
+      <div className="absolute inset-0 border border-border pointer-events-none" />
+      <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
+      <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
+      <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
+      <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
+
+      {/* Hover scan effect */}
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+      <div className="relative flex items-start justify-between mb-3">
+        <div className="size-9 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+          <Icon className="size-4 text-indigo-400" />
         </div>
         <MiniSparkline data={spark} color={color} />
       </div>
-      <p className="text-2xl font-bold tracking-tight leading-none mb-1">{value}</p>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${trendUp ? "text-emerald-600" : "text-muted-foreground"}`}>
+      <p className="relative text-3xl font-black tracking-tight leading-none mb-1 text-foreground tabular-nums">{value}</p>
+      <div className="relative flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">{label}</span>
+        <span className={`text-[9px] font-mono font-semibold flex items-center gap-0.5 ${trendUp ? "text-indigo-400" : "text-muted-foreground"}`}>
           <TrendingUp className="size-3" /> {trend}
         </span>
       </div>
@@ -102,9 +112,9 @@ export default function AdminDashboard() {
 
   const metrics = [
     { icon: FileText, label: "Total Notices", value: mockNotices.length, spark: [3, 5, 4, 7, 6, 8, 10], color: "stroke-primary", trend: "+3 today", trendUp: true },
-    { icon: Users, label: "Active Users", value: activeUsers, spark: [2, 2, 3, 3, 3, 4, 4], color: "stroke-emerald-500", trend: "+1 this week", trendUp: true },
-    { icon: Database, label: "Documents", value: mockDocuments.length, spark: [4, 4, 5, 5, 6, 6, 6], color: "stroke-purple-500", trend: "Stable", trendUp: false },
-    { icon: Globe, label: "Active Sources", value: mockScrapingSources.filter(s => s.status === "active").length, spark: [3, 3, 4, 4, 4, 4, 4], color: "stroke-amber-500", trend: `${scrapingErrors.length} errors`, trendUp: scrapingErrors.length === 0 },
+    { icon: Users, label: "Active Users", value: activeUsers, spark: [2, 2, 3, 3, 3, 4, 4], color: "stroke-primary", trend: "+1 this week", trendUp: true },
+    { icon: Database, label: "Documents", value: mockDocuments.length, spark: [4, 4, 5, 5, 6, 6, 6], color: "stroke-primary", trend: "Stable", trendUp: false },
+    { icon: Globe, label: "Active Sources", value: mockScrapingSources.filter(s => s.status === "active").length, spark: [3, 3, 4, 4, 4, 4, 4], color: "stroke-destructive", trend: `${scrapingErrors.length} errors`, trendUp: scrapingErrors.length === 0 },
   ]
 
   const systemServices = [
@@ -131,41 +141,62 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background">
       <Header />
       <AdminLayout>
-        {/* Page header */}
-        <div className="flex items-center justify-between mb-5">
+        {/* Tactical page header */}
+        <div className="flex items-center justify-between mb-5 border-l-2 border-indigo-500 pl-4 relative">
+          <div className="absolute -left-[2px] top-0 w-3 h-px bg-indigo-500" />
+          <div className="absolute -left-[2px] bottom-0 w-3 h-px bg-indigo-500" />
+
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            {/* System status */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full rounded-sm bg-red-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex size-1.5 rounded-sm bg-indigo-500" />
+              </span>
+              <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.2em] text-indigo-400">
+                [ADMIN_CONTROL // SYSTEM_OVERVIEW]
+              </span>
+            </div>
+
+            <h1 className="text-2xl font-bold text-foreground tracking-tight uppercase">Admin Dashboard</h1>
+            <p className="text-xs text-muted-foreground mt-1 font-mono uppercase tracking-wide">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+
+          <Button variant="outline" size="sm" className="gap-1.5 text-[10px] font-mono uppercase tracking-wide bg-transparent border-border hover:bg-accent hover:border-indigo-500/40">
             <RefreshCw className="size-3.5" /> Refresh
           </Button>
         </div>
 
-        {/* System health strip */}
-        <div className="cmd-card mb-5 flex items-center gap-3 p-3 rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm overflow-x-auto">
-          <div className="flex items-center gap-2 shrink-0">
-            <Activity className="size-4 text-primary" />
-            <span className="text-xs font-semibold">System Status</span>
+        {/* Tactical system health strip */}
+        <div className="cmd-card mb-5 flex items-center gap-3 p-3 bg-card backdrop-blur-xl overflow-x-auto relative">
+          <div className="absolute inset-0 border border-border pointer-events-none" />
+          <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
+          <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
+          <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
+          <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
+
+          <div className="relative flex items-center gap-2 shrink-0">
+            <Activity className="size-4 text-indigo-400" />
+            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-foreground">System Status</span>
           </div>
           <div className="h-4 w-px bg-border shrink-0" />
           {systemServices.map((svc) => (
-            <div key={svc.label} className="flex items-center gap-1.5 shrink-0">
+            <div key={svc.label} className="relative flex items-center gap-1.5 shrink-0">
               <PulseDot active={svc.ok} />
-              <span className="text-[11px] text-muted-foreground">{svc.label}</span>
+              <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">{svc.label}</span>
             </div>
           ))}
-          <div className="ml-auto flex items-center gap-2 shrink-0">
+          <div className="ml-auto flex items-center gap-2 shrink-0 relative">
             <Badge
               variant="outline"
-              className={`text-[10px] gap-1 ${healthOk ? "border-emerald-500/30 text-emerald-600" : "border-destructive/30 text-destructive"}`}
+              className={`text-[9px] gap-1 font-mono uppercase tracking-wide ${healthOk ? "border-indigo-500/30 text-indigo-400 bg-indigo-500/10" : "border-destructive/30 text-destructive bg-destructive/10"}`}
             >
               {healthOk ? <CheckCircle className="size-3" /> : <AlertTriangle className="size-3" />}
               {healthOk ? "All Systems Operational" : `${scrapingErrors.length} Issue${scrapingErrors.length > 1 ? "s" : ""}`}
             </Badge>
-            <Badge variant="outline" className="text-[10px] gap-1">
+            <Badge variant="outline" className="text-[9px] gap-1 font-mono bg-slate-100 border-border uppercase tracking-wide">
               <Clock className="size-3" /> 99.9% uptime
             </Badge>
           </div>
@@ -179,14 +210,20 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Error banner */}
+          {/* Tactical error banner */}
           {scrapingErrors.length > 0 && (
-            <div className="cmd-card rounded-xl border border-destructive/20 bg-destructive/5 p-4 flex items-center gap-3">
-              <div className="size-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+            <div className="cmd-card bg-destructive/[0.08] backdrop-blur-xl p-4 flex items-center gap-3 relative">
+              <div className="absolute inset-0 border border-destructive/20 pointer-events-none" />
+              <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-destructive" />
+              <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-destructive" />
+              <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-destructive" />
+              <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-destructive" />
+
+              <div className="relative size-8 bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0">
                 <AlertCircle className="size-4 text-destructive" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">{scrapingErrors.length} source{scrapingErrors.length > 1 ? "s" : ""} failing</p>
+              <div className="relative flex-1 min-w-0">
+                <p className="text-sm font-semibold uppercase tracking-wide text-foreground">{scrapingErrors.length} source{scrapingErrors.length > 1 ? "s" : ""} failing</p>
                 <p className="text-xs text-muted-foreground truncate">{scrapingErrors.map(s => s.name).join(", ")}</p>
               </div>
               <Link href="/admin/scraping">
@@ -198,7 +235,7 @@ export default function AdminDashboard() {
           {/* Main content row */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             {/* Live log — 3 cols */}
-            <div className="cmd-card lg:col-span-3 rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+            <div className="cmd-card lg:col-span-3 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Zap className="size-4 text-primary" /> Live System Log
@@ -209,21 +246,21 @@ export default function AdminDashboard() {
                 {systemLogs.map((log, i) => (
                   <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-accent/30 text-[11px] transition-colors">
                     {log.level === "info" ? (
-                      <CheckCircle className="size-3 text-emerald-500 shrink-0" />
+                      <CheckCircle className="size-3 text-indigo-500 shrink-0" />
                     ) : log.level === "warn" ? (
-                      <AlertTriangle className="size-3 text-amber-500 shrink-0" />
+                      <AlertTriangle className="size-3 text-destructive shrink-0" />
                     ) : (
                       <XCircle className="size-3 text-destructive shrink-0" />
                     )}
                     <span className="text-muted-foreground w-10 shrink-0 tabular-nums">{log.time}</span>
                     <span
-                      className={`flex-1 truncate ${log.level === "error" ? "text-destructive" : log.level === "warn" ? "text-amber-600" : "text-foreground/80"}`}
+                      className={`flex-1 truncate ${log.level === "error" ? "text-destructive" : log.level === "warn" ? "text-red-600" : "text-foreground/80"}`}
                     >
                       {log.msg}
                     </span>
                     <Badge
                       variant="outline"
-                      className={`text-[9px] h-4 px-1.5 shrink-0 ${log.level === "error" ? "border-destructive/30 text-destructive" : log.level === "warn" ? "border-amber-500/30 text-amber-600" : "border-emerald-500/30 text-emerald-600"}`}
+                      className={`text-[9px] h-4 px-1.5 shrink-0 ${log.level === "error" ? "border-destructive/30 text-destructive" : log.level === "warn" ? "border-destructive/30 text-red-600" : "border-indigo-500/30 text-indigo-600"}`}
                     >
                       {log.level}
                     </Badge>
@@ -240,7 +277,7 @@ export default function AdminDashboard() {
             {/* Right — 2 cols */}
             <div className="lg:col-span-2 space-y-4">
               {/* Source status */}
-              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold flex items-center gap-2">
                     <Link2 className="size-4 text-primary" /> Scraping Sources
@@ -266,7 +303,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Quick actions */}
-              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <BarChart3 className="size-4 text-primary" /> Quick Actions
                 </h3>
@@ -295,7 +332,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Recent users row */}
-          <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+          <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <UserCheck className="size-4 text-primary" /> Recent Users
@@ -317,7 +354,7 @@ export default function AdminDashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium truncate">{u.username}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`size-1.5 rounded-full ${u.status === "active" ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                      <span className={`size-1.5 rounded-full ${u.status === "active" ? "bg-indigo-500" : "bg-muted-foreground"}`} />
                       <p className="text-[10px] text-muted-foreground capitalize">{u.role}</p>
                     </div>
                   </div>

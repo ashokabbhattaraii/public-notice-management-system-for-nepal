@@ -1,6 +1,6 @@
-# Public Notice Management System - Feature Documentation
+# Suchana AI - Feature Documentation
 
-This document outlines all features and functionalities of the Public Notice Management System frontend application. This is design-agnostic documentation focusing solely on what the system does, not how it looks.
+This document outlines all features and functionalities of the Suchana AI frontend application. This is design-agnostic documentation focusing solely on what the system does, not how it looks.
 
 ## Table of Contents
 
@@ -41,8 +41,8 @@ This document outlines all features and functionalities of the Public Notice Man
 - View notice details
 - Filter and search notices
 - View about page
-- Sign up for account
-- Log in to existing account
+- Sign in with Google
+- Access platform via Google OAuth
 
 **Cannot Access:**
 - User dashboard
@@ -94,7 +94,7 @@ This document outlines all features and functionalities of the Public Notice Man
 - Hero section introducing the system
 - Featured/priority notices display
 - Quick statistics (total notices, categories, etc.)
-- Call-to-action for sign up
+- Call-to-action to sign in with Google
 - Access to main notice listing
 
 ### Notice Browsing
@@ -155,29 +155,15 @@ This document outlines all features and functionalities of the Public Notice Man
 
 ### Authentication Pages
 
-#### Sign Up
-**Fields:**
-- Username
-- Email address
-- Password
-- Password confirmation
-- Optional: Role selection (defaults to 'user')
-
-**Validation:**
-- Username uniqueness
-- Email format validation
-- Password strength requirements
-- Email uniqueness
-
 #### Login
-**Fields:**
-- Username or Email
-- Password
+**Method:** Google OAuth only — no username or password required.
 
 **Features:**
-- Remember session
-- Error messaging for invalid credentials
+- "Continue with Google" button (single sign-on)
+- Demo login shortcuts (Admin / User) for development/testing
+- Automatic account creation on first Google sign-in (no separate signup flow)
 - Redirect to dashboard on success
+- Error messaging for failed sign-in
 
 ---
 
@@ -185,7 +171,7 @@ This document outlines all features and functionalities of the Public Notice Man
 
 ### Dashboard Overview
 **Sections:**
-1. Welcome header with username
+1. Welcome header with Google display name
 2. Personal statistics panel
 3. Saved notices section
 4. Recent activity feed
@@ -368,8 +354,8 @@ This document outlines all features and functionalities of the Public Notice Man
 **Display:**
 - Table view of all users
 - Columns:
-  - Username
-  - Email
+  - Display name (from Google)
+  - Email (from Google account)
   - Role
   - Join date
   - Last login
@@ -377,7 +363,7 @@ This document outlines all features and functionalities of the Public Notice Man
   - Actions
 
 **Features:**
-- Search users by username/email
+- Search users by name/email
 - Filter by role
 - Sort by any column
 - Pagination
@@ -385,17 +371,14 @@ This document outlines all features and functionalities of the Public Notice Man
 #### User Actions
 **Available Actions:**
 - View user details
-- Edit user information
+- Edit user information (role, status)
 - Change user role (user ↔ admin)
 - Deactivate/activate account
-- Reset user password
 - Delete user (with confirmation)
 
 #### Create User (Admin Creation)
 **Form Fields:**
-- Username
-- Email
-- Password
+- Email (Google account email)
 - Role assignment
 - Initial status
 
@@ -607,7 +590,7 @@ This document outlines all features and functionalities of the Public Notice Man
   - About
   - RAG/Search
 - Language switcher
-- Login/Sign up buttons (when not authenticated)
+- Sign in with Google button (when not authenticated)
 - User menu (when authenticated):
   - Dashboard
   - Saved notices
@@ -778,7 +761,7 @@ This document outlines all features and functionalities of the Public Notice Man
 #### Context Providers
 1. **AuthContext**
    - Current user state
-   - Authentication methods (login, logout, signup)
+   - Authentication methods (Google OAuth login, logout)
    - Loading states
    - Session management
 
@@ -847,10 +830,10 @@ This document outlines all features and functionalities of the Public Notice Man
 ### Security Features
 
 #### Authentication Security
-- Password hashing (in local mode)
-- Session token management
+- Google OAuth 2.0 (no passwords stored)
+- Session token management via Google identity
 - Auto-logout on inactivity (configurable)
-- Password strength validation
+- Demo login shortcuts for development only
 
 #### Authorization Checks
 - Route protection (auth required)
@@ -945,7 +928,7 @@ This document outlines all features and functionalities of the Public Notice Man
 
 ## Summary
 
-This system provides a comprehensive public notice management platform with three distinct user experiences:
+Suchana AI provides a comprehensive public notice management platform with three distinct user experiences:
 
 1. **Public Users** can browse, search, and view notices without authentication
 2. **Registered Users** get personalized features like saved notices, custom alerts, and RAG search

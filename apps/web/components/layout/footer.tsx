@@ -9,7 +9,7 @@ const footerLinks = {
   Platform: [
     { label: "Browse Notices", href: "/notices" },
     { label: "Document Search (RAG)", href: "/rag" },
-    { label: "Set Up Alerts", href: "/signup" },
+    { label: "Set Up Alerts", href: "/login" },
     { label: "About the Project", href: "/about" },
   ],
   Resources: [
@@ -28,7 +28,7 @@ const footerLinks = {
 
 export function Footer() {
   return (
-    <footer className="border-t border-border/60 bg-muted/30">
+    <footer className="border-t border-border/60 bg-card">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-14">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 md:gap-10">
           {/* Brand column */}

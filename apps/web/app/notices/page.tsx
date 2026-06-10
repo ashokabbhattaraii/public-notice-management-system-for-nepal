@@ -22,9 +22,9 @@ import gsap from "gsap"
 
 const categoryMeta: Record<string, { color: string; bg: string; dot: string }> = {
   exams:         { color: "text-blue-600",   bg: "bg-blue-500/10 border-blue-500/20",    dot: "bg-blue-500"   },
-  vacancies:     { color: "text-emerald-600", bg: "bg-emerald-500/10 border-emerald-500/20", dot: "bg-emerald-500" },
-  tenders:       { color: "text-amber-600",  bg: "bg-amber-500/10 border-amber-500/20",  dot: "bg-amber-500"  },
-  policy:        { color: "text-purple-600", bg: "bg-purple-500/10 border-purple-500/20", dot: "bg-purple-500" },
+  vacancies:     { color: "text-indigo-600", bg: "bg-indigo-500/10 border-indigo-500/20", dot: "bg-indigo-500" },
+  tenders:       { color: "text-red-600",  bg: "bg-red-500/10 border-red-500/20",  dot: "bg-red-500"  },
+  policy:        { color: "text-indigo-600", bg: "bg-indigo-500/10 border-indigo-500/20", dot: "bg-indigo-500" },
   announcements: { color: "text-primary",    bg: "bg-primary/10 border-primary/20",       dot: "bg-primary"    },
 }
 
@@ -56,7 +56,7 @@ function NoticeCard({
 
   return (
     <article
-      className="group relative flex gap-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm overflow-hidden hover:border-primary/30 hover:shadow-md transition-all duration-200 cursor-pointer"
+      className="group relative flex gap-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl overflow-hidden hover:border-primary/30 hover:shadow-md transition-all duration-200 cursor-pointer"
       onClick={onSelect}
     >
       {/* Left accent bar */}
@@ -70,12 +70,12 @@ function NoticeCard({
             {notice.category}
           </span>
           {notice.isOcr && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600">
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-600">
               <ScanText className="size-2.5" /> OCR
             </span>
           )}
           {notice.priority === "high" && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600">
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-red-500/20 bg-red-500/10 text-red-600">
               <AlertTriangle className="size-2.5" /> Urgent
             </span>
           )}
@@ -120,7 +120,7 @@ function NoticeCard({
         {days !== null && (
           <div className={`mt-2.5 flex items-center gap-1.5 text-[11px] font-medium ${
             days < 0 ? "text-muted-foreground line-through" :
-            urgentDeadline ? "text-amber-600" : "text-muted-foreground"
+            urgentDeadline ? "text-red-600" : "text-muted-foreground"
           }`}>
             <Clock className="size-3" />
             {days < 0 ? `Closed ${formatDate(notice.deadline!)}` :
@@ -230,12 +230,12 @@ function NoticeDetail({
                 {notice.category}
               </span>
               {notice.isOcr && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600">
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-600">
                   <ScanText className="size-2.5" /> OCR {notice.ocrConfidence && `${notice.ocrConfidence}%`}
                 </span>
               )}
               {notice.priority === "high" && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600">
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-red-500/20 bg-red-500/10 text-red-600">
                   <AlertTriangle className="size-2.5" /> Urgent
                 </span>
               )}
@@ -257,7 +257,7 @@ function NoticeDetail({
         {/* Deadline */}
         {days !== null && days >= 0 && (
           <div className={`mt-3 flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg ${
-            days <= 7 ? "bg-amber-500/10 text-amber-700 border border-amber-500/20"
+            days <= 7 ? "bg-red-500/10 text-red-700 border border-red-500/20"
                       : "bg-muted/60 text-muted-foreground border border-border/40"
           }`}>
             <Clock className="size-3.5 shrink-0" />
@@ -476,10 +476,10 @@ function NoticeDetail({
 
             {/* OCR info */}
             {notice.isOcr ? (
-              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-4">
+              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <ScanText className="size-4 text-purple-600" />
-                  <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">OCR Processed Document</span>
+                  <ScanText className="size-4 text-indigo-600" />
+                  <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">OCR Processed Document</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-2">
                   This notice was originally a scanned PDF. Text was extracted using Tesseract OCR (nep+eng) with
@@ -488,18 +488,18 @@ function NoticeDetail({
                 <div className="flex items-center gap-2">
                   <div className="flex-1 bg-muted/60 rounded-full h-1.5">
                     <div
-                      className="bg-purple-500 h-1.5 rounded-full"
+                      className="bg-indigo-500 h-1.5 rounded-full"
                       style={{ width: `${notice.ocrConfidence ?? 90}%` }}
                     />
                   </div>
-                  <span className="text-[11px] font-semibold text-purple-600">{notice.ocrConfidence ?? 90}%</span>
+                  <span className="text-[11px] font-semibold text-indigo-600">{notice.ocrConfidence ?? 90}%</span>
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle className="size-4 text-emerald-600" />
-                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Scraped Directly</span>
+                  <CheckCircle className="size-4 text-indigo-600" />
+                  <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">Scraped Directly</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   This notice was scraped directly from the HTML source of the official government portal via Scrapy/Selenium. No OCR processing was required.
@@ -530,7 +530,7 @@ function NoticeDetail({
         >
           {saved ? <><BookmarkCheck className="size-3.5" /> Saved</> : <><Bookmark className="size-3.5" /> Save Notice</>}
         </Button>
-        <Link href="/signup" className="flex-1">
+        <Link href="/login" className="flex-1">
           <Button size="sm" className="w-full gap-1.5 text-xs">
             <Bell className="size-3.5" /> Set Alert
           </Button>
@@ -606,12 +606,12 @@ export default function NoticesPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Public Notices</h1>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">Public Notices</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 Scraped, OCR-processed, and AI-summarized from {mockNotices.filter(n => n.status === "published").length > 0 ? `${new Set(mockNotices.map(n => n.sourcePortal)).size} official government portals` : "official government portals"}
               </p>
             </div>
-            <Link href={user ? "/dashboard/alerts" : "/signup"}>
+            <Link href={user ? "/dashboard/alerts" : "/login"}>
               <Button size="sm" className="gap-1.5">
                 <Bell className="size-3.5" /> Set Up Alerts
               </Button>
@@ -705,8 +705,8 @@ export default function NoticesPage() {
               <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">Legend</h3>
               {[
                 { icon: <Sparkles className="size-3 text-primary" />, label: "AI Summarized" },
-                { icon: <ScanText className="size-3 text-purple-600" />, label: "OCR Extracted" },
-                { icon: <AlertTriangle className="size-3 text-amber-600" />, label: "Urgent / High Priority" },
+                { icon: <ScanText className="size-3 text-indigo-600" />, label: "OCR Extracted" },
+                { icon: <AlertTriangle className="size-3 text-red-600" />, label: "Urgent / High Priority" },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   {item.icon} {item.label}

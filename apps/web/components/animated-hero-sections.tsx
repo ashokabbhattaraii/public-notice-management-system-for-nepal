@@ -13,25 +13,25 @@ const slides = [
   {
     title: "Public Notices",
     subtitle: "Access all government & institutional notices in one centralized platform",
-    accent: "from-blue-500 to-cyan-400",
+    accent: "from-blue-500 to-indigo-400",
     icon: <Building2 className="size-8" />,
   },
   {
     title: "Smart Search",
     subtitle: "AI-powered search across millions of verified government documents",
-    accent: "from-violet-500 to-purple-400",
+    accent: "from-violet-500 to-indigo-400",
     icon: <Search className="size-8" />,
   },
   {
     title: "Real-time Alerts",
     subtitle: "Custom notifications for jobs, exams, tenders & policy updates",
-    accent: "from-amber-500 to-orange-400",
+    accent: "from-red-500 to-orange-400",
     icon: <Bell className="size-8" />,
   },
   {
     title: "Verified Sources",
     subtitle: "Every document authenticated from official government channels",
-    accent: "from-emerald-500 to-green-400",
+    accent: "from-indigo-500 to-green-400",
     icon: <Shield className="size-8" />,
   },
   {

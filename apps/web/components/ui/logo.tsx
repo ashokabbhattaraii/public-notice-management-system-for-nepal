@@ -1,4 +1,3 @@
-// cSpell:ignore Suchana
 "use client"
 
 import React from "react"
@@ -6,52 +5,39 @@ import Link from "next/link"
 
 interface LogoProps {
   size?: "sm" | "md" | "lg"
-  showSubtitle?: boolean
   href?: string
   className?: string
+  /** @deprecated kept for backwards compat — has no effect */
+  showSubtitle?: boolean
 }
 
-export function Logo({ size = "md", showSubtitle = false, href = "/", className = "" }: LogoProps) {
-  const cfg = {
-    sm: { h: 28, name: "text-base", sub: "text-[9px]",  gap: "gap-1.5" },
-    md: { h: 36, name: "text-xl",   sub: "text-[10px]", gap: "gap-2.5" },
-    lg: { h: 44, name: "text-2xl",  sub: "text-xs",     gap: "gap-3"   },
-  }[size]
+const sizes = {
+  sm: { img: 52,  text: "text-sm"  },
+  md: { img: 68,  text: "text-lg"  },
+  lg: { img: 88,  text: "text-2xl" },
+}
+
+export function Logo({ size = "md", href = "/", className = "" }: LogoProps) {
+  const { img, text } = sizes[size]
 
   const inner = (
-    <div className={`flex items-center ${cfg.gap} ${className}`}>
-      {/* Original PNG icon — square-cropped, all-blue so it works in dark & light mode */}
-      <div
-        className="shrink-0 overflow-hidden"
-        style={{ width: cfg.h, height: cfg.h }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/logo1.png"
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          style={{ height: cfg.h, width: "auto", display: "block" }}
-        />
-      </div>
-
-      {/* Text — "Suchana" follows theme, "AI" always brand blue */}
-      <div className="leading-none">
-        <p className={`${cfg.name} font-bold tracking-tight leading-none`}>
-          <span className="text-foreground">Suchana</span>
-          <span className="text-[#2563EB]"> AI</span>
-        </p>
-        {showSubtitle && (
-          <p className={`${cfg.sub} text-muted-foreground mt-0.5 font-medium`}>
-            Public Notice Management
-          </p>
-        )}
-      </div>
+    <div className={`flex items-center gap-2.5 ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/logo.png"
+        alt="Suchana AI logo"
+        draggable={false}
+        className="shrink-0 rounded-xl"
+        style={{ height: img, width: "auto", display: "block", filter: "drop-shadow(0 2px 8px rgba(99,102,241,0.35))" }}
+      />
+      <span className={`${text} font-bold tracking-tight leading-none`}>
+        <span className="text-foreground">Suchana</span>
+        <span className="text-indigo-400"> AI</span>
+      </span>
     </div>
   )
 
   if (!href) return inner
-
   return (
     <Link href={href} className="inline-flex items-center hover:opacity-80 transition-opacity shrink-0">
       {inner}

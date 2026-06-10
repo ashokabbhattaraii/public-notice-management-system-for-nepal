@@ -81,9 +81,9 @@ const suggestions = [
 
 const catColors: Record<string, string> = {
   Legal:       "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  Finance:     "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-  Education:   "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  Procurement: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  Finance:     "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  Education:   "bg-red-500/10 text-red-600 border-red-500/20",
+  Procurement: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
   Technology:  "bg-primary/10 text-primary border-primary/20",
 }
 
@@ -106,7 +106,7 @@ function DocCard({ doc, onToggle, onAsk, isAdmin }: {
             </span>
             <span className={`text-[9px] font-medium flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border ${
               doc.embedded
-                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                ? "bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
                 : "bg-muted text-muted-foreground border-border/60"
             }`}>
               {doc.embedded ? <><Database className="size-2" /> {doc.chunkCount} chunks</> : <><Unlink className="size-2" /> Not indexed</>}
@@ -124,8 +124,8 @@ function DocCard({ doc, onToggle, onAsk, isAdmin }: {
           title={isAdmin ? (doc.embedded ? "Click to unembed from RAG" : "Click to embed into RAG") : "Admin only"}
           className={`flex items-center gap-2 flex-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
             doc.embedded
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/20"
-              : "bg-muted/60 border-border/60 text-muted-foreground hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-700"
+              ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-700 hover:bg-indigo-500/20"
+              : "bg-muted/60 border-border/60 text-muted-foreground hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-700"
           } ${!isAdmin ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
         >
           {doc.embedded
@@ -226,8 +226,8 @@ export default function RagPage() {
         </div>
         {/* Embed stats */}
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="flex items-center gap-1 text-emerald-600 font-medium">
-            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="flex items-center gap-1 text-indigo-600 font-medium">
+            <span className="size-1.5 rounded-full bg-indigo-500 animate-pulse" />
             {embeddedCount} embedded
           </span>
           <span className="text-muted-foreground/40">·</span>
@@ -268,7 +268,7 @@ export default function RagPage() {
   // ─── Chat panel ─────────────────────────────────────────────────────────────
 
   const Chat = (
-    <div className="flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -278,7 +278,7 @@ export default function RagPage() {
           <div>
             <p className="text-sm font-semibold leading-none">Document AI</p>
             <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-              <span className="size-1.5 rounded-full bg-emerald-500" />
+              <span className="size-1.5 rounded-full bg-indigo-500" />
               {embeddedCount} docs · LangChain + ChromaDB
             </p>
           </div>
@@ -318,7 +318,7 @@ export default function RagPage() {
                 <div className="flex gap-1">
                   {[
                     { icon: <Copy className="size-3" />, action: () => navigator.clipboard?.writeText(msg.content) },
-                    { icon: <ThumbsUp className="size-3" />, action: () => setRatings(r => ({ ...r, [msg.id]: "up" })), active: ratings[msg.id] === "up" ? "text-emerald-500" : "" },
+                    { icon: <ThumbsUp className="size-3" />, action: () => setRatings(r => ({ ...r, [msg.id]: "up" })), active: ratings[msg.id] === "up" ? "text-indigo-500" : "" },
                     { icon: <ThumbsDown className="size-3" />, action: () => setRatings(r => ({ ...r, [msg.id]: "down" })), active: ratings[msg.id] === "down" ? "text-destructive" : "" },
                   ].map((btn, i) => (
                     <button key={i} onClick={btn.action} className={`p-1 rounded text-muted-foreground/50 hover:text-muted-foreground transition-colors ${btn.active ?? ""}`}>
@@ -410,7 +410,7 @@ export default function RagPage() {
           {/* Stats pills */}
           <div className="hidden md:flex items-center gap-2">
             {[
-              { icon: <CheckCircle className="size-3 text-emerald-500" />, label: "Pipeline Active" },
+              { icon: <CheckCircle className="size-3 text-indigo-500" />, label: "Pipeline Active" },
               { icon: <Clock className="size-3 text-muted-foreground" />, label: "~1.2s avg" },
               { icon: <RefreshCw className="size-3 text-muted-foreground" />, label: "Jun 1, 2026" },
             ].map(s => (

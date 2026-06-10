@@ -180,7 +180,7 @@ export default function AdminSourcesPage() {
       <AdminLayout>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">Scraping Sources</h1>
+            <h1 className="text-2xl font-bold text-foreground">Scraping Sources</h1>
             <p className="text-muted-foreground text-sm mt-1">Manage URLs to scrape for notices</p>
           </div>
           <Button className="gap-2" onClick={() => { resetForm(); setShowForm(true) }}>

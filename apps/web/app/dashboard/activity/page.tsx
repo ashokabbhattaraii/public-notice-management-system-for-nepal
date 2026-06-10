@@ -53,10 +53,10 @@ export default function ActivityPage() {
   const activityColor = (type: string) => {
     switch (type) {
       case "view": return "bg-blue-500/10 text-blue-600"
-      case "save": return "bg-amber-500/10 text-amber-600"
+      case "save": return "bg-red-500/10 text-red-600"
       case "alert": return "bg-red-500/10 text-red-600"
-      case "search": return "bg-emerald-500/10 text-emerald-600"
-      case "document": return "bg-purple-500/10 text-purple-600"
+      case "search": return "bg-indigo-500/10 text-indigo-600"
+      case "document": return "bg-indigo-500/10 text-indigo-600"
       default: return "bg-accent text-muted-foreground"
     }
   }
@@ -66,7 +66,7 @@ export default function ActivityPage() {
       <Header />
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Clock className="size-5 text-primary" /> Activity
           </h1>
           <p className="text-muted-foreground text-sm mt-1">Your recent actions and history</p>

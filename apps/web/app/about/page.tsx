@@ -23,7 +23,7 @@ export default function AboutPage() {
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-16">
         <div className="text-center mb-16">
           <Badge variant="outline" className="mb-4 border-primary/20">About Suchana AI</Badge>
-          <h1 className="text-3xl sm:text-4xl font-bold mb-4">
+          <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
             Nepal&apos;s <span className="gradient-text">Public Notice</span> Repository
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -33,7 +33,7 @@ export default function AboutPage() {
         </div>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none mb-16">
-          <Card className="bg-card/50 backdrop-blur-sm">
+          <Card className="bg-card/50 backdrop-blur-xl">
             <CardContent className="p-8">
               <h2 className="text-xl font-semibold mb-4">Our Mission</h2>
               <p className="text-muted-foreground leading-relaxed mb-4">
@@ -59,7 +59,7 @@ export default function AboutPage() {
           {features.map((feature, i) => {
             const Icon = feature.icon
             return (
-              <Card key={i} className="bg-card/50 backdrop-blur-sm hover:border-primary/20 transition-all">
+              <Card key={i} className="bg-card/50 backdrop-blur-xl hover:border-primary/20 transition-all">
                 <CardContent className="p-6">
                   <div className="size-10 rounded-lg gradient-primary flex items-center justify-center mb-4">
                     <Icon className="size-5 text-white" />
@@ -72,7 +72,7 @@ export default function AboutPage() {
           })}
         </div>
 
-        <Card className="bg-card/50 backdrop-blur-sm">
+        <Card className="bg-card/50 backdrop-blur-xl">
           <CardContent className="p-8">
             <h2 className="text-xl font-semibold mb-4">How to Use</h2>
             <ol className="space-y-3 text-sm text-muted-foreground">

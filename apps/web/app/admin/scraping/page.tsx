@@ -59,7 +59,7 @@ export default function AdminScrapingPage() {
       <AdminLayout>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">Web Scraping</h1>
+            <h1 className="text-2xl font-bold text-foreground">Web Scraping</h1>
             <p className="text-muted-foreground text-sm mt-1">Manage automated notice collection</p>
           </div>
           <Button className="gap-2">
@@ -70,10 +70,10 @@ export default function AdminScrapingPage() {
         {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: "Active Sources", value: mockScrapingSources.filter(s => s.status === "active").length, icon: Globe, color: "text-emerald-600" },
+            { label: "Active Sources", value: mockScrapingSources.filter(s => s.status === "active").length, icon: Globe, color: "text-indigo-600" },
             { label: "Total Items", value: mockScrapingSources.reduce((s, src) => s + src.itemsScraped, 0).toLocaleString(), icon: Activity, color: "text-blue-600" },
             { label: "Errors", value: mockScrapingSources.filter(s => s.status === "error").length, icon: AlertCircle, color: "text-red-600" },
-            { label: "Next Run", value: "12 min", icon: Clock, color: "text-amber-600" },
+            { label: "Next Run", value: "12 min", icon: Clock, color: "text-red-600" },
           ].map((stat, i) => {
             const Icon = stat.icon
             return (
@@ -193,11 +193,11 @@ export default function AdminScrapingPage() {
                 {scrapingLogs.map((log) => (
                   <div key={log.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-accent/30 font-mono text-xs">
                     {log.status === "success" ? (
-                      <CheckCircle className="size-3.5 text-emerald-500 shrink-0" />
+                      <CheckCircle className="size-3.5 text-indigo-500 shrink-0" />
                     ) : log.status === "error" ? (
                       <XCircle className="size-3.5 text-destructive shrink-0" />
                     ) : log.status === "warning" ? (
-                      <AlertCircle className="size-3.5 text-amber-500 shrink-0" />
+                      <AlertCircle className="size-3.5 text-red-500 shrink-0" />
                     ) : (
                       <Clock className="size-3.5 text-muted-foreground shrink-0" />
                     )}

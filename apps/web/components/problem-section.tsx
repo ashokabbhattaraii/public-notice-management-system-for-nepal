@@ -2,37 +2,44 @@
 
 import React, { useRef, useEffect } from "react"
 import { Globe, FileX, BellOff, MapPin } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import gsap from "gsap"
 
 const problems = [
   {
     icon: Globe,
-    title: "Scattered Across Dozens of Sites",
+    title: "System Fragmentation",
     stat: "50+",
-    statLabel: "government portals",
+    statLabel: "NODES_DISCONNECTED",
+    refCode: "INFRA_01",
     body: "Nepal's notices are spread across independent ministry and commission websites — each with its own format, schedule, and URL. Citizens must visit all of them manually.",
+    severity: "critical",
   },
   {
     icon: FileX,
-    title: "Documents Machines Can't Read",
+    title: "Unstructured Mass",
     stat: "~70%",
-    statLabel: "are image-only PDFs",
+    statLabel: "SCAN_ONLY_PDFS",
+    refCode: "DATA_ERR_70",
     body: "Most official gazettes arrive as scanned images. Search engines can't index them. Screen readers can't parse them. Every file must be opened and read by hand.",
+    severity: "high",
   },
   {
     icon: BellOff,
     title: "No Alerts. No Discovery.",
     stat: "0",
-    statLabel: "cross-portal alert systems",
+    statLabel: "SYS_ALERTS",
+    refCode: "NOTIF_00",
     body: "There is no keyword alert, no category subscription, and no notification in Nepal's public information ecosystem. Repetitive manual checking is the only option.",
+    severity: "critical",
   },
   {
     icon: MapPin,
     title: "Information Inequality",
     stat: "2×",
-    statLabel: "data burden for rural users",
+    statLabel: "OP_BURDEN",
+    refCode: "ACCESS_2X",
     body: "Urban citizens with broadband check multiple heavy portals easily. Rural citizens bear a disproportionate cost of data and slow load times for the same public information.",
+    severity: "high",
   },
 ]
 
@@ -44,92 +51,88 @@ export function ProblemSection() {
   useEffect(() => {
     if (!sectionRef.current || !cardsRef.current) return
 
-    const ctx = gsap.context(() => {
-      if (headingRef.current) {
-        gsap.set(headingRef.current.children, { opacity: 0, y: 30, filter: "blur(8px)" })
+    const heading = headingRef.current
+    const cards = cardsRef.current?.querySelectorAll(".problem-card")
+    const icons = cardsRef.current?.querySelectorAll(".problem-icon")
+    const lines = cardsRef.current?.querySelectorAll(".animated-line")
+
+    const reset = () => {
+      gsap.killTweensOf([heading?.children, cards, icons, lines])
+      if (heading) {
+        gsap.set(heading.children, { opacity: 0, y: 30, filter: "blur(8px)" })
       }
-      gsap.set(cardsRef.current?.querySelectorAll(".problem-card") ?? [], {
-        opacity: 0,
-        y: 60,
-        rotateX: 15,
-        scale: 0.9,
+      gsap.set(cards ?? [], { opacity: 0, y: 60, rotateX: 15, scale: 0.9 })
+      gsap.set(icons ?? [], { scale: 0, rotation: -180 })
+      gsap.set(lines ?? [], { scaleX: 0 })
+    }
+
+    const play = () => {
+      // Heading animation
+      if (heading) {
+        gsap.to(heading.children, {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.4,
+          stagger: 0.08,
+          ease: "power3.out",
+        })
+      }
+
+      // Cards animation
+      gsap.to(cards ?? [], {
+        opacity: 1,
+        y: 0,
+        rotateX: 0,
+        scale: 1,
+        duration: 0.5,
+        stagger: 0.06,
+        ease: "back.out(1.2)",
       })
 
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (!entry.isIntersecting) return
+      // Icons
+      gsap.to(icons ?? [], {
+        scale: 1,
+        rotation: 0,
+        duration: 0.4,
+        stagger: 0.12,
+        delay: 0.15,
+        ease: "back.out(2)",
+      })
 
-            if (headingRef.current) {
-              gsap.fromTo(
-                headingRef.current.children,
-                { opacity: 0, y: 30, filter: "blur(8px)" },
-                {
-                  opacity: 1,
-                  y: 0,
-                  filter: "blur(0px)",
-                  duration: 0.8,
-                  stagger: 0.15,
-                  ease: "power3.out",
-                }
-              )
-            }
+      // Lines
+      gsap.to(lines ?? [], {
+        scaleX: 1,
+        duration: 0.4,
+        stagger: 0.12,
+        delay: 0.25,
+        ease: "power2.out",
+      })
+    }
 
-            const cards = cardsRef.current?.querySelectorAll(".problem-card")
-            if (cards) {
-              gsap.fromTo(
-                cards,
-                { opacity: 0, y: 60, rotateX: 15, scale: 0.9 },
-                {
-                  opacity: 1,
-                  y: 0,
-                  rotateX: 0,
-                  scale: 1,
-                  duration: 0.9,
-                  stagger: 0.12,
-                  ease: "back.out(1.2)",
-                }
-              )
+    reset()
 
-              const icons = cardsRef.current?.querySelectorAll(".problem-icon")
-              if (icons) {
-                gsap.fromTo(
-                  icons,
-                  { scale: 0, rotation: -180 },
-                  {
-                    scale: 1,
-                    rotation: 0,
-                    duration: 0.7,
-                    stagger: 0.12,
-                    delay: 0.3,
-                    ease: "back.out(2)",
-                  }
-                )
-              }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            play()
+          } else {
+            reset()
+          }
+        })
+      },
+      { threshold: 0.15 }
+    )
 
-              const lines = cardsRef.current?.querySelectorAll(".animated-line")
-              if (lines) {
-                gsap.fromTo(
-                  lines,
-                  { scaleX: 0 },
-                  {
-                    scaleX: 1,
-                    duration: 0.8,
-                    stagger: 0.12,
-                    delay: 0.6,
-                    ease: "power2.out",
-                  }
-                )
-              }
-            }
+    observer.observe(sectionRef.current!)
+    return () => observer.disconnect()
+  }, [])
 
-            observer.disconnect()
-          })
-        },
-        { threshold: 0.2 }
-      )
+  useEffect(() => {
+    if (!sectionRef.current || !cardsRef.current) return
 
-      observer.observe(sectionRef.current!)
+    const ctx = gsap.context(() => {
 
       // 3D tilt on hover (matches features section)
       const cards = cardsRef.current?.querySelectorAll(".problem-card")
@@ -183,85 +186,152 @@ export function ProblemSection() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="py-14 md:py-20 px-4 relative overflow-hidden bg-muted/20 border-t border-border/40">
-      {/* Faint grid texture */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
+    <section ref={sectionRef} className="py-12 md:py-20 lg:py-24 px-6 md:px-8 lg:px-12 relative overflow-hidden bg-background">
+      {/* Technical grid overlay */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.02]">
         <svg width="100%" height="100%">
           <defs>
-            <pattern id="prob-grid" width="48" height="48" patternUnits="userSpaceOnUse">
-              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="currentColor" strokeWidth="1" />
+            <pattern id="tactical-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2 2" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#prob-grid)" />
+          <rect width="100%" height="100%" fill="url(#tactical-grid)" />
         </svg>
       </div>
 
-      <div className="max-w-5xl mx-auto relative">
-        {/* Heading */}
-        <div ref={headingRef} className="text-center mb-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
-            Why we built this
-          </p>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Nepal&apos;s public information system{" "}
-            <span className="text-primary">is broken.</span>
+      {/* Horizontal scan lines */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-1/3 left-0 w-full h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+        <div className="absolute top-2/3 left-0 w-full h-px bg-gradient-to-r from-transparent via-destructive/20 to-transparent" />
+      </div>
+
+      <div className="max-w-[1480px] mx-auto relative">
+        {/* Tactical Header */}
+        <div ref={headingRef} className="mb-12 border-l-2 border-indigo-500 pl-5 relative">
+          {/* Corner brackets */}
+          <div className="absolute -left-[2px] top-0 w-4 h-px bg-indigo-500" />
+          <div className="absolute -left-[2px] bottom-0 w-4 h-px bg-indigo-500" />
+
+          {/* System directive label */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full rounded-sm bg-indigo-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex size-2 rounded-sm bg-indigo-500" />
+            </span>
+            <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-indigo-400">
+              [SYSTEM_DIRECTIVE // WHY_WE_BUILT_THIS]
+            </span>
+          </div>
+
+          <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold text-foreground mb-5 leading-[1.1] uppercase tracking-tight text-foreground">
+            Nepal&apos;s public information<br />
+            <span className="text-destructive">system is broken.</span>
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Every day, critical government notices — job vacancies, exam dates, tenders, policy changes — go unseen by the citizens who need them most.
-          </p>
+
+          {/* Scan line indicator */}
+          <div className="flex gap-4 items-center mt-6">
+            <div className="h-1 w-12 bg-indigo-500/30 overflow-hidden relative rounded-full">
+              <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
+            </div>
+            <p className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-2xl font-normal">
+              Nepal&apos;s public information infrastructure operates in silos. Critical data is dispersed across disconnected ministries, rendering comprehensive analysis impossible without AI intervention.
+            </p>
+          </div>
         </div>
 
-        {/* Cards grid */}
+        {/* Tactical Metrics Grid */}
         <div
           ref={cardsRef}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
           style={{ perspective: "1000px" }}
         >
           {problems.map((p, i) => {
             const Icon = p.icon
+            const isCritical = p.severity === "critical"
+
             return (
               <div
                 key={i}
-                className="problem-card relative group rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 flex flex-col sm:flex-row gap-4 cursor-default overflow-hidden"
+                className="problem-card relative group bg-card backdrop-blur-xl overflow-hidden transition-all duration-300 hover:bg-card"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {/* Hover glow */}
-                <div className="card-glow absolute w-40 h-40 rounded-full bg-primary/5 blur-2xl pointer-events-none opacity-0" />
+                {/* Tactical border with corner brackets */}
+                <div className="absolute inset-0 border border-border pointer-events-none" />
+                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
 
-                {/* Animated border highlight */}
-                <div
-                  className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, transparent, hsl(var(--primary) / 0.04), transparent)",
-                  }}
-                />
-
-                {/* Icon */}
-                <div className="problem-icon size-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 relative">
-                  <Icon className="size-6 text-primary relative z-10" />
-                  <div
-                    className="absolute inset-0 rounded-xl bg-primary/10 animate-ping opacity-0 group-hover:opacity-100"
-                    style={{ animationDuration: "2s" }}
-                  />
+                {/* Reference code label */}
+                <div className="absolute top-2 right-2 text-[10px] font-mono text-muted-foreground/60 tracking-wider">
+                  REF: {p.refCode}
                 </div>
 
-                {/* Content */}
-                <div className="relative z-10 flex-1">
-                  {/* Stat */}
-                  <div className="flex items-baseline gap-1.5 mb-1">
-                    <span className="text-2xl font-black text-foreground tabular-nums leading-none">
-                      {p.stat}
-                    </span>
-                    <span className="text-xs text-muted-foreground font-medium">{p.statLabel}</span>
+                {/* Status indicator */}
+                <div className="absolute top-2 left-2">
+                  <span className={`relative flex size-1.5 ${isCritical ? 'animate-pulse' : ''}`}>
+                    {isCritical && (
+                      <span className="absolute inline-flex size-full rounded-full bg-red-300 opacity-75 animate-ping" />
+                    )}
+                    <span className={`relative inline-flex size-1.5 rounded-full ${isCritical ? 'bg-destructive' : 'bg-yellow-500'}`} />
+                  </span>
+                </div>
+
+                {/* Hover scan effect */}
+                <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                <div className="relative p-5 md:p-6">
+                  {/* Icon + Title */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="problem-icon size-8 flex items-center justify-center shrink-0 relative">
+                      <Icon className={`size-5 ${isCritical ? 'text-destructive' : 'text-indigo-400'} relative z-10`} />
+                    </div>
+                    <h3 className="font-semibold text-sm uppercase tracking-wider text-foreground">
+                      {p.title}
+                    </h3>
                   </div>
 
-                  <h3 className="font-semibold text-base mb-1.5">{p.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{p.body}</p>
+                  {/* Large stat display */}
+                  <div className="mb-4">
+                    <div className={`font-black text-4xl md:text-5xl tabular-nums leading-none ${isCritical ? 'text-destructive' : 'text-indigo-400'} mb-2`}>
+                      {p.stat}
+                    </div>
+                    <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground/60">
+                      {p.statLabel}
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                    {p.body}
+                  </p>
+
+                  {/* Micro visualization */}
+                  {i === 0 && (
+                    <div className="mt-4 flex gap-0.5 h-1.5 w-full relative overflow-hidden">
+                      <div className="absolute inset-0 bg-destructive/10 w-full h-full animate-[scanline_2s_linear_infinite]" />
+                      <div className="h-full bg-destructive/80 w-1/5 relative z-10" />
+                      <div className="h-full bg-destructive/60 w-1/5 relative z-10" />
+                      <div className="h-full bg-destructive/40 w-1/5 relative z-10" />
+                      <div className="h-full bg-destructive/20 w-1/5 relative z-10" />
+                      <div className="h-full bg-destructive/10 w-1/5 relative z-10" />
+                    </div>
+                  )}
+
+                  {i === 1 && (
+                    <div className="mt-4 relative h-6 w-full bg-slate-800/40 overflow-hidden border border-border">
+                      <div className="absolute inset-y-0 left-0 bg-indigo-500/30 w-[70%] border-r border-indigo-500">
+                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-indigo-400/20 to-transparent animate-[scanline_2s_linear_infinite]" />
+                      </div>
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-mono text-foreground font-semibold">
+                        30% USABLE
+                      </div>
+                    </div>
+                  )}
 
                   {/* Animated bottom line */}
                   <div
-                    className="animated-line h-0.5 mt-3 bg-gradient-to-r from-primary/40 to-transparent origin-left"
+                    className={`animated-line h-px mt-4 bg-gradient-to-r ${isCritical ? 'from-destructive/50' : 'from-indigo-500/50'} via-transparent to-transparent origin-left`}
                     style={{ transform: "scaleX(0)" }}
                   />
                 </div>

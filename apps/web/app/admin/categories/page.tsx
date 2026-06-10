@@ -18,7 +18,7 @@ export default function AdminCategoriesPage() {
       <Header />
       <AdminLayout>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Category Management</h1>
+          <h1 className="text-2xl font-bold text-foreground">Category Management</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage notice categories</p>
         </div>
 

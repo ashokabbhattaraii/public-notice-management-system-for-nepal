@@ -39,7 +39,7 @@ export default function SavedNoticesPage() {
       <Header />
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Bookmark className="size-5 text-primary" /> Saved Notices
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{savedNotices.length} notices saved</p>

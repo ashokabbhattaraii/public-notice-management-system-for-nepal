@@ -63,7 +63,7 @@ export default function SettingsPage() {
       <Header />
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Settings className="size-5 text-primary" /> Settings
           </h1>
           <p className="text-muted-foreground text-sm mt-1">Manage your account and alert preferences</p>
@@ -145,8 +145,8 @@ export default function SettingsPage() {
               {adminChannels.whatsapp && (
                 <div className="flex items-center justify-between p-4 rounded-lg border border-border">
                   <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Phone className="size-4 text-emerald-600" />
+                    <div className="size-9 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                      <Phone className="size-4 text-indigo-600" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">WhatsApp</p>

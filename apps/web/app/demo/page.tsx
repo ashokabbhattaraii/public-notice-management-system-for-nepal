@@ -128,11 +128,11 @@ export default function DemoPage() {
             {metrics.map((metric, index) => (
               <div
                 key={index}
-                className="relative bg-card/60 backdrop-blur-sm rounded-xl p-5 shadow-lg border border-border/50 overflow-hidden group cursor-pointer opacity-0"
+                className="relative bg-card/60 backdrop-blur-xl rounded-xl p-5 shadow-lg border border-border/50 overflow-hidden group cursor-pointer opacity-0"
               >
                 <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative text-center">
-                  <div className="text-3xl md:text-4xl font-bold text-primary mb-1 group-hover:scale-105 transition-transform duration-300">
+                  <div className="text-3xl md:text-4xl font-bold text-foreground text-primary mb-1 group-hover:scale-105 transition-transform duration-300">
                     {metric.value}
                   </div>
                   <div className="text-sm font-medium text-muted-foreground">
@@ -147,8 +147,8 @@ export default function DemoPage() {
         {/* News Dashboard Section */}
         <section className="py-24 px-4">
           <div ref={newsDashboardRef} className="max-w-5xl mx-auto opacity-0">
-            <Card className="overflow-hidden border-border/60 shadow-xl bg-card/80 backdrop-blur-sm">
-              <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-muted/30">
+            <Card className="overflow-hidden border-border/60 shadow-xl bg-card/80 backdrop-blur-xl">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-card">
                 <div className="flex items-center gap-3">
                   <div className="size-10 rounded-lg bg-primary flex items-center justify-center">
                     <Newspaper className="size-5 text-primary-foreground" />
@@ -239,7 +239,7 @@ export default function DemoPage() {
                   <Sparkles className="size-3.5 text-primary" />
                   <span className="text-xs font-medium text-primary">AI-Powered Engine</span>
                 </div>
-                <h3 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-5 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent">
+                <h3 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-5 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent">
                   Powered by AI Intelligence
                 </h3>
                 <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto mb-8 leading-relaxed">
@@ -250,7 +250,7 @@ export default function DemoPage() {
                     <Zap className="size-3 text-yellow-500" /> Instant Answers
                   </span>
                   <span className="flex items-center gap-1.5 bg-accent/60 border border-border/50 rounded-full px-3.5 py-1.5 text-xs font-medium text-muted-foreground">
-                    <Shield className="size-3 text-emerald-500" /> Verified Sources
+                    <Shield className="size-3 text-indigo-500" /> Verified Sources
                   </span>
                   <span className="flex items-center gap-1.5 bg-accent/60 border border-border/50 rounded-full px-3.5 py-1.5 text-xs font-medium text-muted-foreground">
                     <FileText className="size-3 text-blue-500" /> 2.5M+ Documents

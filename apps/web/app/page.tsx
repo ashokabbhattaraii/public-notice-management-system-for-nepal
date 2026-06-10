@@ -12,7 +12,8 @@ import { mockNotices } from "@/lib/mock-data"
 import Link from "next/link"
 import gsap from "gsap"
 import { FeaturesSection } from "@/components/features-section"
-import { AlertCTASection } from "@/components/alert-cta-section"
+import { ContactSection } from "@/components/contact-section"
+import { AboutSection } from "@/components/about-section"
 import { NoticesDashboardMockup } from "@/components/notices-dashboard-mockup"
 import { ProblemSection } from "@/components/problem-section"
 import { SolutionSection } from "@/components/solution-section"
@@ -55,28 +56,26 @@ export default function HomePage() {
       // Title entrance with 3D perspective
       tl.from(titleRef.current, {
         opacity: 0,
-        y: 100,
-        rotationX: -20,
+        y: 60,
+        rotationX: -10,
         transformPerspective: 1000,
-        duration: 1.4,
-        delay: 0.3,
+        duration: 0.7,
+        delay: 0.1,
       })
         .from(
           subtitleRef.current,
-          { opacity: 0, y: 50, scale: 0.9, duration: 1 },
-          "-=0.8"
+          { opacity: 0, y: 30, scale: 0.95, duration: 0.5 },
+          "-=0.4"
         )
         .from(
           searchBoxRef.current,
           {
             opacity: 0,
-            y: 40,
-            scale: 0.9,
-            rotationX: -10,
-            transformPerspective: 1000,
-            duration: 1,
+            y: 25,
+            scale: 0.95,
+            duration: 0.5,
           },
-          "-=0.6"
+          "-=0.3"
         )
       // Animated grid background drift
       if (bgGridRef.current) {
@@ -113,7 +112,7 @@ export default function HomePage() {
             repeat: -1,
             yoyo: true,
             ease: "sine.inOut",
-            delay: i * 0.15,
+            delay: i * 0.05,
           })
         })
       }
@@ -171,7 +170,7 @@ export default function HomePage() {
       {/* Hero Section — Advanced GSAP with particles, glow, grid, floating badges */}
       <section
         ref={heroRef}
-        className="relative w-full overflow-hidden flex items-center justify-center py-16 sm:py-20 md:py-24 lg:py-32"
+        className="relative w-full overflow-hidden flex items-center justify-center pt-8 pb-16 md:pt-12 md:pb-20 lg:pt-16 lg:pb-24"
       >
         {/* Animated Background Grid */}
         <div className="absolute inset-0 opacity-30 pointer-events-none">
@@ -301,53 +300,88 @@ export default function HomePage() {
           </svg>
         </div>
 
-        {/* Hero Content — two column */}
-        <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-8 md:gap-12 xl:gap-20 items-center">
+        {/* Hero Content — tactical layout */}
+        <div className="relative z-10 w-full max-w-[1480px] mx-auto px-6 md:px-8 lg:px-12">
+          <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 md:gap-14 xl:gap-20 items-center">
 
-            {/* Left — copy */}
-            <div className="space-y-7">
-              <div className="inline-flex items-center gap-2 bg-muted border border-border rounded-full px-3.5 py-1.5 text-xs font-medium text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Nepal&apos;s Unified Public Notice Repository — Live
+            {/* Left — copy with tactical styling */}
+            <div className="space-y-8 relative">
+              {/* System status badge */}
+              <div className="inline-flex items-center gap-2.5 bg-card border border-border px-4 py-2 text-[11px] font-mono font-semibold text-muted-foreground shadow-lg shadow-black/10 backdrop-blur-xl uppercase tracking-wider relative">
+                {/* Corner brackets */}
+                <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-400" />
+                <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-400" />
+                <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-400" />
+                <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-400" />
+
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full rounded-sm bg-indigo-400 opacity-75 animate-ping" />
+                  <span className="relative inline-flex size-2 rounded-sm bg-indigo-500" />
+                </span>
+                [SYS_ONLINE // NEPAL_PUBLIC_NOTICE_NET]
               </div>
 
               <h1
                 ref={titleRef}
-                className="text-foreground text-3xl sm:text-4xl md:text-5xl xl:text-6xl font-bold leading-[1.1] tracking-tight"
+                className="text-foreground text-4xl sm:text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.05] tracking-tight uppercase"
               >
                 Transparent.
                 <br />Accessible.
-                <br /><span className="gradient-text">AI-Powered.</span>
+                <br /><span className="text-indigo-400">AI-Powered.</span>
               </h1>
+
+              {/* Scan line divider */}
+              <div className="flex gap-4 items-center">
+                <div className="h-0.5 w-16 bg-indigo-500/30 overflow-hidden relative">
+                  <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
+                </div>
+              </div>
 
               <p
                 ref={subtitleRef}
-                className="text-muted-foreground text-sm sm:text-base md:text-lg leading-relaxed max-w-md"
+                className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-xl font-light"
               >
                 Every government notice across Nepal — aggregated from official portals,
                 classified by AI, and made instantly searchable for every citizen.
               </p>
 
-              {/* Search Box */}
-              <div ref={searchBoxRef} className="relative">
-                <div className="relative bg-background rounded-xl shadow-lg p-3 border border-border">
-                  <div className="flex gap-2">
+              {/* Search Box — tactical interface */}
+              <div ref={searchBoxRef} className="relative max-w-2xl">
+                <div className="relative bg-card shadow-2xl shadow-black/20 p-4 border border-border backdrop-blur-xl">
+                  {/* Corner brackets */}
+                  <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                  <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                  <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+                  {/* Query label */}
+                  <div className="absolute -top-2.5 left-4 bg-background px-2 text-[10px] font-mono text-indigo-400 uppercase tracking-wider">
+                    QUERY_INTERFACE
+                  </div>
+
+                  <div className="relative flex gap-2.5">
                     <div className="flex-1 relative group">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 transition-colors group-focus-within:text-primary" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground size-4 transition-colors group-focus-within:text-indigo-400" />
                       <Input
                         type="text"
                         placeholder="Search notices, ministries, reference numbers…"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 h-11 text-sm border-0 bg-muted/40 focus-visible:ring-1"
+                        className="pl-11 h-12 text-sm border border-border bg-background/80 focus-visible:ring-1 focus-visible:ring-indigo-500/40 font-light"
                       />
                     </div>
-                    <Button size="sm" className="h-11 px-5 shrink-0">Search</Button>
+                    <Button size="sm" className="h-12 px-7 shrink-0 font-semibold shadow-lg shadow-indigo-500/20 uppercase tracking-wide text-xs bg-indigo-600 hover:bg-indigo-500 text-white">
+                      Execute
+                    </Button>
                   </div>
-                  <div className="flex gap-1.5 mt-2.5 flex-wrap">
+
+                  <div className="flex gap-2 mt-3.5 flex-wrap">
                     {["Tenders", "PSC Exams", "Vacancies", "Policy Updates", "Gazette"].map((tag) => (
-                      <Badge key={tag} variant="secondary" className="cursor-pointer text-xs font-normal hover:bg-accent">
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="cursor-pointer text-[10px] font-mono font-medium hover:bg-accent px-3 py-1 bg-secondary text-secondary-foreground border border-border hover:border-indigo-500/40 transition-all duration-200 uppercase tracking-wider"
+                      >
                         {tag}
                       </Badge>
                     ))}
@@ -355,24 +389,50 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Trust indicators */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-1">
+              {/* Tactical metrics */}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
                 {[
-                  ["50+", "Government Sources"],
-                  ["OCR", "Scanned PDF Support"],
-                  ["RAG", "Document Q&A"],
+                  ["50+", "GOV_SOURCES"],
+                  ["OCR", "PDF_PARSE"],
+                  ["RAG", "DOC_Q&A"],
                 ].map(([val, label]) => (
-                  <div key={label}>
-                    <p className="text-base font-bold text-foreground leading-none">{val}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                  <div
+                    key={label}
+                    className="flex items-center gap-3 px-4 py-2 bg-card border border-border backdrop-blur-xl relative"
+                  >
+                    {/* Corner accent */}
+                    <div className="absolute top-0 left-0 w-1 h-1 bg-indigo-500" />
+                    <p className="text-base font-bold text-indigo-400 leading-none tabular-nums">{val}</p>
+                    <div className="w-px h-5 bg-border" />
+                    <p className="text-[10px] text-muted-foreground leading-tight font-mono uppercase tracking-wider">{label}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Right — dashboard mockup */}
-            <div className="hidden lg:block">
-              <NoticesDashboardMockup />
+            {/* Right — dashboard mockup with tactical frame */}
+            <div className="hidden lg:block relative">
+              <div className="relative overflow-hidden border border-border shadow-2xl shadow-black/30 bg-card backdrop-blur-xl">
+                {/* Tactical corners */}
+                <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-indigo-500 z-20" />
+                <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-indigo-500 z-20" />
+                <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-indigo-500 z-20" />
+                <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-indigo-500 z-20" />
+
+                {/* HUD overlay */}
+                <div className="absolute top-2 left-2 z-20 text-[9px] font-mono text-indigo-400/60 uppercase tracking-wider">
+                  LIVE_PREVIEW
+                </div>
+                <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">
+                  <span className="relative flex size-1.5">
+                    <span className="absolute inline-flex size-full rounded-full bg-indigo-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-indigo-500" />
+                  </span>
+                  <span className="text-[9px] font-mono text-indigo-400 uppercase tracking-wider">SYNC</span>
+                </div>
+
+                <NoticesDashboardMockup />
+              </div>
             </div>
 
           </div>
@@ -383,67 +443,25 @@ export default function HomePage() {
 
 
       {/* The Problem */}
-      <ProblemSection />
+      <div id="problem">
+        <ProblemSection />
+      </div>
 
       {/* The Solution */}
-      <SolutionSection />
+      <div id="solution">
+        <SolutionSection />
+      </div>
 
       {/* Features Section */}
-      <FeaturesSection features={features} />
+      <div id="features">
+        <FeaturesSection features={features} />
+      </div>
 
-      {/* AI Intelligence Section */}
-      <section className="relative py-14 md:py-20 px-4 overflow-hidden bg-background border-t border-border/40">
-        <div className="absolute inset-0 opacity-[0.06] pointer-events-none grayscale">
-          <CpuArchitecture />
-        </div>
+      {/* About Section */}
+      <AboutSection />
 
-        <div className="relative z-10 max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-4">
-              How the AI works
-            </p>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Built on Production-Grade AI Infrastructure
-            </h2>
-            <p className="text-muted-foreground text-base max-w-xl mx-auto leading-relaxed">
-              From Tesseract OCR on scanned PDFs to HuggingFace NLP classification and LangChain RAG pipelines —
-              every notice is processed, indexed, and made queryable in plain language.
-            </p>
-          </div>
-
-          {/* Tech stack grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-            {[
-              { icon: Zap, label: "Scrapy + Selenium", sub: "Automated web scraping" },
-              { icon: FileText, label: "Tesseract OCR", sub: "Scanned PDF extraction" },
-              { icon: Shield, label: "HuggingFace NLP", sub: "Classification & summarization" },
-              { icon: BookOpen, label: "LangChain + ChromaDB", sub: "RAG document Q&A" },
-            ].map((item) => {
-              const Icon = item.icon
-              return (
-                <div key={item.label} className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 text-center group hover:border-primary/30 transition-colors">
-                  <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-2.5 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="size-4 text-primary" />
-                  </div>
-                  <p className="text-xs font-semibold">{item.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{item.sub}</p>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="text-center">
-            <Link href="/rag">
-              <Button size="lg" className="gap-2 h-11 px-8 shadow-lg shadow-primary/20">
-                Try Document Search <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Alert CTA Section */}
-      <AlertCTASection />
+      {/* Contact Section */}
+      <ContactSection />
 
       <Footer />
     </div>

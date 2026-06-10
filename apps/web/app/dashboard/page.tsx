@@ -24,19 +24,29 @@ function StatCard({
   icon: React.ReactNode; trend?: string; trendUp?: boolean
 }) {
   return (
-    <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+    <div className="dash-card bg-card backdrop-blur-xl p-4 flex flex-col gap-3 relative group hover:bg-card transition-all duration-300">
+      {/* Tactical border with corner brackets */}
+      <div className="absolute inset-0 border border-border pointer-events-none" />
+      <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+      <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+      <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+      <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+      {/* Hover scan effect */}
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+      <div className="relative flex items-center justify-between">
+        <span className="text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
+        <div className="size-8 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
           {icon}
         </div>
       </div>
-      <div>
-        <p className="text-2xl font-bold tracking-tight leading-none">{value}</p>
-        <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[11px] text-muted-foreground">{sub}</span>
+      <div className="relative">
+        <p className="text-3xl font-black tracking-tight leading-none text-foreground tabular-nums">{value}</p>
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-muted-foreground font-mono uppercase tracking-wide">{sub}</span>
           {trend && (
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${trendUp ? "bg-emerald-500/10 text-emerald-600" : "bg-muted text-muted-foreground"}`}>
+            <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 uppercase tracking-wider ${trendUp ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" : "bg-slate-800/40 text-muted-foreground border border-border"}`}>
               {trend}
             </span>
           )}
@@ -48,13 +58,13 @@ function StatCard({
 
 function ActivityDot({ type }: { type: string }) {
   const map: Record<string, string> = {
-    view: "bg-blue-500",
-    save: "bg-amber-500",
-    alert: "bg-primary",
-    search: "bg-emerald-500",
-    document: "bg-purple-500",
+    view: "bg-blue-400 border-blue-500",
+    save: "bg-red-300 border-destructive",
+    alert: "bg-indigo-400 border-indigo-500",
+    search: "bg-indigo-400 border-indigo-500",
+    document: "bg-indigo-400 border-indigo-500",
   }
-  return <span className={`size-2 rounded-full shrink-0 mt-1.5 ${map[type] ?? "bg-muted-foreground"}`} />
+  return <span className={`size-2 shrink-0 mt-1.5 border ${map[type] ?? "bg-muted-foreground/60 border-border"}`} />
 }
 
 export default function DashboardPage() {
@@ -115,19 +125,34 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background">
       <Header />
       <DashboardLayout>
-        {/* Page header */}
-        <div className="flex items-start justify-between mb-6 gap-4">
+        {/* Tactical page header */}
+        <div className="flex items-start justify-between mb-6 gap-4 border-l-2 border-indigo-500 pl-4 relative">
+          <div className="absolute -left-[2px] top-0 w-3 h-px bg-indigo-500" />
+          <div className="absolute -left-[2px] bottom-0 w-3 h-px bg-indigo-500" />
+
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
-              Good morning, {user.username} 👋
+            {/* System status */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full rounded-sm bg-indigo-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex size-1.5 rounded-sm bg-indigo-500" />
+              </span>
+              <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.2em] text-indigo-400">
+                [SESSION_ACTIVE // USER_{user.id}]
+              </span>
+            </div>
+
+            <h1 className="text-3xl font-bold text-foreground tracking-tight uppercase">
+              Good morning, <span className="text-indigo-400">{user.username}</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-sm text-muted-foreground mt-1 font-mono uppercase tracking-wide">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
+
           <Link href="/notices">
-            <Button size="sm" className="gap-1.5 shrink-0">
-              <Search className="size-3.5" />
+            <Button size="sm" className="gap-1.5 shrink-0 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/30 uppercase tracking-wide text-xs font-semibold">
+              <Search className="size-4" />
               Browse Notices
             </Button>
           </Link>
@@ -168,27 +193,34 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Urgent notices banner */}
+          {/* Tactical urgent notices banner */}
           {urgentNotices.length > 0 && (
-            <div className="dash-card rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <CalendarClock className="size-4 text-amber-600" />
-                <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Urgent Notices</span>
-                <Badge className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-400 border-0 h-4 px-1.5">
+            <div className="dash-card bg-destructive/[0.08] backdrop-blur-xl p-4 relative">
+              <div className="absolute inset-0 border border-destructive/20 pointer-events-none" />
+              <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-destructive" />
+              <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-destructive" />
+              <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-destructive" />
+              <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-destructive" />
+
+              <div className="relative flex items-center gap-2 mb-3">
+                <CalendarClock className="size-5 text-destructive" />
+                <span className="text-sm font-mono font-semibold text-destructive uppercase tracking-wider">Urgent Notices</span>
+                <Badge className="text-[10px] font-mono bg-destructive/20 text-destructive border border-destructive/30 h-5 px-2 uppercase tracking-wider">
                   {urgentNotices.length} active
                 </Badge>
               </div>
-              <div className="grid sm:grid-cols-2 gap-2">
+              <div className="relative grid sm:grid-cols-2 gap-2">
                 {urgentNotices.map((n) => (
-                  <Link key={n.id} href="/notices" className="flex items-center gap-2.5 p-2.5 rounded-lg bg-background/60 hover:bg-background transition-colors border border-border/40 group">
-                    <div className="size-7 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <FileText className="size-3.5 text-amber-600" />
+                  <Link key={n.id} href="/notices" className="flex items-center gap-2.5 p-2.5 bg-card hover:bg-accent transition-colors border border-border group relative">
+                    <div className="absolute top-0 left-0 w-1 h-1 bg-destructive" />
+                    <div className="size-7 bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0">
+                      <FileText className="size-3.5 text-destructive" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium truncate">{n.title}</p>
-                      <p className="text-[11px] text-muted-foreground">{n.organization}</p>
+                      <p className="text-sm font-medium truncate text-foreground">{n.title}</p>
+                      <p className="text-xs text-muted-foreground font-mono uppercase tracking-wide">{n.organization}</p>
                     </div>
-                    <ArrowRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    <ArrowRight className="size-3 text-destructive opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all shrink-0" />
                   </Link>
                 ))}
               </div>
@@ -199,20 +231,26 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Left — 2 cols */}
             <div className="lg:col-span-2 space-y-4">
-              {/* Alert setup wizard or alert summary */}
+              {/* Tactical alert setup wizard */}
               {!hasAlerts ? (
-                <div className="dash-card rounded-xl border border-primary/20 bg-primary/[0.03] p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Zap className="size-4 text-primary" />
+                <div className="dash-card bg-indigo-500/[0.08] backdrop-blur-xl p-5 relative">
+                  <div className="absolute inset-0 border border-indigo-500/20 pointer-events-none" />
+                  <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                  <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                  <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+                  <div className="relative flex items-center gap-3 mb-4">
+                    <div className="size-9 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                      <Zap className="size-4 text-indigo-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">Set up your first alert</p>
-                      <p className="text-xs text-muted-foreground">Get notified the moment relevant notices are published</p>
+                      <p className="text-base font-semibold uppercase tracking-wide text-foreground">Set up your first alert</p>
+                      <p className="text-xs text-muted-foreground font-mono uppercase tracking-wide mt-0.5">Get notified the moment relevant notices are published</p>
                     </div>
                   </div>
                   {wizardStep === 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[
                         { id: "keyword" as const, label: "Keywords", icon: Search, desc: "Match by text" },
                         { id: "category" as const, label: "Category", icon: FolderOpen, desc: "Filter by type" },
@@ -222,13 +260,18 @@ export default function DashboardPage() {
                         return (
                           <button key={t.id}
                             onClick={() => { setWizardData({ ...wizardData, type: t.id }); setWizardStep(1) }}
-                            className="p-4 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-left group"
+                            className="relative p-4 bg-card border border-border hover:border-indigo-500/40 hover:bg-accent transition-all text-left group"
                           >
-                            <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20 transition-colors">
-                              <Icon className="size-4 text-primary" />
+                            <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
+                            <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
+                            <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
+                            <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
+
+                            <div className="size-8 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-2 group-hover:bg-indigo-500/20 transition-colors">
+                              <Icon className="size-4 text-indigo-400" />
                             </div>
-                            <p className="text-xs font-medium">{t.label}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{t.desc}</p>
+                            <p className="text-sm font-semibold uppercase tracking-wide text-foreground">{t.label}</p>
+                            <p className="text-xs text-muted-foreground mt-1 font-mono uppercase tracking-wide">{t.desc}</p>
                           </button>
                         )
                       })}
@@ -262,7 +305,7 @@ export default function DashboardPage() {
                   )}
                 </div>
               ) : (
-                <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+                <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
                       <Bell className="size-4 text-primary" /> Active Alerts
@@ -278,7 +321,7 @@ export default function DashboardPage() {
                     {alerts.filter(a => a.enabled).slice(0, 3).map((alert) => (
                       <div key={alert.id} className="flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/10">
                         <div className="flex items-center gap-2">
-                          <span className="size-2 rounded-full bg-emerald-500" />
+                          <span className="size-2 rounded-full bg-indigo-500" />
                           <span className="text-sm">{alert.name}</span>
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 capitalize">{alert.type}</Badge>
                         </div>
@@ -292,64 +335,77 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Recommended notices */}
-              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <TrendingUp className="size-4 text-primary" /> Recommended for You
+              {/* Tactical recommended notices */}
+              <div className="dash-card bg-card backdrop-blur-xl p-5 relative">
+                <div className="absolute inset-0 border border-border pointer-events-none" />
+                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+                <div className="relative flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-mono font-semibold flex items-center gap-2 uppercase tracking-wider text-foreground">
+                    <TrendingUp className="size-4 text-indigo-400" /> Recommended for You
                   </h3>
                   <Link href="/notices">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                      View All <ArrowRight className="size-3" />
+                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 font-mono uppercase tracking-wide hover:text-indigo-500 hover:bg-accent">
+                      View All <ArrowRight className="size-3.5" />
                     </Button>
                   </Link>
                 </div>
-                <div className="space-y-1">
+                <div className="relative space-y-1">
                   {recommendedNotices.map((notice) => (
-                    <Link key={notice.id} href="/notices" className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-accent/40 transition-colors group">
-                      <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <FileText className="size-3.5 text-primary" />
+                    <Link key={notice.id} href="/notices" className="flex items-center gap-3 py-2.5 px-2 -mx-2 bg-transparent hover:bg-accent transition-colors group border-b border-border/40 last:border-0">
+                      <div className="size-8 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                        <FileText className="size-3.5 text-indigo-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{notice.title}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[11px] text-muted-foreground truncate">{notice.organization}</span>
-                          <span className="text-muted-foreground/40 text-[10px]">·</span>
-                          <span className="text-[11px] text-muted-foreground">{notice.views.toLocaleString()} views</span>
+                        <p className="text-sm font-medium truncate text-foreground">{notice.title}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-xs text-muted-foreground truncate font-mono uppercase tracking-wide">{notice.organization}</span>
+                          <span className="text-muted-foreground/60 text-xs">·</span>
+                          <span className="text-xs text-muted-foreground font-mono">{notice.views.toLocaleString()} views</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge variant="secondary" className="text-[10px] h-5">{notice.category}</Badge>
+                        <Badge variant="secondary" className="text-[10px] h-5 font-mono bg-slate-800/40 text-muted-foreground border-border uppercase tracking-wider">{notice.category}</Badge>
                         {notice.priority === "high" && (
-                          <span className="size-1.5 rounded-full bg-amber-500" />
+                          <span className="size-2 bg-destructive border border-red-300" />
                         )}
-                        <ArrowRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowRight className="size-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                       </div>
                     </Link>
                   ))}
                 </div>
               </div>
 
-              {/* Engagement summary */}
-              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="size-4 text-primary" />
-                  <h3 className="text-sm font-semibold">This Month</h3>
+              {/* Tactical engagement summary */}
+              <div className="dash-card bg-card backdrop-blur-xl p-5 relative">
+                <div className="absolute inset-0 border border-border pointer-events-none" />
+                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+                <div className="relative flex items-center gap-2 mb-4">
+                  <BarChart3 className="size-5 text-indigo-400" />
+                  <h3 className="text-sm font-mono font-semibold uppercase tracking-wider text-foreground">This Month</h3>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="relative grid grid-cols-3 gap-3">
                   {[
-                    { label: "Searches", value: "23", icon: Search, color: "bg-blue-500/10 text-blue-600" },
-                    { label: "Docs Read", value: "14", icon: FileText, color: "bg-purple-500/10 text-purple-600" },
-                    { label: "Alerts Fired", value: totalMatches.toString(), icon: Bell, color: "bg-primary/10 text-primary" },
+                    { label: "Searches", value: "23", icon: Search, color: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
+                    { label: "Docs Read", value: "14", icon: FileText, color: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400" },
+                    { label: "Alerts Fired", value: totalMatches.toString(), icon: Bell, color: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400" },
                   ].map((item) => {
                     const Icon = item.icon
                     return (
-                      <div key={item.label} className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-accent/30 text-center">
-                        <div className={`size-8 rounded-lg flex items-center justify-center ${item.color}`}>
+                      <div key={item.label} className="flex flex-col items-center gap-1.5 p-3 bg-muted/20 border border-border text-center relative">
+                        <div className="absolute top-0 left-0 w-1 h-1 bg-indigo-500" />
+                        <div className={`size-8 border flex items-center justify-center ${item.color}`}>
                           <Icon className="size-4" />
                         </div>
-                        <p className="text-lg font-bold">{item.value}</p>
-                        <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                        <p className="text-2xl font-black tabular-nums text-foreground">{item.value}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">{item.label}</p>
                       </div>
                     )
                   })}
@@ -359,27 +415,33 @@ export default function DashboardPage() {
 
             {/* Right — 1 col */}
             <div className="space-y-4">
-              {/* Activity feed */}
-              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Activity className="size-4 text-primary" /> Activity
+              {/* Tactical activity feed */}
+              <div className="dash-card bg-card backdrop-blur-xl p-5 relative">
+                <div className="absolute inset-0 border border-border pointer-events-none" />
+                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
+
+                <div className="relative flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-mono font-semibold flex items-center gap-2 uppercase tracking-wider text-foreground">
+                    <Activity className="size-4 text-indigo-400" /> Activity Log
                   </h3>
                   <Link href="/dashboard/activity">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                      All <ArrowRight className="size-3" />
+                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 font-mono uppercase tracking-wide hover:text-indigo-500 hover:bg-accent">
+                      All <ArrowRight className="size-3.5" />
                     </Button>
                   </Link>
                 </div>
                 <div className="relative space-y-0">
-                  {/* Vertical line */}
-                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border/60" />
+                  {/* Tactical vertical line */}
+                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-indigo-500/20" />
                   {recentActivities.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3 py-2.5 pl-1">
+                    <div key={activity.id} className="flex items-start gap-3 py-2.5 pl-1 relative">
                       <ActivityDot type={activity.type} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs leading-relaxed">{activity.description}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className="text-sm leading-relaxed text-foreground/80">{activity.description}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1 font-mono uppercase tracking-wide">
                           {new Date(activity.timestamp).toLocaleDateString("en-US", {
                             month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                           })}
@@ -391,7 +453,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Quick actions */}
-              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <TrendingUp className="size-4 text-primary" /> Quick Actions
                 </h3>
@@ -418,14 +480,14 @@ export default function DashboardPage() {
               </div>
 
               {/* Notice categories */}
-              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5">
+              <div className="dash-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
                 <h3 className="text-sm font-semibold mb-3">Browse by Category</h3>
                 <div className="space-y-1.5">
                   {[
                     { label: "Vacancies", count: 14, color: "bg-blue-500" },
-                    { label: "Tenders", count: 8, color: "bg-amber-500" },
+                    { label: "Tenders", count: 8, color: "bg-destructive" },
                     { label: "Exams", count: 11, color: "bg-primary" },
-                    { label: "Policy", count: 5, color: "bg-purple-500" },
+                    { label: "Policy", count: 5, color: "bg-indigo-500" },
                   ].map((cat) => (
                     <Link key={cat.label} href="/notices">
                       <div className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-accent/40 transition-colors group cursor-pointer">

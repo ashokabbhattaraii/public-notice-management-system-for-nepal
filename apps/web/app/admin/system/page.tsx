@@ -31,9 +31,9 @@ export default function AdminSystemPage() {
   const systemStats = [
     { icon: Server, label: "System Status", value: "Operational", color: "text-green-600" },
     { icon: Database, label: "Storage", value: "localStorage", color: "text-blue-600" },
-    { icon: HardDrive, label: "Data Size", value: "4.8 MB", color: "text-purple-600" },
-    { icon: Activity, label: "Uptime", value: "99.9%", color: "text-amber-600" },
-    { icon: Shield, label: "Security", value: "Local Mode", color: "text-emerald-600" },
+    { icon: HardDrive, label: "Data Size", value: "4.8 MB", color: "text-indigo-600" },
+    { icon: Activity, label: "Uptime", value: "99.9%", color: "text-red-600" },
+    { icon: Shield, label: "Security", value: "Local Mode", color: "text-indigo-600" },
     { icon: Clock, label: "Last Backup", value: "Today 05:00", color: "text-sky-600" },
   ]
 
@@ -57,7 +57,7 @@ export default function AdminSystemPage() {
       <Header />
       <AdminLayout>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">System</h1>
+          <h1 className="text-2xl font-bold text-foreground">System</h1>
           <p className="text-muted-foreground text-sm mt-1">Monitor, configure, and manage the system</p>
         </div>
 
@@ -150,9 +150,9 @@ export default function AdminSystemPage() {
                     <div key={i} className="flex items-center justify-between p-2.5 rounded-lg border border-border/50">
                       <div className="flex items-center gap-2.5">
                         {check.status === "ok" ? (
-                          <CheckCircle className="size-4 text-emerald-500" />
+                          <CheckCircle className="size-4 text-indigo-500" />
                         ) : (
-                          <AlertCircle className="size-4 text-amber-500" />
+                          <AlertCircle className="size-4 text-red-500" />
                         )}
                         <span className="text-sm font-medium">{check.name}</span>
                       </div>
@@ -192,9 +192,9 @@ export default function AdminSystemPage() {
                 {systemLogs.map((log, i) => (
                   <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-accent/30 font-mono text-xs">
                     {log.level === "info" ? (
-                      <CheckCircle className="size-3.5 text-emerald-500 shrink-0" />
+                      <CheckCircle className="size-3.5 text-indigo-500 shrink-0" />
                     ) : log.level === "warn" ? (
-                      <AlertCircle className="size-3.5 text-amber-500 shrink-0" />
+                      <AlertCircle className="size-3.5 text-red-500 shrink-0" />
                     ) : (
                       <XCircle className="size-3.5 text-destructive shrink-0" />
                     )}
