@@ -8,7 +8,6 @@ import {
   AlertTriangle, CheckCircle, ArrowRight, Globe, Tag,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/auth-context"
 import { mockNotices, categories } from "@/lib/mock-data"
@@ -45,7 +44,7 @@ function NoticeCard({
 
   return (
     <article
-      className="group flex cursor-pointer overflow-hidden rounded-[20px] bg-white transition-colors hover:bg-vez-sky/10"
+      className="vz-sweep group flex cursor-pointer rounded-[20px] bg-white"
       onClick={onSelect}
     >
       <div className="min-w-0 flex-1 p-5 md:p-6">
@@ -586,63 +585,94 @@ export default function NoticesPage() {
   const publishedCount = mockNotices.filter(n => n.status === "published").length
 
   return (
-    <div className="min-h-screen bg-vez-surface font-poppins">
+    <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
       <Header />
 
-      {/* Page hero */}
-      <div className="bg-white">
-        <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-8 md:py-16 lg:px-12">
-          <div className="flex flex-wrap items-end justify-between gap-6">
+      {/* Fixed-height workspace — mirrors the Documents page */}
+      <div className="mx-auto flex w-full max-w-[1480px] min-h-0 flex-1 flex-col gap-4 px-6 py-5 md:px-8 lg:px-12">
+
+        {/* Top bar */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-vez-navy">
+              <FileText className="size-4 text-white" />
+            </div>
             <div>
-              <p className="text-base text-vez-mute">Public notices</p>
-              <h1 className="mt-3 max-w-[16ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink">
-                Every notice, one feed.
-              </h1>
-              <p className="mt-4 max-w-[48ch] text-base leading-6 text-vez-mute">
-                Scraped, OCR-processed, and AI-summarized from {new Set(mockNotices.map(n => n.sourcePortal)).size} official government portals.
+              <h1 className="text-lg tracking-[-0.02em] text-vez-ink">Public notices</h1>
+              <p className="text-xs text-vez-mute">
+                {publishedCount} notices · {new Set(mockNotices.map(n => n.sourcePortal)).size} official portals · OCR + AI summarized
               </p>
             </div>
-            <Link
-              href={user ? "/dashboard/alerts" : "/login"}
-              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
-            >
-              <Bell className="size-4" /> Set up alerts
-            </Link>
           </div>
 
-          {/* Search bar */}
-          <div className="relative mt-8 max-w-2xl">
-            <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
+          {/* Search */}
+          <div className="relative w-full max-w-md flex-1 md:w-auto">
+            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
             <input
-              placeholder="Search by title, keyword, organisation, or tag…"
+              placeholder="Search title, keyword, organisation, tag…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-13 w-full rounded-full border border-vez-line bg-white py-3.5 pl-12 pr-12 text-base text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+              className="h-11 w-full rounded-full border border-vez-line bg-white pl-11 pr-10 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-navy"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-navy"
                 aria-label="Clear search"
               >
                 <X className="size-4" />
               </button>
             )}
           </div>
-        </div>
-      </div>
 
-      <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8 lg:px-12">
-        <div className="flex items-start gap-6">
-          {/* ── Left sidebar ── */}
-          <aside className="sticky top-24 hidden w-60 shrink-0 flex-col gap-5 lg:flex">
-            {/* Categories */}
-            <div className="rounded-[20px] bg-white p-4">
+          <Link
+            href={user ? "/dashboard/alerts" : "/login"}
+            className="flex items-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+          >
+            <Bell className="size-4" /> Set up alerts
+          </Link>
+        </div>
+
+        {/* Mobile filters */}
+        <div className="flex shrink-0 gap-2 overflow-x-auto lg:hidden">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value as NoticeCategory | "all")}
+            className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
+          >
+            <option value="all">All categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.label}</option>
+            ))}
+          </select>
+          <select
+            value={selectedPriority}
+            onChange={(e) => setSelectedPriority(e.target.value as "all" | "high" | "normal" | "low")}
+            className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
+          >
+            <option value="all">All priority</option>
+            <option value="high">Urgent</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <button
+            onClick={() => setSortBy(sortBy === "date" ? "views" : "date")}
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
+          >
+            <Filter className="size-3.5" /> {sortBy === "date" ? "Newest" : "Popular"}
+          </button>
+        </div>
+
+        {/* Panels — fill remaining height, page itself never scrolls */}
+        <div className="flex min-h-0 flex-1 gap-4 pb-5">
+          {/* ── Filter sidebar (scrolls internally) ── */}
+          <aside className="hidden w-64 shrink-0 overflow-y-auto rounded-[20px] bg-vez-surface p-5 lg:block">
+            <div>
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Category</h3>
               <div className="space-y-1">
                 <button
                   onClick={() => setSelectedCategory("all")}
-                  className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
+                  className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                 >
                   <span>All</span>
                   <span className="text-xs">{publishedCount}</span>
@@ -651,7 +681,7 @@ export default function NoticesPage() {
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id as NoticeCategory)}
-                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === cat.id ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
+                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === cat.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     <span>{cat.label}</span>
                     <span className="text-xs">{categoryCounts[cat.id] ?? 0}</span>
@@ -660,15 +690,16 @@ export default function NoticesPage() {
               </div>
             </div>
 
-            {/* Priority */}
-            <div className="rounded-[20px] bg-white p-4">
+            <div className="my-5 h-px bg-vez-line" />
+
+            <div>
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Priority</h3>
               <div className="space-y-1">
                 {(["all", "high", "normal", "low"] as const).map((p) => (
                   <button
                     key={p}
                     onClick={() => setSelectedPriority(p)}
-                    className={`w-full rounded-full px-4 py-2 text-left text-sm capitalize transition-colors ${selectedPriority === p ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
+                    className={`w-full rounded-full px-4 py-2 text-left text-sm capitalize transition-colors ${selectedPriority === p ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     {p === "all" ? "All priority" : p === "high" ? "Urgent" : p === "normal" ? "Normal" : "Low"}
                   </button>
@@ -676,15 +707,16 @@ export default function NoticesPage() {
               </div>
             </div>
 
-            {/* Sort */}
-            <div className="rounded-[20px] bg-white p-4">
+            <div className="my-5 h-px bg-vez-line" />
+
+            <div>
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Sort by</h3>
               <div className="space-y-1">
                 {[{ id: "date", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
                   <button
                     key={s.id}
                     onClick={() => setSortBy(s.id as "date" | "views")}
-                    className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
+                    className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     {s.label}
                   </button>
@@ -692,8 +724,9 @@ export default function NoticesPage() {
               </div>
             </div>
 
-            {/* Legend */}
-            <div className="space-y-2.5 rounded-[20px] bg-white p-5">
+            <div className="my-5 h-px bg-vez-line" />
+
+            <div className="space-y-2.5 px-2">
               <h3 className="text-xs text-vez-mute">Legend</h3>
               {[
                 { icon: <Sparkles className="size-3.5 text-vez-navy" />, label: "AI summarized" },
@@ -707,52 +740,26 @@ export default function NoticesPage() {
             </div>
           </aside>
 
-          {/* ── Main content ── */}
-          <div className="min-w-0 flex-1">
-            {/* Mobile filters */}
-            <div className="mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value as NoticeCategory | "all")}
-                className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
-              >
-                <option value="all">All categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
-                ))}
-              </select>
-              <select
-                value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value as "all" | "high" | "normal" | "low")}
-                className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
-              >
-                <option value="all">All priority</option>
-                <option value="high">Urgent</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
-              </select>
-              <button
-                onClick={() => setSortBy(sortBy === "date" ? "views" : "date")}
-                className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
-              >
-                <Filter className="size-3.5" /> {sortBy === "date" ? "Newest" : "Popular"}
-              </button>
+          {/* ── Notice feed (scrolls internally) ── */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-vez-surface">
+            <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-5 py-3.5">
+              <p className="text-sm text-vez-ink">
+                {filteredNotices.length} notice{filteredNotices.length !== 1 ? "s" : ""}
+                {searchQuery && <span className="text-vez-mute"> matching &ldquo;{searchQuery}&rdquo;</span>}
+              </p>
+              <span className="flex items-center gap-1.5 rounded-full bg-vez-sky/40 px-3 py-1 text-xs text-vez-navy">
+                <span className="size-1.5 animate-pulse rounded-full bg-vez-navy" /> Live
+              </span>
             </div>
 
-            <p className="mb-4 text-sm text-vez-mute">
-              {filteredNotices.length} notice{filteredNotices.length !== 1 ? "s" : ""}
-              {searchQuery && ` matching "${searchQuery}"`}
-            </p>
-
-            {/* Notice feed */}
-            <div ref={feedRef} className="space-y-4">
+            <div ref={feedRef} className="flex-1 space-y-3 overflow-y-auto p-4">
               {filteredNotices.length === 0 ? (
-                <div className="rounded-[20px] bg-white py-16 text-center text-vez-mute">
-                  <Filter className="mx-auto mb-4 size-10 opacity-30" />
+                <div className="flex h-full flex-col items-center justify-center py-16 text-center text-vez-mute">
+                  <Filter className="mb-4 size-10 opacity-30" />
                   <h3 className="mb-1 text-base text-vez-ink">No notices found</h3>
                   <p className="mb-5 text-sm">Try adjusting your search or filter criteria</p>
                   <button
-                    className="rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface"
+                    className="rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-sky/20"
                     onClick={() => { setSearchQuery(""); setSelectedCategory("all"); setSelectedPriority("all") }}
                   >
                     Clear filters
@@ -768,24 +775,22 @@ export default function NoticesPage() {
                 />
               ))}
             </div>
-
-            {/* Notice detail — modal */}
-            <Dialog open={!!selectedNotice} onOpenChange={(open) => !open && setSelectedNotice(null)}>
-              <DialogContent className="w-full max-w-2xl gap-0 overflow-hidden rounded-[24px] border-vez-line p-0">
-                {selectedNotice && (
-                  <NoticeDetail
-                    notice={selectedNotice}
-                    saved={savedIds.has(selectedNotice.id)}
-                    onToggleSave={() => toggleSave(selectedNotice.id)}
-                  />
-                )}
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
-      </div>
 
-      <Footer />
+        {/* Notice detail — modal */}
+        <Dialog open={!!selectedNotice} onOpenChange={(open) => !open && setSelectedNotice(null)}>
+          <DialogContent className="w-full max-w-2xl gap-0 overflow-hidden rounded-[24px] border-vez-line p-0">
+            {selectedNotice && (
+              <NoticeDetail
+                notice={selectedNotice}
+                saved={savedIds.has(selectedNotice.id)}
+                onToggleSave={() => toggleSave(selectedNotice.id)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   )
 }

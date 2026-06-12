@@ -3,6 +3,7 @@
 import React from "react"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow } from "./vezigno-ui"
 
 const solutions = [
   {
@@ -40,7 +41,7 @@ export function VezignoSolution() {
     <section id="solution" className="bg-white">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         <Reveal>
-          <p className="text-base text-vez-mute">The solution</p>
+          <Eyebrow>The solution</Eyebrow>
         </Reveal>
         <AnimatedHeading
           text="One platform that answers all four problems."
@@ -50,26 +51,30 @@ export function VezignoSolution() {
         <div className="mt-12 lg:mt-16">
           {solutions.map((s, i) => (
             <Reveal key={s.number} delay={i * 80}>
-              <div className="grid gap-6 border-t border-vez-line py-10 md:py-12 lg:grid-cols-[80px_1fr_1.2fr] lg:gap-12">
-                <p className="text-2xl font-normal leading-[30px] text-vez-mute">{s.number}</p>
+              <div className="border-t border-vez-line">
+                <div className="vz-sweep group -mx-6 grid gap-6 rounded-[20px] px-6 py-10 md:py-12 lg:-mx-10 lg:grid-cols-[80px_1fr_1.2fr] lg:gap-12 lg:px-10">
+                  <p className="text-2xl font-normal leading-[30px] text-vez-mute transition-colors duration-300 group-hover:text-vez-navy">
+                    {s.number}
+                  </p>
 
-                <div>
-                  <h3 className="text-[clamp(28px,2.8vw,36px)] font-normal leading-[1.33] text-vez-ink">
-                    {s.title}
-                  </h3>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-vez-sky/40 px-4 py-1.5 text-sm text-vez-ink">
-                      {s.tag}
-                    </span>
-                    <span className="rounded-full bg-vez-surface px-4 py-1.5 text-sm text-vez-mute">
-                      Solves: {s.solves}
-                    </span>
+                  <div>
+                    <h3 className="text-[clamp(28px,2.8vw,36px)] font-normal leading-[1.33] text-vez-ink">
+                      {s.title}
+                    </h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-vez-sky/40 px-4 py-1.5 text-sm text-vez-ink transition-colors duration-300 group-hover:bg-white">
+                        {s.tag}
+                      </span>
+                      <span className="rounded-full bg-vez-surface px-4 py-1.5 text-sm text-vez-mute transition-colors duration-300 group-hover:bg-white/60 group-hover:text-vez-ink/70">
+                        Solves: {s.solves}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <p className="text-base leading-6 text-vez-mute md:text-lg md:leading-7">
-                  {s.body}
-                </p>
+                  <p className="text-base leading-6 text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/75 md:text-lg md:leading-7">
+                    {s.body}
+                  </p>
+                </div>
               </div>
             </Reveal>
           ))}

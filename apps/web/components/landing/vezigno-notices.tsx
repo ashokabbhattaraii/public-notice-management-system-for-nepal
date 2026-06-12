@@ -2,11 +2,11 @@
 
 import React from "react"
 import Link from "next/link"
-import { ArrowUpRight } from "lucide-react"
 import { mockNotices } from "@/lib/mock-data"
 import { Reveal } from "./reveal"
 import { CountUp } from "./count-up"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow, ArrowCta } from "./vezigno-ui"
 
 const stats = [
   { value: "50+", label: "Government sources" },
@@ -60,18 +60,17 @@ export function VezignoNotices() {
         {/* Featured notices */}
         <div className="mt-16 md:mt-20">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <AnimatedHeading
-              text="Latest from the portals."
-              className="max-w-[18ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink"
-            />
+            <div>
+              <Reveal>
+                <Eyebrow>Live feed</Eyebrow>
+              </Reveal>
+              <AnimatedHeading
+                text="Latest from the portals."
+                className="mt-4 max-w-[18ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink"
+              />
+            </div>
             <Reveal delay={250}>
-              <Link
-                href="/notices"
-                className="flex w-fit items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-all duration-300 hover:-translate-y-0.5 hover:opacity-90"
-              >
-                View all notices
-                <ArrowUpRight className="size-4" />
-              </Link>
+              <ArrowCta href="/notices">View all notices</ArrowCta>
             </Reveal>
           </div>
 
@@ -80,7 +79,7 @@ export function VezignoNotices() {
               <Reveal key={notice.id} delay={i * 100}>
                 <Link
                   href="/notices"
-                  className="group flex h-full flex-col rounded-[20px] bg-vez-surface p-8 transition-all duration-300 hover:-translate-y-1 hover:bg-vez-sky/30"
+                  className="vz-sweep group flex h-full flex-col rounded-[20px] bg-vez-surface p-8"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="rounded-full bg-white px-4 py-1.5 text-sm text-vez-ink">
@@ -96,11 +95,11 @@ export function VezignoNotices() {
                   <h3 className="mt-6 text-2xl font-normal leading-[30px] text-vez-ink">
                     {notice.title}
                   </h3>
-                  <p className="mt-3 line-clamp-3 flex-1 text-base leading-6 text-vez-mute">
+                  <p className="mt-3 line-clamp-3 flex-1 text-base leading-6 text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/70">
                     {notice.aiSummary ?? notice.description}
                   </p>
 
-                  <div className="mt-6 flex items-center justify-between border-t border-vez-line pt-5 text-sm text-vez-mute">
+                  <div className="mt-6 flex items-center justify-between border-t border-vez-line pt-5 text-sm text-vez-mute transition-colors duration-300 group-hover:border-vez-ink/10 group-hover:text-vez-ink/70">
                     <span className="line-clamp-1">{notice.organization}</span>
                     <span className="shrink-0">{formatDate(notice.publishedAt)}</span>
                   </div>

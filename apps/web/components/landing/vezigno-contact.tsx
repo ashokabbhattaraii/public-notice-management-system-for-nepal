@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { Mail, Phone, MapPin, CheckCircle2 } from "lucide-react"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow } from "./vezigno-ui"
 
 const contactInfo = [
   { icon: Mail, label: "Email", value: "support@suchana.ai", href: "mailto:support@suchana.ai" },
@@ -35,7 +36,7 @@ export function VezignoContact() {
     <section id="contact" className="bg-white">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         <Reveal>
-          <p className="text-base text-vez-mute">Contact</p>
+          <Eyebrow>Contact</Eyebrow>
         </Reveal>
         <AnimatedHeading
           text="Questions, feedback, or partnerships — write to us."
@@ -123,13 +124,13 @@ export function VezignoContact() {
                 <Reveal key={item.label} delay={i * 80}>
                   <a
                     href={item.href}
-                    className="flex items-center gap-5 rounded-[20px] bg-vez-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-vez-sky/20"
+                    className="vz-sweep group flex items-center gap-5 rounded-[20px] bg-vez-surface p-6"
                   >
                     <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white">
                       <Icon className="size-5 text-vez-navy" />
                     </div>
                     <div>
-                      <p className="text-sm text-vez-mute">{item.label}</p>
+                      <p className="text-sm text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/60">{item.label}</p>
                       <p className="text-base text-vez-ink">{item.value}</p>
                     </div>
                   </a>

@@ -4,6 +4,7 @@ import React from "react"
 import { Reveal } from "./reveal"
 import { CountUp } from "./count-up"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow } from "./vezigno-ui"
 
 const values = [
   {
@@ -38,7 +39,7 @@ export function VezignoAbout() {
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-20">
           <div>
             <Reveal>
-              <p className="text-base text-vez-mute">About us</p>
+              <Eyebrow>About us</Eyebrow>
             </Reveal>
             <AnimatedHeading
               text="Building the future of public information."
@@ -62,14 +63,16 @@ export function VezignoAbout() {
           <div className="flex flex-col justify-end">
             {values.map((v, i) => (
               <Reveal key={v.title} delay={i * 80}>
-                <div className="border-t border-vez-line py-6">
-                  <div className="flex items-baseline gap-4">
-                    <span className="size-2.5 shrink-0 translate-y-[-2px] rounded-full bg-vez-sky" />
-                    <div>
-                      <h3 className="text-2xl font-normal leading-[30px] text-vez-ink">
-                        {v.title}
-                      </h3>
-                      <p className="mt-2 text-base leading-6 text-vez-mute">{v.body}</p>
+                <div className="border-t border-vez-line">
+                  <div className="vz-sweep group -mx-5 rounded-[16px] px-5 py-6">
+                    <div className="flex items-baseline gap-4">
+                      <span className="size-2.5 shrink-0 translate-y-[-2px] rounded-full bg-vez-sky transition-colors duration-300 group-hover:bg-vez-navy" />
+                      <div>
+                        <h3 className="text-2xl font-normal leading-[30px] text-vez-ink">
+                          {v.title}
+                        </h3>
+                        <p className="mt-2 text-base leading-6 text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/70">{v.body}</p>
+                      </div>
                     </div>
                   </div>
                 </div>

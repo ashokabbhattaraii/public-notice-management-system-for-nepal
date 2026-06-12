@@ -4,6 +4,7 @@ import React from "react"
 import { NoticesDashboardMockup } from "@/components/notices-dashboard-mockup"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow } from "./vezigno-ui"
 
 const steps = [
   { number: "01", label: "Aggregate 50+ portals" },
@@ -17,7 +18,7 @@ export function VezignoDemo() {
     <section id="demo" className="bg-vez-navy">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         <Reveal>
-          <p className="text-base text-white/50">The product</p>
+          <Eyebrow dark>The product</Eyebrow>
         </Reveal>
         <AnimatedHeading
           text="One dashboard for every portal."
@@ -34,9 +35,11 @@ export function VezignoDemo() {
         <Reveal delay={250}>
           <div className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-4">
             {steps.map((step) => (
-              <div key={step.number} className="border-t border-white/15 pt-5">
-                <p className="text-sm text-vez-sky">{step.number}</p>
-                <p className="mt-1 text-base text-white/80">{step.label}</p>
+              <div key={step.number} className="border-t border-white/15">
+                <div className="vz-sweep group -mx-3 rounded-[14px] px-3 pb-3 pt-5">
+                  <p className="text-sm text-vez-sky transition-colors duration-300 group-hover:text-vez-navy">{step.number}</p>
+                  <p className="mt-1 text-base text-white/80 transition-colors duration-300 group-hover:text-vez-ink">{step.label}</p>
+                </div>
               </div>
             ))}
           </div>

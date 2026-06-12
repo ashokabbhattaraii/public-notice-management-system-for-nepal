@@ -27,8 +27,8 @@ const footerLinks = {
 
 export function VezignoFooter() {
   return (
-    <footer className="bg-vez-navy">
-      <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12">
+    <footer className="overflow-hidden bg-vez-navy">
+      <div className="mx-auto max-w-[1480px] px-6 pt-16 md:px-8 md:pt-20 lg:px-12">
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="sm:col-span-2">
@@ -45,7 +45,7 @@ export function VezignoFooter() {
                 href="https://github.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition-all duration-300 hover:scale-110 hover:bg-vez-sky hover:text-vez-navy"
               >
                 <Github className="size-4" />
               </a>
@@ -58,13 +58,13 @@ export function VezignoFooter() {
           {/* Link columns */}
           {Object.entries(footerLinks).map(([group, links]) => (
             <div key={group}>
-              <h4 className="text-sm text-white/40">{group}</h4>
+              <h4 className="text-sm uppercase tracking-[0.16em] text-white/40">{group}</h4>
               <ul className="mt-5 flex flex-col gap-3">
                 {links.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-base text-white/70 transition-colors hover:text-vez-sky"
+                      className="vz-link text-base text-white/70 transition-colors hover:text-vez-sky"
                     >
                       {link.label}
                     </Link>
@@ -83,6 +83,14 @@ export function VezignoFooter() {
             B.Sc. (Hons) IT Cloud Engineering — Asia Pacific University
           </p>
         </div>
+
+        {/* Watermark wordmark */}
+        <p
+          aria-hidden="true"
+          className="pointer-events-none mt-10 select-none whitespace-nowrap text-center text-[clamp(72px,12.5vw,190px)] font-normal leading-[0.78] tracking-[-0.05em] text-white/[0.06]"
+        >
+          Suchana AI
+        </p>
       </div>
     </footer>
   )

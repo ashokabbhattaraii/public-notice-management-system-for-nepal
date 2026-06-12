@@ -4,6 +4,7 @@ import React, { useRef, useEffect } from "react"
 import gsap from "gsap"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
+import { Eyebrow } from "./vezigno-ui"
 
 interface Testimonial {
   quote: string
@@ -87,15 +88,15 @@ function initials(name: string) {
 
 function TestimonialCard({ t }: { t: Testimonial }) {
   return (
-    <figure className="flex w-[340px] shrink-0 flex-col justify-between rounded-[20px] bg-white p-8 md:w-[420px]">
+    <figure className="vz-sweep group flex w-[340px] shrink-0 flex-col justify-between rounded-[20px] bg-white p-8 md:w-[420px]">
       <blockquote className="text-base leading-[1.6] text-vez-ink">"{t.quote}"</blockquote>
       <figcaption className="mt-6 flex items-center gap-4">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-sky text-sm font-medium text-vez-navy">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-sky text-sm font-medium text-vez-navy transition-colors duration-300 group-hover:bg-white">
           {initials(t.name)}
         </span>
         <span>
           <span className="block text-base text-vez-ink">{t.name}</span>
-          <span className="block text-sm text-vez-mute">{t.role}</span>
+          <span className="block text-sm text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/70">{t.role}</span>
         </span>
       </figcaption>
     </figure>
@@ -146,7 +147,7 @@ export function VezignoFeedback() {
       <div className="py-16 md:py-20 lg:py-24">
         <div className="mx-auto max-w-[1480px] px-6 md:px-8 lg:px-12">
           <Reveal>
-            <p className="text-base text-vez-mute">Feedback</p>
+            <Eyebrow>Feedback</Eyebrow>
           </Reveal>
           <AnimatedHeading
             text="Trusted by citizens across Nepal."

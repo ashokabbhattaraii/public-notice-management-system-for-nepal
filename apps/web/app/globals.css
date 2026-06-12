@@ -292,6 +292,57 @@
   }
 }
 
+/* Vezigno landing — sky sweep hover: a sky-blue layer slides down from the
+   top of the card on hover. Children stay above via position:relative. */
+.vz-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.vz-sweep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-vez-sky);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  pointer-events: none;
+}
+
+.vz-sweep:hover::before {
+  transform: scaleY(1);
+  transform-origin: top;
+}
+
+.vz-sweep:not(:hover)::before {
+  transform: scaleY(0);
+  transform-origin: bottom;
+}
+
+.vz-sweep > * {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vz-sweep::before {
+    transition: none;
+  }
+}
+
+/* Vezigno landing — animated underline for inline links */
+.vz-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.vz-link:hover {
+  background-size: 100% 1px;
+}
+
 /* Vezigno landing — testimonial marquee */
 @keyframes vz-marquee {
   from {
