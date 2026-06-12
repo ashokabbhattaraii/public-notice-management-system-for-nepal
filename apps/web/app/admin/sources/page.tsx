@@ -6,19 +6,12 @@ import {
   Play,
   Edit,
   Trash2,
-  CheckCircle,
-  AlertCircle,
   Info,
   Loader2,
-  Link2,
   ToggleLeft,
   ToggleRight,
   X,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
 
@@ -88,6 +81,12 @@ const defaultSources: ScrapingSource[] = [
 
 const categoryOptions = ["Job", "Exam", "Tender", "Policy", "Policy / Administrative", "Other"]
 const frequencyOptions = ["Daily", "Every 6 hours", "Every 12 hours", "Weekly", "Manual"]
+
+const inputClass =
+  "h-11 w-full rounded-full border border-vez-line bg-white px-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+
+const selectClass =
+  "h-11 w-full rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
 
 export default function AdminSourcesPage() {
   const [sources, setSources] = useState<ScrapingSource[]>(defaultSources)
@@ -175,185 +174,215 @@ export default function AdminSourcesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
       <AdminLayout>
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Scraping Sources</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage URLs to scrape for notices</p>
+            <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+              Scraping sources.
+            </h1>
+            <p className="mt-2 text-sm text-vez-mute">Manage URLs to scrape for notices</p>
           </div>
-          <Button className="gap-2" onClick={() => { resetForm(); setShowForm(true) }}>
-            <Plus className="size-4" /> Add Source
-          </Button>
+          <button
+            className="flex items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+            onClick={() => { resetForm(); setShowForm(true) }}
+          >
+            <Plus className="size-4" /> Add source
+          </button>
         </div>
 
         {/* Info Banner */}
-        <Card className="mb-6 border-primary/20 bg-primary/5">
-          <CardContent className="p-4 flex items-start gap-3">
-            <Info className="size-5 text-primary shrink-0 mt-0.5" />
-            <p className="text-sm text-muted-foreground">
-              More sources can be added here. Each source will be scraped on schedule and notices will be automatically classified and indexed.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="mb-6 flex items-start gap-3 rounded-[16px] bg-vez-sky/25 p-5">
+          <Info className="mt-0.5 size-5 shrink-0 text-vez-navy" />
+          <p className="text-sm text-vez-ink/80">
+            More sources can be added here. Each source will be scraped on schedule and notices will be automatically classified and indexed.
+          </p>
+        </div>
 
         {/* Add/Edit Form */}
         {showForm && (
-          <Card className="mb-6 border-primary/20">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">{editingId ? "Edit Source" : "Add New Source"}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={resetForm}><X className="size-4" /></Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-6 rounded-[20px] bg-white p-6 md:p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg text-vez-ink">{editingId ? "Edit source" : "Add new source"}</h2>
+              <button
+                className="flex size-9 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                onClick={resetForm}
+                aria-label="Close form"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">Source Name *</label>
-                  <Input
+                  <label className="mb-2 block text-sm text-vez-mute">Source name *</label>
+                  <input
                     placeholder="e.g. Ministry of Foreign Affairs"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className={inputClass}
                   />
-                  {formErrors.name && <p className="text-xs text-destructive mt-1">{formErrors.name}</p>}
+                  {formErrors.name && <p className="mt-1.5 text-xs text-red-600">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">URL *</label>
-                  <Input
+                  <label className="mb-2 block text-sm text-vez-mute">URL *</label>
+                  <input
                     placeholder="https://example.gov.np/"
                     value={form.url}
                     onChange={(e) => setForm({ ...form, url: e.target.value })}
+                    className={inputClass}
                   />
-                  {formErrors.url && <p className="text-xs text-destructive mt-1">{formErrors.url}</p>}
+                  {formErrors.url && <p className="mt-1.5 text-xs text-red-600">{formErrors.url}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">Notice Category</label>
+                  <label className="mb-2 block text-sm text-vez-mute">Notice category</label>
                   <select
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    className={selectClass}
                   >
                     {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">Scrape Frequency</label>
+                  <label className="mb-2 block text-sm text-vez-mute">Scrape frequency</label>
                   <select
                     value={form.frequency}
                     onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    className={selectClass}
                   >
                     {frequencyOptions.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Notes / Description</label>
-                <Input
-                  placeholder="Brief description of this source..."
+                <label className="mb-2 block text-sm text-vez-mute">Notes / description</label>
+                <input
+                  placeholder="Brief description of this source…"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className={inputClass}
                 />
               </div>
-              <div className="flex gap-2">
-                <Button onClick={handleSubmit}>{editingId ? "Save Changes" : "Add Source"}</Button>
-                <Button variant="ghost" onClick={resetForm}>Cancel</Button>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={handleSubmit}
+                  className="rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+                >
+                  {editingId ? "Save changes" : "Add source"}
+                </button>
+                <button
+                  onClick={resetForm}
+                  className="rounded-full px-5 py-2.5 text-sm text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                >
+                  Cancel
+                </button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Sources Table */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left">
-                    <th className="p-4 font-medium text-muted-foreground">Source</th>
-                    <th className="p-4 font-medium text-muted-foreground">Category</th>
-                    <th className="p-4 font-medium text-muted-foreground">Frequency</th>
-                    <th className="p-4 font-medium text-muted-foreground">Status</th>
-                    <th className="p-4 font-medium text-muted-foreground">Last Scraped</th>
-                    <th className="p-4 font-medium text-muted-foreground">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sources.map((source) => (
-                    <tr key={source.id} className="border-b border-border/50 hover:bg-accent/30">
-                      <td className="p-4">
-                        <div>
-                          <p className="font-medium">{source.name}</p>
-                          <p className="text-xs text-muted-foreground truncate max-w-[200px]">{source.url}</p>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <Badge variant="secondary">{source.category}</Badge>
-                      </td>
-                      <td className="p-4 text-muted-foreground">{source.frequency}</td>
-                      <td className="p-4">
-                        <button onClick={() => toggleSource(source.id)} className="flex items-center gap-1.5">
-                          {source.status === "active" ? (
-                            <>
-                              <ToggleRight className="size-5 text-primary" />
-                              <span className="text-xs text-green-600">Active</span>
-                            </>
+        <div className="overflow-hidden rounded-[20px] bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-vez-line text-left">
+                  <th className="p-5 font-normal text-vez-mute">Source</th>
+                  <th className="p-5 font-normal text-vez-mute">Category</th>
+                  <th className="p-5 font-normal text-vez-mute">Frequency</th>
+                  <th className="p-5 font-normal text-vez-mute">Status</th>
+                  <th className="p-5 font-normal text-vez-mute">Last scraped</th>
+                  <th className="p-5 font-normal text-vez-mute">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map((source) => (
+                  <tr key={source.id} className="border-b border-vez-line/50 transition-colors last:border-0 hover:bg-vez-surface/60">
+                    <td className="p-5">
+                      <div>
+                        <p className="text-vez-ink">{source.name}</p>
+                        <p className="max-w-[200px] truncate text-xs text-vez-mute">{source.url}</p>
+                      </div>
+                    </td>
+                    <td className="p-5">
+                      <span className="rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">{source.category}</span>
+                    </td>
+                    <td className="p-5 text-vez-mute">{source.frequency}</td>
+                    <td className="p-5">
+                      <button onClick={() => toggleSource(source.id)} className="flex items-center gap-1.5">
+                        {source.status === "active" ? (
+                          <>
+                            <ToggleRight className="size-5 text-vez-navy" />
+                            <span className="text-xs text-vez-navy">Active</span>
+                          </>
+                        ) : (
+                          <>
+                            <ToggleLeft className="size-5 text-vez-mute" />
+                            <span className="text-xs text-vez-mute">Inactive</span>
+                          </>
+                        )}
+                      </button>
+                    </td>
+                    <td className="p-5 text-xs text-vez-mute">
+                      {source.lastScraped
+                        ? new Date(source.lastScraped).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                        : "Never"
+                      }
+                    </td>
+                    <td className="p-5">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className="flex items-center gap-1 rounded-full border border-vez-line px-3.5 py-1.5 text-xs text-vez-ink transition-colors hover:bg-vez-surface disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => triggerScrape(source.id)}
+                          disabled={scrapingId === source.id || source.status === "inactive"}
+                        >
+                          {scrapingId === source.id ? (
+                            <><Loader2 className="size-3 animate-spin" /> Scraping…</>
                           ) : (
-                            <>
-                              <ToggleLeft className="size-5 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Inactive</span>
-                            </>
+                            <><Play className="size-3" /> Scrape</>
                           )}
                         </button>
-                      </td>
-                      <td className="p-4 text-xs text-muted-foreground">
-                        {source.lastScraped
-                          ? new Date(source.lastScraped).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-                          : "Never"
-                        }
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1 h-7 text-xs"
-                            onClick={() => triggerScrape(source.id)}
-                            disabled={scrapingId === source.id || source.status === "inactive"}
+                        <button
+                          className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                          onClick={() => startEdit(source)}
+                          aria-label="Edit source"
+                        >
+                          <Edit className="size-3.5" />
+                        </button>
+                        {deleteConfirm === source.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              className="rounded-full bg-red-600 px-3.5 py-1.5 text-xs text-white transition-opacity hover:opacity-90"
+                              onClick={() => deleteSource(source.id)}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              className="rounded-full px-3.5 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface"
+                              onClick={() => setDeleteConfirm(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
+                            onClick={() => setDeleteConfirm(source.id)}
+                            aria-label="Delete source"
                           >
-                            {scrapingId === source.id ? (
-                              <><Loader2 className="size-3 animate-spin" /> Scraping...</>
-                            ) : (
-                              <><Play className="size-3" /> Scrape</>
-                            )}
-                          </Button>
-                          <Button variant="ghost" size="icon" className="size-7" onClick={() => startEdit(source)}>
-                            <Edit className="size-3.5" />
-                          </Button>
-                          {deleteConfirm === source.id ? (
-                            <div className="flex items-center gap-1">
-                              <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => deleteSource(source.id)}>
-                                Confirm
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setDeleteConfirm(null)}>
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button variant="ghost" size="icon" className="size-7 text-destructive hover:text-destructive" onClick={() => setDeleteConfirm(source.id)}>
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </AdminLayout>
     </div>
   )

@@ -3,24 +3,33 @@
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Logo } from "@/components/ui/logo"
-import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowUpRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { cn } from "@/lib/utils"
-import { ThemeToggle } from "@/components/theme-toggle"
+
+const sectionLinks = [
+  { id: "#problem", label: "Problem" },
+  { id: "#solution", label: "Solution" },
+  { id: "#features", label: "Features" },
+  { id: "#about", label: "About" },
+  { id: "#contact", label: "Contact" },
+]
+
+const utilityLinks = [
+  { href: "/notices", label: "Notices" },
+  { href: "/rag", label: "Documents" },
+]
 
 export function Header() {
   const { user, logout } = useAuth()
-  const { language, setLanguage, t } = useLanguage()
+  const { language, setLanguage } = useLanguage()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10)
+    const onScroll = () => setScrolled(window.scrollY > 24)
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
@@ -30,310 +39,249 @@ export function Header() {
     setMobileOpen(false)
   }, [pathname])
 
-  const isHomePage = pathname === "/"
+  const isHome = pathname === "/"
+  // Transparent over the sky hero at the top of the home page; frosted white everywhere else
+  const solid = !isHome || scrolled || mobileOpen
 
-  const mainNavLinks = isHomePage
-    ? [
-        { href: "/", label: "Home", scroll: false },
-        { href: "#problem", label: "Problem", scroll: true },
-        { href: "#solution", label: "Solution", scroll: true },
-        { href: "#features", label: "Features", scroll: true },
-        { href: "#about", label: "About Us", scroll: true },
-        { href: "#contact", label: "Contact", scroll: true },
-      ]
-    : [
-        { href: "/", label: "Home", scroll: false },
-        { href: "/#problem", label: "Problem", scroll: false },
-        { href: "/#solution", label: "Solution", scroll: false },
-        { href: "/#features", label: "Features", scroll: false },
-        { href: "/#about", label: "About Us", scroll: false },
-        { href: "/#contact", label: "Contact", scroll: false },
-      ]
-
-  const utilityLinks = [
-    { href: "/notices", label: "Notices" },
-    { href: "/rag", label: "Documents" },
+  // Same menu on every page: section anchors resolve to /#section off the home page
+  const navLinks = [
+    ...sectionLinks.map((s) => ({ href: isHome ? s.id : `/${s.id}`, label: s.label, anchor: true })),
+    ...utilityLinks.map((u) => ({ ...u, anchor: false })),
   ]
 
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, scroll?: boolean) => {
-    if (scroll && href.startsWith("#")) {
-      if (isHomePage) {
-        e.preventDefault()
-        const element = document.querySelector(href)
-        if (element) {
-          const offset = 80
-          const elementPosition = element.getBoundingClientRect().top + window.pageYOffset
-          window.scrollTo({ top: elementPosition - offset, behavior: "smooth" })
-        }
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, anchor: boolean) => {
+    if (anchor && isHome && href.startsWith("#")) {
+      e.preventDefault()
+      const element = document.querySelector(href)
+      if (element) {
+        const top = element.getBoundingClientRect().top + window.pageYOffset - 88
+        window.scrollTo({ top, behavior: "smooth" })
       }
-      // If not on homepage, the Link href="#section" won't work, so we need full path
-      setMobileOpen(false)
     }
+    setMobileOpen(false)
   }
+
+  const isActive = (link: { href: string; anchor: boolean }) =>
+    !link.anchor && pathname === link.href
 
   return (
     <>
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300",
-          scrolled
-            ? "bg-background/95 backdrop-blur-xl shadow-sm"
-            : "bg-background/80 backdrop-blur-md"
+          "fixed top-0 left-0 right-0 z-50 w-full transition-colors duration-300",
+          solid
+            ? "bg-white/90 backdrop-blur-[6px] border-b border-vez-line"
+            : "bg-transparent"
         )}
       >
-        {/* Top accent line */}
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
-        {/* Bottom border */}
-        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-border/50" />
-
-        <div className="relative max-w-[1480px] mx-auto flex items-center justify-between h-16 lg:h-[4.5rem] px-4 sm:px-6 lg:px-8">
-          {/* Logo */}
-          <Link href="/" className="relative shrink-0">
-            <Logo size="sm" />
+        <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between px-6 md:px-8 lg:px-12">
+          {/* Brand — text mark per spec */}
+          <Link href="/" className="shrink-0 text-base text-vez-ink">
+            Suchana<span className="text-vez-navy font-medium">&nbsp;AI</span>
           </Link>
 
-          {/* Desktop Navigation — only visible on lg+ */}
-          <div className="hidden lg:flex items-center gap-2 xl:gap-3">
-            {/* Main nav */}
-            <nav className="flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {mainNavLinks.map((link) => {
-                const isActive = link.scroll ? false : pathname === link.href
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={(e) => handleNavClick(e, link.href, link.scroll)}
-                    className={cn(
-                      "px-3 xl:px-4 py-1.5 text-[13px] font-medium rounded-full transition-all duration-200 whitespace-nowrap",
-                      isActive
-                        ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                )
-              })}
-            </nav>
-
-            {/* Utility links */}
-            <div className="flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {utilityLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "px-3 xl:px-4 py-1.5 text-[13px] font-medium rounded-full transition-all duration-200 whitespace-nowrap",
-                    pathname === link.href
-                      ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {/* Language */}
-              <button
-                onClick={() => setLanguage(language === "en" ? "ne" : "en")}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-full hover:bg-accent transition-colors"
+          {/* Frosted pill nav */}
+          <nav
+            className={cn(
+              "hidden lg:flex items-center gap-1 rounded-full p-2 backdrop-blur-[6px] transition-colors duration-300",
+              solid ? "bg-vez-surface" : "bg-white/10"
+            )}
+          >
+            {navLinks.map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                onClick={(e) => handleNavClick(e, link.href, link.anchor)}
+                className={cn(
+                  "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+                  isActive(link)
+                    ? "bg-vez-navy text-white"
+                    : "text-vez-ink hover:bg-white/60"
+                )}
               >
-                <Globe className="size-3.5" />
-                <span className="font-semibold">{language === "en" ? "EN" : "ने"}</span>
-              </button>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
 
-              {/* Theme */}
-              <ThemeToggle />
+          {/* Right actions */}
+          <div className="hidden lg:flex items-center gap-2">
+            <button
+              onClick={() => setLanguage(language === "en" ? "ne" : "en")}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-base text-vez-ink transition-colors hover:bg-white/60"
+            >
+              <Globe className="size-4" />
+              {language === "en" ? "EN" : "ने"}
+            </button>
 
-              {user ? (
-                <>
-                  <Button variant="ghost" size="icon" className="relative size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                    <Bell className="size-4" />
-                    <span className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-indigo-600 text-[9px] text-white flex items-center justify-center font-bold">
-                      3
-                    </span>
-                  </Button>
-
-                  {user.role === "admin" && (
-                    <Link href="/admin">
-                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                        <Shield className="size-4" />
-                      </Button>
-                    </Link>
+            {user ? (
+              <>
+                <button
+                  className={cn(
+                    "relative flex size-10 items-center justify-center rounded-full text-vez-ink/70 transition-colors hover:text-vez-navy",
+                    solid ? "hover:bg-vez-surface" : "hover:bg-white/40"
                   )}
+                  aria-label="Notifications"
+                >
+                  <Bell className="size-4" />
+                  <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-vez-navy text-[9px] text-white">
+                    3
+                  </span>
+                </button>
 
-                  <Link href="/dashboard">
-                    <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                      <LayoutDashboard className="size-4" />
-                    </Button>
+                {user.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    className={cn(
+                      "flex size-10 items-center justify-center rounded-full text-vez-ink/70 transition-colors hover:text-vez-navy",
+                      solid ? "hover:bg-vez-surface" : "hover:bg-white/40"
+                    )}
+                    aria-label="Admin panel"
+                  >
+                    <Shield className="size-4" />
                   </Link>
+                )}
 
-                  {/* Avatar + logout */}
-                  <div className="flex items-center gap-2 ml-1 pl-2 border-l border-border">
-                    <div className="size-7 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center">
-                      <span className="text-[11px] font-bold text-white">{user.username[0].toUpperCase()}</span>
-                    </div>
-                    <div className="hidden xl:block text-sm leading-none">
-                      <p className="font-medium text-foreground">{user.username}</p>
-                      <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 rounded-full mt-0.5">
-                        {user.role}
-                      </Badge>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={logout} className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full">
-                      <LogOut className="size-3.5" />
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <Link href="/login">
-                  <button className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded-full bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-sm">
-                    <span>Get Started</span>
-                    <ArrowRight className="size-3.5" />
-                  </button>
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+                >
+                  <LayoutDashboard className="size-4" />
+                  Dashboard
                 </Link>
-              )}
-            </div>
+
+                <div className="ml-1 flex items-center gap-2 border-l border-vez-ink/15 pl-3">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky">
+                    <span className="text-sm text-vez-navy">{user.username[0].toUpperCase()}</span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="flex size-9 items-center justify-center rounded-full text-vez-ink/60 transition-colors hover:bg-red-50 hover:text-red-600"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="size-4" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+              >
+                Sign in
+                <ArrowUpRight className="size-4" />
+              </Link>
+            )}
           </div>
 
-          {/* Mobile menu button — visible below lg */}
-          <div className="flex lg:hidden items-center gap-2">
-            {/* Quick actions on mobile */}
+          {/* Mobile toggle */}
+          <div className="flex items-center gap-2 lg:hidden">
             {user && (
-              <Button variant="ghost" size="icon" className="relative size-9 text-muted-foreground hover:text-foreground rounded-full">
+              <button className="relative flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]" aria-label="Notifications">
                 <Bell className="size-4" />
-                <span className="absolute top-0.5 right-0.5 size-3 rounded-full bg-indigo-600 text-[8px] text-white flex items-center justify-center font-bold">
+                <span className="absolute right-1 top-1 flex size-3.5 items-center justify-center rounded-full bg-vez-navy text-[8px] text-white">
                   3
                 </span>
-              </Button>
+              </button>
             )}
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 text-foreground hover:bg-accent rounded-full"
+            <button
+              className="flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]"
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label="Toggle menu"
             >
               {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* Mobile menu */}
         <div
           className={cn(
-            "lg:hidden overflow-hidden transition-all duration-300 ease-out",
-            mobileOpen ? "max-h-[85vh] opacity-100" : "max-h-0 opacity-0"
+            "lg:hidden overflow-hidden transition-all duration-300",
+            mobileOpen ? "max-h-[85vh]" : "max-h-0"
           )}
         >
-          <div className="border-t border-border bg-background/98 backdrop-blur-xl">
-            <nav className="max-w-[1480px] mx-auto flex flex-col px-4 sm:px-6 py-3 gap-0.5 max-h-[75vh] overflow-y-auto">
-              {/* Nav links */}
-              {mainNavLinks.map((link) => {
-                const isActive = link.scroll ? false : pathname === link.href
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={(e) => {
-                      handleNavClick(e, link.href, link.scroll)
-                      setMobileOpen(false)
-                    }}
-                    className={cn(
-                      "px-4 py-3 rounded-lg text-[15px] font-medium transition-colors",
-                      isActive
-                        ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                        : "text-foreground hover:bg-accent"
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                )
-              })}
+          <nav className="flex max-h-[75vh] flex-col gap-1 overflow-y-auto border-t border-vez-line bg-white px-6 py-4">
+            {navLinks.map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                onClick={(e) => handleNavClick(e, link.href, link.anchor)}
+                className={cn(
+                  "rounded-[12px] px-4 py-3 text-base transition-colors",
+                  isActive(link) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
 
-              <div className="h-px my-2 bg-border" />
+            <div className="my-2 h-px bg-vez-line" />
 
-              {/* Utility */}
-              {utilityLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "px-4 py-3 rounded-lg text-[15px] font-medium transition-colors",
-                    pathname === link.href
-                      ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                      : "text-foreground hover:bg-accent"
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
+            <button
+              onClick={() => setLanguage(language === "en" ? "ne" : "en")}
+              className="flex items-center gap-2 rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+            >
+              <Globe className="size-4" />
+              {language === "en" ? "English" : "नेपाली"}
+            </button>
 
-              <div className="h-px my-2 bg-border" />
+            <div className="my-2 h-px bg-vez-line" />
 
-              {/* Settings row */}
-              <div className="flex items-center gap-3 px-4 py-2">
-                <button
-                  onClick={() => setLanguage(language === "en" ? "ne" : "en")}
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-accent transition-colors"
-                >
-                  <Globe className="size-4" />
-                  <span className="font-medium">{language === "en" ? "EN" : "ने"}</span>
-                </button>
-              </div>
-
-              <div className="h-px my-2 bg-border" />
-
-              {/* User section */}
-              {user ? (
-                <>
-                  {/* User info */}
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="size-9 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shrink-0">
-                      <span className="text-sm font-bold text-white">{user.username[0].toUpperCase()}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{user.username}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
-                    </div>
+            {user ? (
+              <>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky">
+                    <span className="text-sm text-vez-navy">{user.username[0].toUpperCase()}</span>
                   </div>
-
-                  <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-[15px] font-medium text-foreground hover:bg-accent transition-colors">
-                    Dashboard
-                  </Link>
-                  {user.role === "admin" && (
-                    <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-[15px] font-medium text-foreground hover:bg-accent transition-colors">
-                      Admin Panel
-                    </Link>
-                  )}
-                  <button
-                    onClick={() => { logout(); setMobileOpen(false) }}
-                    className="px-4 py-3 rounded-lg text-[15px] font-medium text-left text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </>
-              ) : (
-                <div className="px-3 py-2">
-                  <Link href="/login" onClick={() => setMobileOpen(false)}>
-                    <button className="w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors">
-                      <span>Get Started</span>
-                      <ArrowRight className="size-4" />
-                    </button>
-                  </Link>
+                  <div>
+                    <p className="text-base text-vez-ink">{user.username}</p>
+                    <p className="text-sm capitalize text-vez-mute">{user.role}</p>
+                  </div>
                 </div>
-              )}
-            </nav>
-          </div>
+
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                >
+                  Dashboard
+                </Link>
+                {user.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                  >
+                    Admin panel
+                  </Link>
+                )}
+                <button
+                  onClick={() => {
+                    logout()
+                    setMobileOpen(false)
+                  }}
+                  className="rounded-[12px] px-4 py-3 text-left text-base text-red-600 hover:bg-red-50"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white"
+              >
+                Sign in
+                <ArrowUpRight className="size-4" />
+              </Link>
+            )}
+          </nav>
         </div>
       </header>
 
-      {/* Spacer */}
-      <div className="h-16 lg:h-[4.5rem]" aria-hidden="true" />
+      {/* Spacer — only off the home page; the hero supplies its own top padding under the transparent header */}
+      {!isHome && <div className="h-20" aria-hidden="true" />}
     </>
   )
 }

@@ -1,10 +1,11 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Poppins } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Providers } from "./providers"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-poppins" })
 
 export const metadata: Metadata = {
   title: "Suchana AI — Nepal's AI-Powered Public Notice Platform",
@@ -36,7 +37,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <Providers>
             {children}

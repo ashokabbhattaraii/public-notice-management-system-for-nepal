@@ -1,14 +1,12 @@
 "use client"
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import React, { useState, useMemo, useRef, useEffect } from "react"
 import {
   Search, Filter, Calendar, Eye, Clock, Bell, FileText,
   ExternalLink, Sparkles, ScanText, ChevronRight, X,
   Bookmark, BookmarkCheck, MessageSquare, Send, Building2,
   AlertTriangle, CheckCircle, ArrowRight, Globe, Tag,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -19,14 +17,6 @@ import Link from "next/link"
 import gsap from "gsap"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-
-const categoryMeta: Record<string, { color: string; bg: string; dot: string }> = {
-  exams:         { color: "text-blue-600",   bg: "bg-blue-500/10 border-blue-500/20",    dot: "bg-blue-500"   },
-  vacancies:     { color: "text-indigo-600", bg: "bg-indigo-500/10 border-indigo-500/20", dot: "bg-indigo-500" },
-  tenders:       { color: "text-red-600",  bg: "bg-red-500/10 border-red-500/20",  dot: "bg-red-500"  },
-  policy:        { color: "text-indigo-600", bg: "bg-indigo-500/10 border-indigo-500/20", dot: "bg-indigo-500" },
-  announcements: { color: "text-primary",    bg: "bg-primary/10 border-primary/20",       dot: "bg-primary"    },
-}
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
@@ -50,57 +40,52 @@ function NoticeCard({
   onSelect: () => void
   onToggleSave: () => void
 }) {
-  const meta = categoryMeta[notice.category] ?? categoryMeta.announcements
   const days = notice.deadline ? deadlineDays(notice.deadline) : null
   const urgentDeadline = days !== null && days <= 7 && days >= 0
 
   return (
     <article
-      className="group relative flex gap-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl overflow-hidden hover:border-primary/30 hover:shadow-md transition-all duration-200 cursor-pointer"
+      className="group flex cursor-pointer overflow-hidden rounded-[20px] bg-white transition-colors hover:bg-vez-sky/10"
       onClick={onSelect}
     >
-      {/* Left accent bar */}
-      <div className={`w-1 shrink-0 ${meta.dot} opacity-70`} />
-
-      <div className="flex-1 p-4 md:p-5 min-w-0">
+      <div className="min-w-0 flex-1 p-5 md:p-6">
         {/* Top row — badges */}
-        <div className="flex items-center gap-2 flex-wrap mb-2.5">
-          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
-            <span className={`size-1.5 rounded-full ${meta.dot}`} />
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs capitalize text-vez-navy">
             {notice.category}
           </span>
           {notice.isOcr && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-600">
-              <ScanText className="size-2.5" /> OCR
+            <span className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
+              <ScanText className="size-3" /> OCR
             </span>
           )}
           {notice.priority === "high" && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-red-500/20 bg-red-500/10 text-red-600">
-              <AlertTriangle className="size-2.5" /> Urgent
+            <span className="inline-flex items-center gap-1 rounded-full bg-vez-navy px-3 py-1 text-xs text-white">
+              <AlertTriangle className="size-3" /> Urgent
             </span>
           )}
           {notice.aiSummary && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-primary/20 bg-primary/10 text-primary">
-              <Sparkles className="size-2.5" /> AI Summary
+            <span className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
+              <Sparkles className="size-3" /> AI summary
             </span>
           )}
         </div>
 
         {/* Title */}
-        <h3 className="font-semibold text-sm md:text-base leading-snug mb-2 group-hover:text-primary transition-colors line-clamp-2">
+        <h3 className="mb-2 line-clamp-2 text-base leading-snug text-vez-ink transition-colors group-hover:text-vez-navy md:text-lg">
           {notice.title}
         </h3>
 
         {/* AI Summary */}
         {notice.aiSummary && (
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">
+          <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-vez-mute">
             {notice.aiSummary}
           </p>
         )}
 
         {/* Meta row */}
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1 font-medium text-foreground/70">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-vez-mute">
+          <span className="flex items-center gap-1 text-vez-ink/80">
             <Building2 className="size-3" /> {notice.organization}
           </span>
           {notice.sourcePortal && (
@@ -118,9 +103,9 @@ function NoticeCard({
 
         {/* Deadline */}
         {days !== null && (
-          <div className={`mt-2.5 flex items-center gap-1.5 text-[11px] font-medium ${
-            days < 0 ? "text-muted-foreground line-through" :
-            urgentDeadline ? "text-red-600" : "text-muted-foreground"
+          <div className={`mt-3 flex items-center gap-1.5 text-xs ${
+            days < 0 ? "text-vez-mute line-through" :
+            urgentDeadline ? "text-red-600" : "text-vez-mute"
           }`}>
             <Clock className="size-3" />
             {days < 0 ? `Closed ${formatDate(notice.deadline!)}` :
@@ -132,15 +117,15 @@ function NoticeCard({
       </div>
 
       {/* Right actions */}
-      <div className="flex flex-col items-center justify-between gap-2 p-3 border-l border-border/40 shrink-0">
+      <div className="flex shrink-0 flex-col items-center justify-between gap-2 border-l border-vez-line/60 p-4">
         <button
           onClick={(e) => { e.stopPropagation(); onToggleSave() }}
-          className="p-1.5 rounded-lg hover:bg-accent/60 transition-colors text-muted-foreground hover:text-primary"
+          className="flex size-9 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
           title={saved ? "Remove bookmark" : "Bookmark"}
         >
-          {saved ? <BookmarkCheck className="size-4 text-primary" /> : <Bookmark className="size-4" />}
+          {saved ? <BookmarkCheck className="size-4 text-vez-navy" /> : <Bookmark className="size-4" />}
         </button>
-        <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+        <ChevronRight className="size-4 text-vez-mute/50 transition-all group-hover:translate-x-0.5 group-hover:text-vez-navy" />
       </div>
     </article>
   )
@@ -151,19 +136,16 @@ function NoticeCard({
 function NoticeDetail({
   notice,
   saved,
-  onClose,
   onToggleSave,
 }: {
   notice: Notice
   saved: boolean
-  onClose: () => void
   onToggleSave: () => void
 }) {
   const [activeTab, setActiveTab] = useState<"summary" | "content" | "qa" | "source">("summary")
   const [question, setQuestion] = useState("")
   const [qaHistory, setQaHistory] = useState<Array<{ q: string; a: string }>>([])
   const [answering, setAnswering] = useState(false)
-  const meta = categoryMeta[notice.category] ?? categoryMeta.announcements
   const days = notice.deadline ? deadlineDays(notice.deadline) : null
 
   // Reset tab when notice changes
@@ -192,7 +174,6 @@ function NoticeDetail({
     if (ql.includes("contact") || ql.includes("address") || ql.includes("phone")) {
       return `Contact details are available directly at ${notice.sourceUrl ?? notice.sourcePortal ?? "the official portal"}. This notice was scraped from the official government source.`
     }
-    // Generic contextual answer
     const relevantFact = notice.keyFacts?.find(f =>
       f.toLowerCase().split(/\s+/).some(w => ql.includes(w))
     )
@@ -219,58 +200,56 @@ function NoticeDetail({
   ]
 
   return (
-    <div className="flex flex-col max-h-[85vh] overflow-hidden">
+    <div className="flex max-h-[85vh] flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-4 md:p-5 border-b border-border/60 shrink-0">
+      <div className="shrink-0 border-b border-vez-line p-5 md:p-6">
         <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
-                <span className={`size-1.5 rounded-full ${meta.dot}`} />
+          <div className="min-w-0 flex-1">
+            <div className="mb-2.5 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs capitalize text-vez-navy">
                 {notice.category}
               </span>
               {notice.isOcr && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-600">
-                  <ScanText className="size-2.5" /> OCR {notice.ocrConfidence && `${notice.ocrConfidence}%`}
+                <span className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
+                  <ScanText className="size-3" /> OCR {notice.ocrConfidence && `${notice.ocrConfidence}%`}
                 </span>
               )}
               {notice.priority === "high" && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-red-500/20 bg-red-500/10 text-red-600">
-                  <AlertTriangle className="size-2.5" /> Urgent
+                <span className="inline-flex items-center gap-1 rounded-full bg-vez-navy px-3 py-1 text-xs text-white">
+                  <AlertTriangle className="size-3" /> Urgent
                 </span>
               )}
             </div>
-            <h2 className="font-bold text-sm md:text-base leading-snug">{notice.title}</h2>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-              <Building2 className="size-3 shrink-0" /> {notice.organization}
+            <h2 className="text-base leading-snug text-vez-ink md:text-lg">{notice.title}</h2>
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-vez-mute">
+              <Building2 className="size-3.5 shrink-0" /> {notice.organization}
             </p>
           </div>
           <button
             onClick={onToggleSave}
-            className="p-1.5 rounded-lg hover:bg-accent/60 transition-colors shrink-0"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-vez-surface"
             title={saved ? "Remove bookmark" : "Bookmark"}
           >
-            {saved ? <BookmarkCheck className="size-4 text-primary" /> : <Bookmark className="size-4 text-muted-foreground" />}
+            {saved ? <BookmarkCheck className="size-4 text-vez-navy" /> : <Bookmark className="size-4 text-vez-mute" />}
           </button>
         </div>
 
         {/* Deadline */}
         {days !== null && days >= 0 && (
-          <div className={`mt-3 flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg ${
-            days <= 7 ? "bg-red-500/10 text-red-700 border border-red-500/20"
-                      : "bg-muted/60 text-muted-foreground border border-border/40"
+          <div className={`mt-4 flex items-center gap-2 rounded-[12px] px-4 py-2.5 text-sm ${
+            days <= 7 ? "bg-red-50 text-red-700" : "bg-vez-surface text-vez-mute"
           }`}>
-            <Clock className="size-3.5 shrink-0" />
+            <Clock className="size-4 shrink-0" />
             Deadline: {formatDate(notice.deadline!)} ({days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days} days left`})
           </div>
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-border/60 shrink-0 overflow-x-auto">
+      {/* Tabs — pill style */}
+      <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-vez-line px-4 py-3">
         {([
-          { id: "summary", label: "AI Summary", icon: Sparkles },
-          { id: "content", label: "Full Content", icon: FileText },
+          { id: "summary", label: "AI summary", icon: Sparkles },
+          { id: "content", label: "Full content", icon: FileText },
           { id: "qa",      label: "Ask AI",       icon: MessageSquare },
           { id: "source",  label: "Source",        icon: Globe },
         ] as const).map((tab) => {
@@ -279,40 +258,40 @@ function NoticeDetail({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm transition-colors ${
                 activeTab === tab.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "bg-vez-navy text-white"
+                  : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
               }`}
             >
-              <Icon className="size-3" /> {tab.label}
+              <Icon className="size-3.5" /> {tab.label}
             </button>
           )
         })}
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-5">
+      <div className="flex-1 overflow-y-auto p-5 md:p-6">
         {/* ── AI Summary ── */}
         {activeTab === "summary" && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {notice.aiSummary ? (
               <>
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="size-3.5 text-primary" />
-                    <span className="text-xs font-semibold text-primary">AI-Generated Summary</span>
+                <div className="rounded-[16px] bg-vez-sky/20 p-5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Sparkles className="size-4 text-vez-navy" />
+                    <span className="text-sm text-vez-navy">AI-generated summary</span>
                   </div>
-                  <p className="text-sm leading-relaxed">{notice.aiSummary}</p>
+                  <p className="text-sm leading-relaxed text-vez-ink">{notice.aiSummary}</p>
                 </div>
 
                 {notice.keyFacts && notice.keyFacts.length > 0 && (
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">Key Facts</h4>
-                    <ul className="space-y-2">
+                    <h4 className="mb-3 text-sm text-vez-mute">Key facts</h4>
+                    <ul className="space-y-2.5">
                       {notice.keyFacts.map((fact, i) => (
-                        <li key={i} className="flex items-start gap-2.5 text-sm">
-                          <CheckCircle className="size-3.5 text-primary shrink-0 mt-0.5" />
+                        <li key={i} className="flex items-start gap-2.5 text-sm text-vez-ink">
+                          <CheckCircle className="mt-0.5 size-4 shrink-0 text-vez-navy" />
                           <span>{fact}</span>
                         </li>
                       ))}
@@ -322,11 +301,11 @@ function NoticeDetail({
 
                 {notice.tags && notice.tags.length > 0 && (
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Tags</h4>
-                    <div className="flex flex-wrap gap-1.5">
+                    <h4 className="mb-2.5 text-sm text-vez-mute">Tags</h4>
+                    <div className="flex flex-wrap gap-2">
                       {notice.tags.map((tag) => (
-                        <span key={tag} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted border border-border/60 text-muted-foreground">
-                          <Tag className="size-2.5" /> {tag}
+                        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
+                          <Tag className="size-3" /> {tag}
                         </span>
                       ))}
                     </div>
@@ -334,14 +313,14 @@ function NoticeDetail({
                 )}
               </>
             ) : (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <Sparkles className="size-8 mx-auto mb-3 opacity-30" />
+              <div className="py-10 text-center text-sm text-vez-mute">
+                <Sparkles className="mx-auto mb-3 size-8 opacity-30" />
                 <p>AI summary not available for this notice.</p>
               </div>
             )}
 
             {/* Meta */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+            <div className="grid grid-cols-2 gap-4 border-t border-vez-line pt-4">
               {[
                 { label: "Organization", value: notice.organization },
                 { label: "Published", value: formatDate(notice.publishedAt) },
@@ -351,8 +330,8 @@ function NoticeDetail({
                 ...(notice.scrapedAt ? [{ label: "Scraped at", value: formatDate(notice.scrapedAt) }] : []),
               ].map((item) => (
                 <div key={item.label}>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">{item.label}</p>
-                  <p className="text-sm font-medium mt-0.5">{item.value}</p>
+                  <p className="text-xs text-vez-mute">{item.label}</p>
+                  <p className="mt-0.5 text-sm text-vez-ink">{item.value}</p>
                 </div>
               ))}
             </div>
@@ -362,14 +341,14 @@ function NoticeDetail({
         {/* ── Full Content ── */}
         {activeTab === "content" && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-              <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
+            <div className="rounded-[16px] bg-vez-surface p-5">
+              <p className="mb-3 flex items-center gap-1.5 text-xs text-vez-mute">
                 <FileText className="size-3" />
                 {notice.isOcr ? `Extracted via OCR from scanned PDF (confidence: ${notice.ocrConfidence ?? "—"}%)` : "Scraped directly from HTML source"}
               </p>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{notice.content}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-vez-ink">{notice.content}</p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-vez-mute">
               <Calendar className="size-3" />
               Last updated: {formatDate(notice.updatedAt)} · Author: {notice.author}
             </div>
@@ -378,21 +357,21 @@ function NoticeDetail({
 
         {/* ── Ask AI ── */}
         {activeTab === "qa" && (
-          <div className="flex flex-col gap-4 h-full">
+          <div className="flex h-full flex-col gap-4">
             {qaHistory.length === 0 && (
               <div>
-                <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
-                  <MessageSquare className="size-3" /> Ask anything about this notice
+                <p className="mb-3 flex items-center gap-1.5 text-sm text-vez-mute">
+                  <MessageSquare className="size-3.5" /> Ask anything about this notice
                 </p>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {suggestedQuestions.map((q) => (
                     <button
                       key={q}
                       onClick={() => setQuestion(q)}
-                      className="w-full text-left text-xs px-3 py-2 rounded-lg border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-colors flex items-center justify-between group"
+                      className="group flex w-full items-center justify-between rounded-[12px] bg-vez-surface px-4 py-3 text-left text-sm text-vez-ink transition-colors hover:bg-vez-sky/20"
                     >
                       <span>{q}</span>
-                      <ArrowRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ArrowRight className="size-3.5 text-vez-mute opacity-0 transition-opacity group-hover:opacity-100" />
                     </button>
                   ))}
                 </div>
@@ -403,24 +382,24 @@ function NoticeDetail({
               <div className="flex-1 space-y-4 overflow-y-auto">
                 {qaHistory.map((item, i) => (
                   <div key={i} className="space-y-2">
-                    <div className="ml-auto max-w-[85%] bg-primary/10 border border-primary/20 rounded-xl rounded-br-sm px-3 py-2 text-sm text-right">
+                    <div className="ml-auto max-w-[85%] rounded-[16px] rounded-br-[4px] bg-vez-sky/30 px-4 py-2.5 text-right text-sm text-vez-ink">
                       {item.q}
                     </div>
-                    <div className="mr-auto max-w-[90%] bg-muted/60 border border-border/60 rounded-xl rounded-bl-sm px-3 py-2">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <Sparkles className="size-3 text-primary" />
-                        <span className="text-[10px] font-semibold text-primary">Suchana AI</span>
+                    <div className="mr-auto max-w-[90%] rounded-[16px] rounded-bl-[4px] bg-vez-surface px-4 py-3">
+                      <div className="mb-1.5 flex items-center gap-1.5">
+                        <Sparkles className="size-3 text-vez-navy" />
+                        <span className="text-xs text-vez-navy">Suchana AI</span>
                       </div>
-                      <p className="text-xs leading-relaxed">{item.a}</p>
+                      <p className="text-sm leading-relaxed text-vez-ink">{item.a}</p>
                     </div>
                   </div>
                 ))}
                 {answering && (
-                  <div className="mr-auto max-w-[90%] bg-muted/60 border border-border/60 rounded-xl rounded-bl-sm px-3 py-2">
+                  <div className="mr-auto max-w-[90%] rounded-[16px] rounded-bl-[4px] bg-vez-surface px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
-                      <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
-                      <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-vez-navy [animation-delay:0ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-vez-navy [animation-delay:150ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-vez-navy [animation-delay:300ms]" />
                     </div>
                   </div>
                 )}
@@ -428,18 +407,23 @@ function NoticeDetail({
             )}
 
             {/* Input */}
-            <div className="flex gap-2 mt-auto pt-3 border-t border-border/40">
-              <Input
+            <div className="mt-auto flex gap-2 border-t border-vez-line pt-4">
+              <input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAsk()}
                 placeholder="Ask a question about this notice…"
-                className="h-9 text-sm"
+                className="h-11 w-full rounded-full border border-vez-line bg-white px-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
                 disabled={answering}
               />
-              <Button size="sm" className="h-9 px-3 shrink-0" onClick={handleAsk} disabled={!question.trim() || answering}>
-                <Send className="size-3.5" />
-              </Button>
+              <button
+                onClick={handleAsk}
+                disabled={!question.trim() || answering}
+                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-navy text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                aria-label="Send question"
+              >
+                <Send className="size-4" />
+              </button>
             </div>
           </div>
         )}
@@ -447,19 +431,19 @@ function NoticeDetail({
         {/* ── Source ── */}
         {activeTab === "source" && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+            <div className="space-y-4 rounded-[16px] bg-vez-surface p-5">
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium mb-1">Source Portal</p>
-                <p className="text-sm font-semibold">{notice.sourcePortal ?? "Unknown"}</p>
+                <p className="mb-1 text-xs text-vez-mute">Source portal</p>
+                <p className="text-sm text-vez-ink">{notice.sourcePortal ?? "Unknown"}</p>
               </div>
               {notice.sourceUrl && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium mb-1">Direct URL</p>
+                  <p className="mb-1 text-xs text-vez-mute">Direct URL</p>
                   <a
                     href={notice.sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
+                    className="inline-flex items-center gap-1.5 break-all text-sm text-vez-navy hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {notice.sourceUrl} <ExternalLink className="size-3 shrink-0" />
@@ -468,40 +452,40 @@ function NoticeDetail({
               )}
               {notice.scrapedAt && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium mb-1">Scraped At</p>
-                  <p className="text-sm">{new Date(notice.scrapedAt).toLocaleString()}</p>
+                  <p className="mb-1 text-xs text-vez-mute">Scraped at</p>
+                  <p className="text-sm text-vez-ink">{new Date(notice.scrapedAt).toLocaleString()}</p>
                 </div>
               )}
             </div>
 
             {/* OCR info */}
             {notice.isOcr ? (
-              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <ScanText className="size-4 text-indigo-600" />
-                  <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">OCR Processed Document</span>
+              <div className="rounded-[16px] bg-vez-sky/20 p-5">
+                <div className="mb-2 flex items-center gap-2">
+                  <ScanText className="size-4 text-vez-navy" />
+                  <span className="text-sm text-vez-navy">OCR processed document</span>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed mb-2">
+                <p className="mb-3 text-sm leading-relaxed text-vez-mute">
                   This notice was originally a scanned PDF. Text was extracted using Tesseract OCR (nep+eng) with
                   {notice.ocrConfidence ? ` ${notice.ocrConfidence}% confidence.` : " high confidence."}
                 </p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-muted/60 rounded-full h-1.5">
+                <div className="flex items-center gap-3">
+                  <div className="h-1.5 flex-1 rounded-full bg-white">
                     <div
-                      className="bg-indigo-500 h-1.5 rounded-full"
+                      className="h-1.5 rounded-full bg-vez-navy"
                       style={{ width: `${notice.ocrConfidence ?? 90}%` }}
                     />
                   </div>
-                  <span className="text-[11px] font-semibold text-indigo-600">{notice.ocrConfidence ?? 90}%</span>
+                  <span className="text-xs text-vez-navy">{notice.ocrConfidence ?? 90}%</span>
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle className="size-4 text-indigo-600" />
-                  <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">Scraped Directly</span>
+              <div className="rounded-[16px] bg-vez-sky/20 p-5">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <CheckCircle className="size-4 text-vez-navy" />
+                  <span className="text-sm text-vez-navy">Scraped directly</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-vez-mute">
                   This notice was scraped directly from the HTML source of the official government portal via Scrapy/Selenium. No OCR processing was required.
                 </p>
               </div>
@@ -509,10 +493,13 @@ function NoticeDetail({
 
             <div className="text-center">
               {notice.sourceUrl && (
-                <a href={notice.sourceUrl} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                    <ExternalLink className="size-3.5" /> View Original Notice
-                  </Button>
+                <a
+                  href={notice.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface"
+                >
+                  <ExternalLink className="size-3.5" /> View original notice
                 </a>
               )}
             </div>
@@ -521,19 +508,18 @@ function NoticeDetail({
       </div>
 
       {/* Footer actions */}
-      <div className="p-3 border-t border-border/60 flex gap-2 shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 gap-1.5 text-xs"
+      <div className="flex shrink-0 gap-2.5 border-t border-vez-line p-4">
+        <button
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface"
           onClick={onToggleSave}
         >
-          {saved ? <><BookmarkCheck className="size-3.5" /> Saved</> : <><Bookmark className="size-3.5" /> Save Notice</>}
-        </Button>
-        <Link href="/login" className="flex-1">
-          <Button size="sm" className="w-full gap-1.5 text-xs">
-            <Bell className="size-3.5" /> Set Alert
-          </Button>
+          {saved ? <><BookmarkCheck className="size-4" /> Saved</> : <><Bookmark className="size-4" /> Save notice</>}
+        </button>
+        <Link
+          href="/login"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+        >
+          <Bell className="size-4" /> Set alert
         </Link>
       </div>
     </div>
@@ -597,102 +583,108 @@ export default function NoticesPage() {
     )
   }, [])
 
+  const publishedCount = mockNotices.filter(n => n.status === "published").length
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-vez-surface font-poppins">
       <Header />
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-        {/* Page header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+      {/* Page hero */}
+      <div className="bg-white">
+        <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-8 md:py-16 lg:px-12">
+          <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">Public Notices</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Scraped, OCR-processed, and AI-summarized from {mockNotices.filter(n => n.status === "published").length > 0 ? `${new Set(mockNotices.map(n => n.sourcePortal)).size} official government portals` : "official government portals"}
+              <p className="text-base text-vez-mute">Public notices</p>
+              <h1 className="mt-3 max-w-[16ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink">
+                Every notice, one feed.
+              </h1>
+              <p className="mt-4 max-w-[48ch] text-base leading-6 text-vez-mute">
+                Scraped, OCR-processed, and AI-summarized from {new Set(mockNotices.map(n => n.sourcePortal)).size} official government portals.
               </p>
             </div>
-            <Link href={user ? "/dashboard/alerts" : "/login"}>
-              <Button size="sm" className="gap-1.5">
-                <Bell className="size-3.5" /> Set Up Alerts
-              </Button>
+            <Link
+              href={user ? "/dashboard/alerts" : "/login"}
+              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+            >
+              <Bell className="size-4" /> Set up alerts
             </Link>
           </div>
 
           {/* Search bar */}
-          <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
+          <div className="relative mt-8 max-w-2xl">
+            <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
+            <input
               placeholder="Search by title, keyword, organisation, or tag…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-10"
+              className="h-13 w-full rounded-full border border-vez-line bg-white py-3.5 pl-12 pr-12 text-base text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-navy"
+                aria-label="Clear search"
+              >
                 <X className="size-4" />
               </button>
             )}
           </div>
         </div>
+      </div>
 
-        <div className="flex gap-5 items-start">
+      <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8 lg:px-12">
+        <div className="flex items-start gap-6">
           {/* ── Left sidebar ── */}
-          <aside className="hidden lg:flex flex-col gap-4 w-52 shrink-0 sticky top-20">
+          <aside className="sticky top-24 hidden w-60 shrink-0 flex-col gap-5 lg:flex">
             {/* Categories */}
-            <div className="rounded-xl border border-border/60 bg-card/80 p-3">
-              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">Category</h3>
-              <div className="space-y-0.5">
+            <div className="rounded-[20px] bg-white p-4">
+              <h3 className="mb-3 px-2 text-xs text-vez-mute">Category</h3>
+              <div className="space-y-1">
                 <button
                   onClick={() => setSelectedCategory("all")}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-colors ${selectedCategory === "all" ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`}
+                  className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
                 >
                   <span>All</span>
-                  <span className="text-[11px]">{mockNotices.filter(n => n.status === "published").length}</span>
+                  <span className="text-xs">{publishedCount}</span>
                 </button>
-                {categories.map((cat) => {
-                  const m = categoryMeta[cat.id]
-                  return (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id as NoticeCategory)}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-colors ${selectedCategory === cat.id ? `${m.bg} ${m.color} font-medium border` : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span className={`size-1.5 rounded-full ${m.dot}`} />
-                        {cat.label}
-                      </span>
-                      <span className="text-[11px]">{categoryCounts[cat.id] ?? 0}</span>
-                    </button>
-                  )
-                })}
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id as NoticeCategory)}
+                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === cat.id ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
+                  >
+                    <span>{cat.label}</span>
+                    <span className="text-xs">{categoryCounts[cat.id] ?? 0}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Priority */}
-            <div className="rounded-xl border border-border/60 bg-card/80 p-3">
-              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">Priority</h3>
-              <div className="space-y-0.5">
+            <div className="rounded-[20px] bg-white p-4">
+              <h3 className="mb-3 px-2 text-xs text-vez-mute">Priority</h3>
+              <div className="space-y-1">
                 {(["all", "high", "normal", "low"] as const).map((p) => (
                   <button
                     key={p}
                     onClick={() => setSelectedPriority(p)}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors capitalize ${selectedPriority === p ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`}
+                    className={`w-full rounded-full px-4 py-2 text-left text-sm capitalize transition-colors ${selectedPriority === p ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
                   >
-                    {p === "all" ? "All Priority" : p === "high" ? "⚡ Urgent" : p === "normal" ? "● Normal" : "○ Low"}
+                    {p === "all" ? "All priority" : p === "high" ? "Urgent" : p === "normal" ? "Normal" : "Low"}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Sort */}
-            <div className="rounded-xl border border-border/60 bg-card/80 p-3">
-              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">Sort By</h3>
-              <div className="space-y-0.5">
-                {[{ id: "date", label: "Newest First" }, { id: "views", label: "Most Viewed" }].map((s) => (
+            <div className="rounded-[20px] bg-white p-4">
+              <h3 className="mb-3 px-2 text-xs text-vez-mute">Sort by</h3>
+              <div className="space-y-1">
+                {[{ id: "date", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
                   <button
                     key={s.id}
                     onClick={() => setSortBy(s.id as "date" | "views")}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${sortBy === s.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`}
+                    className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/40 text-vez-navy" : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"}`}
                   >
                     {s.label}
                   </button>
@@ -701,14 +693,14 @@ export default function NoticesPage() {
             </div>
 
             {/* Legend */}
-            <div className="rounded-xl border border-border/60 bg-card/80 p-3 space-y-1.5">
-              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1 mb-2">Legend</h3>
+            <div className="space-y-2.5 rounded-[20px] bg-white p-5">
+              <h3 className="text-xs text-vez-mute">Legend</h3>
               {[
-                { icon: <Sparkles className="size-3 text-primary" />, label: "AI Summarized" },
-                { icon: <ScanText className="size-3 text-indigo-600" />, label: "OCR Extracted" },
-                { icon: <AlertTriangle className="size-3 text-red-600" />, label: "Urgent / High Priority" },
+                { icon: <Sparkles className="size-3.5 text-vez-navy" />, label: "AI summarized" },
+                { icon: <ScanText className="size-3.5 text-vez-mute" />, label: "OCR extracted" },
+                { icon: <AlertTriangle className="size-3.5 text-vez-navy" />, label: "Urgent / high priority" },
               ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <div key={item.label} className="flex items-center gap-2 text-xs text-vez-mute">
                   {item.icon} {item.label}
                 </div>
               ))}
@@ -716,52 +708,55 @@ export default function NoticesPage() {
           </aside>
 
           {/* ── Main content ── */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {/* Mobile filters */}
-            <div className="lg:hidden flex gap-2 mb-4 overflow-x-auto pb-1">
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value as NoticeCategory | "all")}
-                className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs shrink-0"
+                className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
               >
-                <option value="all">All Categories</option>
+                <option value="all">All categories</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.label}</option>
                 ))}
               </select>
               <select
                 value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value as any)}
-                className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs shrink-0"
+                onChange={(e) => setSelectedPriority(e.target.value as "all" | "high" | "normal" | "low")}
+                className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
               >
-                <option value="all">All Priority</option>
+                <option value="all">All priority</option>
                 <option value="high">Urgent</option>
                 <option value="normal">Normal</option>
                 <option value="low">Low</option>
               </select>
               <button
                 onClick={() => setSortBy(sortBy === "date" ? "views" : "date")}
-                className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs shrink-0 flex items-center gap-1"
+                className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
               >
-                <Filter className="size-3" /> {sortBy === "date" ? "Newest" : "Popular"}
+                <Filter className="size-3.5" /> {sortBy === "date" ? "Newest" : "Popular"}
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="mb-4 text-sm text-vez-mute">
               {filteredNotices.length} notice{filteredNotices.length !== 1 ? "s" : ""}
               {searchQuery && ` matching "${searchQuery}"`}
             </p>
 
-            {/* Notice feed — always full width */}
-            <div ref={feedRef} className="space-y-2.5">
+            {/* Notice feed */}
+            <div ref={feedRef} className="space-y-4">
               {filteredNotices.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground">
-                  <Filter className="size-10 mx-auto mb-4 opacity-30" />
-                  <h3 className="font-semibold mb-1">No notices found</h3>
-                  <p className="text-sm mb-4">Try adjusting your search or filter criteria</p>
-                  <Button variant="outline" size="sm" onClick={() => { setSearchQuery(""); setSelectedCategory("all"); setSelectedPriority("all") }}>
-                    Clear Filters
-                  </Button>
+                <div className="rounded-[20px] bg-white py-16 text-center text-vez-mute">
+                  <Filter className="mx-auto mb-4 size-10 opacity-30" />
+                  <h3 className="mb-1 text-base text-vez-ink">No notices found</h3>
+                  <p className="mb-5 text-sm">Try adjusting your search or filter criteria</p>
+                  <button
+                    className="rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface"
+                    onClick={() => { setSearchQuery(""); setSelectedCategory("all"); setSelectedPriority("all") }}
+                  >
+                    Clear filters
+                  </button>
                 </div>
               ) : filteredNotices.map((notice) => (
                 <NoticeCard
@@ -776,12 +771,11 @@ export default function NoticesPage() {
 
             {/* Notice detail — modal */}
             <Dialog open={!!selectedNotice} onOpenChange={(open) => !open && setSelectedNotice(null)}>
-              <DialogContent className="max-w-2xl w-full p-0 gap-0 overflow-hidden">
+              <DialogContent className="w-full max-w-2xl gap-0 overflow-hidden rounded-[24px] border-vez-line p-0">
                 {selectedNotice && (
                   <NoticeDetail
                     notice={selectedNotice}
                     saved={savedIds.has(selectedNotice.id)}
-                    onClose={() => setSelectedNotice(null)}
                     onToggleSave={() => toggleSave(selectedNotice.id)}
                   />
                 )}

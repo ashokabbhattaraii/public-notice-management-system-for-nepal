@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
 import { Github } from "lucide-react"
 
@@ -24,7 +25,7 @@ const footerLinks = {
   ],
 }
 
-export function Footer() {
+export function VezignoFooter() {
   return (
     <footer className="bg-vez-navy">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12">

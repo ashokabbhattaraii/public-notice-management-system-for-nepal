@@ -39,75 +39,85 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Vezigno Modern tokens (systemdesignupgrade.md) */
+  --color-vez-sky: #a2c5d3;
+  --color-vez-navy: #101d23;
+  --color-vez-ink: #333333;
+  --color-vez-mute: #666666;
+  --color-vez-line: #e5e7eb;
+  --color-vez-surface: #f5f5f5;
+  --font-poppins: var(--font-poppins), sans-serif;
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: #FFFFFF;
-  --foreground: #0F172A;
+  --foreground: #333333;
   --card: #FFFFFF;
-  --card-foreground: #0F172A;
+  --card-foreground: #333333;
   --popover: #FFFFFF;
-  --popover-foreground: #0F172A;
-  --primary: #6366F1;
+  --popover-foreground: #333333;
+  --primary: #101d23;
   --primary-foreground: #FFFFFF;
-  --secondary: #F1F5F9;
-  --secondary-foreground: #334155;
-  --muted: #E2E8F0;
-  --muted-foreground: #475569;
-  --accent: #EEF2FF;
-  --accent-foreground: #334155;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #333333;
+  --muted: #f5f5f5;
+  --muted-foreground: #666666;
+  --accent: #e8f0f4;
+  --accent-foreground: #101d23;
   --destructive: #EF4444;
-  --border: #CBD5E1;
-  --input: #CBD5E1;
-  --ring: #6366F1;
-  --chart-1: #10B981;
-  --chart-2: #06B6D4;
-  --chart-3: #A855F7;
-  --chart-4: #F59E0B;
-  --chart-5: #6366F1;
-  --sidebar: #F8FAFC;
-  --sidebar-foreground: #0F172A;
-  --sidebar-primary: #6366F1;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #a2c5d3;
+  --chart-1: #101d23;
+  --chart-2: #a2c5d3;
+  --chart-3: #666666;
+  --chart-4: #c9dde6;
+  --chart-5: #333333;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #333333;
+  --sidebar-primary: #101d23;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EEF2FF;
-  --sidebar-accent-foreground: #334155;
-  --sidebar-border: #CBD5E1;
-  --sidebar-ring: #6366F1;
+  --sidebar-accent: #e8f0f4;
+  --sidebar-accent-foreground: #101d23;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #a2c5d3;
 }
 
 .dark {
-  --background: #1a1d29;
-  --foreground: #FFFFFF;
-  --card: #21242f;
-  --card-foreground: #FFFFFF;
-  --popover: #21242f;
-  --popover-foreground: #FFFFFF;
-  --primary: #6366F1;
-  --primary-foreground: #FFFFFF;
-  --secondary: #2a2d3a;
-  --secondary-foreground: #CBD5E1;
-  --muted: #2a2d3a;
-  --muted-foreground: #94A3B8;
-  --accent: #2a2d3a;
-  --accent-foreground: #CBD5E1;
+  --background: #101d23;
+  --foreground: #f5f5f5;
+  --card: #16252d;
+  --card-foreground: #f5f5f5;
+  --popover: #16252d;
+  --popover-foreground: #f5f5f5;
+  --primary: #a2c5d3;
+  --primary-foreground: #101d23;
+  --secondary: #1c2e37;
+  --secondary-foreground: #d7e3e9;
+  --muted: #1c2e37;
+  --muted-foreground: #9bb0ba;
+  --accent: #1c2e37;
+  --accent-foreground: #d7e3e9;
   --destructive: #EF4444;
-  --border: #2d3142;
-  --input: #2d3142;
-  --ring: #6366F1;
-  --chart-1: #6366F1;
-  --chart-2: #818CF8;
-  --chart-3: #A5B4FC;
-  --chart-4: #C7D2FE;
-  --chart-5: #E0E7FF;
-  --sidebar: #1a1d29;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #6366F1;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #2a2d3a;
-  --sidebar-accent-foreground: #CBD5E1;
-  --sidebar-border: #2d3142;
-  --sidebar-ring: #6366F1;
+  --border: #243a45;
+  --input: #243a45;
+  --ring: #a2c5d3;
+  --chart-1: #a2c5d3;
+  --chart-2: #c9dde6;
+  --chart-3: #7fa5b5;
+  --chart-4: #5d8294;
+  --chart-5: #f5f5f5;
+  --sidebar: #101d23;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #a2c5d3;
+  --sidebar-primary-foreground: #101d23;
+  --sidebar-accent: #1c2e37;
+  --sidebar-accent-foreground: #d7e3e9;
+  --sidebar-border: #243a45;
+  --sidebar-ring: #a2c5d3;
 }
 
 @layer base {
@@ -246,5 +256,72 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+/* Vezigno landing — scroll reveal (initial state; GSAP ScrollTrigger animates to clear) */
+.vz-reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  filter: blur(8px);
+}
+
+/* Word-stagger headings: words start below their clipping line */
+.vz-word-line {
+  display: inline-block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+  vertical-align: bottom;
+}
+
+.vz-word-line .vz-word {
+  display: inline-block;
+  transform: translateY(110%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vz-reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  .vz-word-line .vz-word {
+    transform: none;
+  }
+}
+
+/* Vezigno landing — testimonial marquee */
+@keyframes vz-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Both rows travel right-to-left; the second runs slower and offset for depth */
+.vz-marquee {
+  animation: vz-marquee 48s linear infinite;
+}
+
+.vz-marquee-slow {
+  animation-duration: 64s;
+  animation-delay: -24s;
+}
+
+.vz-marquee-row:hover .vz-marquee {
+  animation-play-state: paused;
+}
+
+.vz-marquee-mask {
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vz-marquee {
+    animation: none;
   }
 }

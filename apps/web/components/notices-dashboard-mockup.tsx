@@ -13,7 +13,6 @@ import {
   LayoutDashboard,
   FileText,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import gsap from "gsap"
 import { mockNotices } from "@/lib/mock-data"
@@ -28,6 +27,14 @@ const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
 ]
 
+const categoryLabels: Record<string, string> = {
+  exams: "Exams",
+  vacancies: "Vacancies",
+  tenders: "Tenders",
+  policy: "Policy",
+  announcements: "Announcements",
+}
+
 export function NoticesDashboardMockup() {
   const windowRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
@@ -35,7 +42,7 @@ export function NoticesDashboardMockup() {
   useEffect(() => {
     if (!windowRef.current) return
 
-    gsap.set(windowRef.current, { opacity: 0, y: 48, scale: 0.97 })
+    gsap.set(windowRef.current, { opacity: 0, y: 48 })
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -45,7 +52,6 @@ export function NoticesDashboardMockup() {
           gsap.to(windowRef.current, {
             opacity: 1,
             y: 0,
-            scale: 1,
             duration: 0.9,
             ease: "power3.out",
           })
@@ -76,22 +82,18 @@ export function NoticesDashboardMockup() {
   }, [])
 
   return (
-    <div
-      ref={windowRef}
-      className="w-full rounded-xl border border-border shadow-2xl overflow-hidden bg-background"
-      style={{ boxShadow: "0 32px 80px -16px rgba(0,0,0,0.18), 0 0 0 1px hsl(var(--border))" }}
-    >
+    <div ref={windowRef} className="w-full overflow-hidden bg-white">
       {/* ── Title bar ── */}
-      <div className="flex items-center justify-between px-4 h-10 bg-muted/60 border-b border-border select-none">
+      <div className="flex h-12 select-none items-center justify-between border-b border-vez-line bg-vez-surface px-5">
         {/* Traffic lights */}
         <div className="flex items-center gap-1.5">
-          <span className="size-3 rounded-full bg-red-400/80 dark:bg-red-500/70" />
-          <span className="size-3 rounded-full bg-yellow-400/80 dark:bg-yellow-500/70" />
-          <span className="size-3 rounded-full bg-green-400/80 dark:bg-green-500/70" />
+          <span className="size-3 rounded-full bg-[#f87171]" />
+          <span className="size-3 rounded-full bg-[#fbbf24]" />
+          <span className="size-3 rounded-full bg-[#34d399]" />
         </div>
 
         {/* Window title */}
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-sm text-vez-mute">
           <FileText className="size-3.5" />
           Suchana AI — Dashboard
         </div>
@@ -102,28 +104,29 @@ export function NoticesDashboardMockup() {
 
       {/* ── Window body ── */}
       <div className="flex" style={{ height: "420px" }}>
-
         {/* ── Sidebar ── */}
-        <div className="hidden sm:flex w-44 flex-col border-r border-border bg-muted/20 shrink-0">
-          {/* App logo */}
-          <div className="flex items-center gap-2 px-4 py-3.5 border-b border-border">
-            <div className="size-6 rounded-md bg-indigo-500 flex items-center justify-center">
-              <FileText className="size-3.5 text-indigo-500-foreground" />
+        <div className="hidden w-48 shrink-0 flex-col border-r border-vez-line bg-vez-surface/60 sm:flex">
+          {/* Brand */}
+          <div className="flex items-center gap-2 border-b border-vez-line px-4 py-4">
+            <div className="flex size-6 items-center justify-center rounded-full bg-vez-navy">
+              <FileText className="size-3.5 text-white" />
             </div>
-            <span className="text-sm font-semibold">GovNotice</span>
+            <span className="text-sm text-vez-ink">
+              Suchana<span className="font-medium">&nbsp;AI</span>
+            </span>
           </div>
 
           {/* Nav */}
-          <nav className="flex flex-col gap-0.5 p-2 flex-1">
+          <nav className="flex flex-1 flex-col gap-1 p-3">
             {sidebarItems.map((item) => {
               const Icon = item.icon
               return (
                 <div
                   key={item.label}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors ${
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-full px-4 py-2 text-sm transition-colors ${
                     item.active
-                      ? "bg-indigo-500/10 text-indigo-500 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      ? "bg-vez-sky/40 text-vez-navy"
+                      : "text-vez-mute hover:bg-white hover:text-vez-ink"
                   }`}
                 >
                   <Icon className="size-4 shrink-0" />
@@ -134,8 +137,8 @@ export function NoticesDashboardMockup() {
           </nav>
 
           {/* Bottom settings */}
-          <div className="p-2 border-t border-border">
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors">
+          <div className="border-t border-vez-line p-3">
+            <div className="flex cursor-pointer items-center gap-2.5 rounded-full px-4 py-2 text-sm text-vez-mute transition-colors hover:bg-white hover:text-vez-ink">
               <Settings className="size-4 shrink-0" />
               Settings
             </div>
@@ -143,33 +146,33 @@ export function NoticesDashboardMockup() {
         </div>
 
         {/* ── Main content ── */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Content header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-background/60 shrink-0">
+          <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-6 py-3.5">
             <div className="flex items-center gap-2">
-              <Newspaper className="size-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Latest Notices</span>
+              <Newspaper className="size-4 text-vez-mute" />
+              <span className="text-sm text-vez-ink">Latest Notices</span>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="gap-1 text-[10px] h-5 px-1.5">
-                <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-[11px] text-vez-navy">
+                <span className="size-1.5 animate-pulse rounded-full bg-vez-navy" />
                 Live
-              </Badge>
-              <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              </span>
+              <span className="rounded-full bg-vez-surface px-3 py-1 text-[11px] text-vez-mute">
                 {mockNotices.length} total
-              </Badge>
+              </span>
             </div>
           </div>
 
           {/* Tab bar */}
-          <div className="flex items-center gap-1 px-5 py-2 border-b border-border bg-muted/10 shrink-0">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-vez-line px-6 py-2.5">
             {["All", "Urgent", "Tenders", "Exams", "Jobs"].map((tab, i) => (
               <span
                 key={tab}
-                className={`text-[11px] px-2.5 py-1 rounded-md cursor-pointer transition-colors ${
+                className={`cursor-pointer rounded-full px-3.5 py-1 text-[11px] transition-colors ${
                   i === 0
-                    ? "bg-background border border-border text-foreground font-medium shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-vez-navy text-white"
+                    : "text-vez-mute hover:bg-vez-surface hover:text-vez-ink"
                 }`}
               >
                 {tab}
@@ -178,61 +181,63 @@ export function NoticesDashboardMockup() {
           </div>
 
           {/* Notices list */}
-          <div ref={rowsRef} className="flex-1 overflow-y-auto divide-y divide-border/60">
+          <div ref={rowsRef} className="flex-1 divide-y divide-vez-line overflow-y-auto">
             {recentNotices.map((notice, i) => (
-              <Link key={notice.id} href="/notices" className="block group">
-                <div className="flex items-center gap-3 px-5 py-3 hover:bg-accent/40 transition-colors">
+              <Link key={notice.id} href="/notices" className="group block">
+                <div className="flex items-center gap-3 px-6 py-3.5 transition-colors hover:bg-vez-surface/60">
                   {/* Row number */}
-                  <span className="text-[11px] font-bold text-muted-foreground w-5 shrink-0 tabular-nums">
+                  <span className="w-5 shrink-0 text-[11px] tabular-nums text-vez-mute">
                     {String(i + 1).padStart(2, "0")}
                   </span>
 
                   {/* Badges + title */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                      <Badge
-                        variant={notice.priority === "high" ? "default" : "secondary"}
-                        className="text-[9px] px-1.5 py-0 h-4"
-                      >
-                        {notice.category}
-                      </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy">
+                        {categoryLabels[notice.category] ?? notice.category}
+                      </span>
                       {notice.priority === "high" && (
-                        <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4">
-                          Urgent
-                        </Badge>
+                        <span className="rounded-full bg-vez-navy px-2.5 py-0.5 text-[10px] text-white">
+                          Priority
+                        </span>
                       )}
-                      <span className="text-[10px] text-muted-foreground truncate">{notice.organization}</span>
+                      <span className="truncate text-[10px] text-vez-mute">
+                        {notice.organization}
+                      </span>
                     </div>
-                    <p className="text-xs font-medium truncate group-hover:text-indigo-500 transition-colors">
+                    <p className="truncate text-xs text-vez-ink transition-colors group-hover:text-vez-navy">
                       {notice.title}
                     </p>
                   </div>
 
                   {/* Meta */}
-                  <div className="hidden md:flex flex-col items-end gap-0.5 shrink-0">
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="hidden shrink-0 flex-col items-end gap-0.5 md:flex">
+                    <span className="flex items-center gap-1 text-[10px] text-vez-mute">
                       <Eye className="size-2.5" />
                       {notice.views.toLocaleString()}
                     </span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1 text-[10px] text-vez-mute">
                       <Clock className="size-2.5" />
-                      {new Date(notice.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {new Date(notice.publishedAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
                   </div>
 
-                  <ChevronRight className="size-3.5 text-muted-foreground/40 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                  <ChevronRight className="size-3.5 shrink-0 text-vez-mute/50 transition-all group-hover:translate-x-0.5 group-hover:text-vez-navy" />
                 </div>
               </Link>
             ))}
           </div>
 
           {/* Status bar */}
-          <div className="flex items-center justify-between px-5 py-2 border-t border-border bg-muted/10 shrink-0">
-            <span className="text-[10px] text-muted-foreground">
+          <div className="flex shrink-0 items-center justify-between border-t border-vez-line px-6 py-2.5">
+            <span className="text-[10px] text-vez-mute">
               Showing {recentNotices.length} of {mockNotices.length} notices
             </span>
             <Link href="/notices">
-              <span className="text-[10px] text-indigo-500 hover:underline cursor-pointer font-medium">
+              <span className="cursor-pointer text-[10px] text-vez-navy hover:underline">
                 View all →
               </span>
             </Link>

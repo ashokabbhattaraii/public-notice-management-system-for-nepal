@@ -2,10 +2,6 @@
 
 import React, { useState } from "react"
 import { Plus, Edit, Trash2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
 import { categories } from "@/lib/mock-data"
@@ -14,55 +10,52 @@ export default function AdminCategoriesPage() {
   const [newCategory, setNewCategory] = useState("")
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
       <AdminLayout>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">Category Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage notice categories</p>
+        <div className="mb-8">
+          <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+            Category management.
+          </h1>
+          <p className="mt-2 text-sm text-vez-mute">Manage notice categories</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Existing Categories</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="rounded-[20px] bg-white p-6">
+            <h2 className="mb-5 text-lg text-vez-ink">Existing categories</h2>
+            <div className="space-y-2.5">
               {categories.map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/30 transition-colors">
+                <div key={cat.id} className="flex items-center justify-between rounded-[14px] bg-vez-surface px-4 py-3 transition-colors hover:bg-vez-sky/15">
                   <div className="flex items-center gap-3">
-                    <Badge variant="default">{cat.label}</Badge>
-                    <span className="text-sm text-muted-foreground">{cat.count} notices</span>
+                    <span className="rounded-full bg-vez-navy px-3.5 py-1 text-xs text-white">{cat.label}</span>
+                    <span className="text-sm text-vez-mute">{cat.count} notices</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="size-7"><Edit className="size-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="size-7 text-destructive"><Trash2 className="size-3.5" /></Button>
+                    <button className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-white hover:text-vez-navy" aria-label="Edit category"><Edit className="size-3.5" /></button>
+                    <button className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600" aria-label="Delete category"><Trash2 className="size-3.5" /></button>
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Category</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Category Name</label>
-                  <Input
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    placeholder="Enter category name"
-                  />
-                </div>
-                <Button variant="default" className="gap-2 w-full">
-                  <Plus className="size-4" /> Add Category
-                </Button>
+          <div className="h-fit rounded-[20px] bg-vez-sky/25 p-6">
+            <h2 className="mb-5 text-lg text-vez-ink">Add category</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm text-vez-mute">Category name</label>
+                <input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  placeholder="Enter category name"
+                  className="h-11 w-full rounded-full border border-vez-line bg-white px-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+                />
               </div>
-            </CardContent>
-          </Card>
+              <button className="flex w-full items-center justify-center gap-2 rounded-full bg-vez-navy px-5 py-3 text-sm text-white transition-opacity hover:opacity-90">
+                <Plus className="size-4" /> Add category
+              </button>
+            </div>
+          </div>
         </div>
       </AdminLayout>
     </div>

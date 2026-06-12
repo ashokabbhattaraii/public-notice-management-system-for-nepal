@@ -13,11 +13,8 @@ import {
   X,
   ArrowLeft,
   FileSearch,
-  ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
 import { useAlerts } from "@/lib/alerts-context"
 
@@ -29,11 +26,11 @@ const navGroups = [
     ],
   },
   {
-    label: "My Content",
+    label: "My content",
     links: [
-      { href: "/dashboard/saved", label: "Saved Notices", icon: Bookmark },
-      { href: "/dashboard/alerts", label: "My Alerts", icon: Bell, badge: true },
-      { href: "/rag", label: "Document Search", icon: FileSearch },
+      { href: "/dashboard/saved", label: "Saved notices", icon: Bookmark },
+      { href: "/dashboard/alerts", label: "My alerts", icon: Bell, badge: true },
+      { href: "/rag", label: "Document search", icon: FileSearch },
     ],
   },
   {
@@ -51,25 +48,25 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
   const activeAlerts = alerts.filter(a => a.enabled).length
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Tactical back button */}
-      <div className="px-3 pt-3 pb-2 border-b border-border">
-        <Link href="/" onClick={onLinkClick}>
-          <Button variant="ghost" size="sm" className="gap-2 w-full justify-start text-muted-foreground hover:text-indigo-500 hover:bg-accent h-9 text-xs font-mono uppercase tracking-wide">
-            <ArrowLeft className="size-4" />
-            Back to Site
-          </Button>
+    <div className="flex h-full flex-col bg-white">
+      {/* Back to site */}
+      <div className="border-b border-vez-line px-4 pb-3 pt-4">
+        <Link
+          href="/"
+          onClick={onLinkClick}
+          className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+        >
+          <ArrowLeft className="size-4" />
+          Back to site
         </Link>
       </div>
 
-      {/* Tactical nav groups */}
-      <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+      {/* Nav groups */}
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
         {navGroups.map((group) => (
           <div key={group.label}>
-            <p className="px-3 mb-1 text-[10px] font-mono font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
+            <p className="mb-2 px-3 text-xs text-vez-mute">{group.label}</p>
+            <div className="space-y-1">
               {group.links.map((link) => {
                 const Icon = link.icon
                 const isActive = pathname === link.href
@@ -79,20 +76,19 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
                     href={link.href}
                     onClick={onLinkClick}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 text-sm transition-all group relative",
+                      "flex items-center gap-3 rounded-full px-4 py-2.5 text-sm transition-colors",
                       isActive
-                        ? "bg-indigo-500/10 text-indigo-400 font-semibold border-l-2 border-indigo-500"
-                        : "text-muted-foreground hover:text-indigo-500 hover:bg-accent border-l-2 border-transparent"
+                        ? "bg-vez-sky/40 text-vez-navy"
+                        : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
                     )}
                   >
                     <Icon className="size-4 shrink-0" />
-                    <span className="flex-1 font-mono uppercase tracking-wide">{link.label}</span>
+                    <span className="flex-1">{link.label}</span>
                     {"badge" in link && link.badge && activeAlerts > 0 && (
-                      <Badge className="h-4 px-1.5 text-[10px] font-mono bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-vez-navy px-1.5 text-[10px] text-white">
                         {activeAlerts}
-                      </Badge>
+                      </span>
                     )}
-                    {isActive && <ChevronRight className="size-3.5 opacity-70" />}
                   </Link>
                 )
               })}
@@ -101,19 +97,18 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
         ))}
       </nav>
 
-      {/* Tactical user profile footer */}
+      {/* User profile */}
       {user && (
-        <div className="p-3 border-t border-border">
-          <div className="relative flex items-center gap-3 px-2 py-2 bg-card border border-border">
-            <div className="absolute top-0 left-0 w-1 h-1 bg-indigo-500" />
-            <div className="size-8 bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-indigo-400">
+        <div className="border-t border-vez-line p-4">
+          <div className="flex items-center gap-3 rounded-[16px] bg-vez-surface px-3 py-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky">
+              <span className="text-sm text-vez-navy">
                 {user.username.charAt(0).toUpperCase()}
               </span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate text-foreground">{user.username}</p>
-              <p className="text-[10px] text-muted-foreground capitalize font-mono uppercase tracking-wide">{user.role}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-vez-ink">{user.username}</p>
+              <p className="text-xs capitalize text-vez-mute">{user.role}</p>
             </div>
           </div>
         </div>
@@ -127,40 +122,44 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
       {/* Mobile sidebar toggle */}
-      <div className="md:hidden fixed bottom-4 left-4 z-50">
-        <Button
-          size="icon"
-          className="size-12 rounded-full shadow-lg"
+      <div className="fixed bottom-4 left-4 z-50 md:hidden">
+        <button
+          className="flex size-12 items-center justify-center rounded-full bg-vez-navy text-white"
           onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
         >
           <Menu className="size-5" />
-        </Button>
+        </button>
       </div>
 
-      {/* Tactical mobile sidebar overlay */}
+      {/* Mobile sidebar overlay */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 flex flex-col bg-background border-r border-border shadow-xl">
-            <div className="flex items-center justify-end p-2 border-b border-border">
-              <Button variant="ghost" size="icon" className="size-7 hover:bg-accent" onClick={() => setMobileOpen(false)}>
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-vez-navy/40 backdrop-blur-[6px]" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute bottom-0 left-0 top-0 flex w-64 flex-col border-r border-vez-line bg-white">
+            <div className="flex items-center justify-end border-b border-vez-line p-2">
+              <button
+                className="flex size-9 items-center justify-center rounded-full text-vez-mute hover:bg-vez-surface"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+              >
                 <X className="size-4" />
-              </Button>
+              </button>
             </div>
             <SidebarContent pathname={pathname} onLinkClick={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
 
-      {/* Tactical desktop sidebar */}
-      <aside className="hidden md:flex w-56 flex-col border-r border-border bg-background shrink-0">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-vez-line bg-white md:flex">
         <SidebarContent pathname={pathname} />
       </aside>
 
-      <main className="flex-1 overflow-auto bg-background">
-        <div className="p-5 md:p-7">
+      <main className="flex-1 overflow-auto bg-vez-surface/60">
+        <div className="p-5 md:p-8">
           {children}
         </div>
       </main>

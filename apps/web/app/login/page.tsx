@@ -1,11 +1,10 @@
 "use client"
 
 import React, { useState } from "react"
-import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Shield, User } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, Shield, User } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { Logo } from "@/components/ui/logo"
 
 const GoogleIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
@@ -47,199 +46,121 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-background">
-      <div className="w-full flex flex-row-reverse">
-        {/* Left panel - Login Form */}
-        <div className="relative w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-16 py-12 bg-background overflow-hidden min-h-screen">
-          {/* Technical grid background */}
-          <div className="absolute inset-0 pointer-events-none opacity-[0.02]">
-            <svg width="100%" height="100%">
-              <defs>
-                <pattern id="login-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="2 2" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#login-grid)" />
-            </svg>
+    <div className="flex min-h-screen w-full bg-white font-poppins antialiased">
+      {/* Left panel — sign-in */}
+      <div className="flex min-h-screen w-full flex-col justify-center px-8 py-12 sm:px-12 lg:w-1/2 lg:px-16">
+        <div className="mx-auto flex w-full max-w-md flex-col gap-10">
+          {/* Back */}
+          <button
+            onClick={() => router.back()}
+            className="flex w-fit items-center gap-2 text-base text-vez-mute transition-colors hover:text-vez-ink"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </button>
+
+          {/* Brand */}
+          <Link href="/" className="text-2xl font-normal text-vez-ink">
+            Suchana<span className="text-vez-navy font-medium">&nbsp;AI</span>
+          </Link>
+
+          <div>
+            <h1 className="text-[clamp(36px,4vw,48px)] font-normal leading-[1.15] tracking-[-0.04em] text-vez-ink">
+              Welcome back.
+            </h1>
+            <p className="mt-3 text-base leading-6 text-vez-mute">
+              Sign in to track notices, set alerts, and search documents.
+            </p>
           </div>
 
-          <div className="relative z-10 flex flex-col gap-8 max-w-md mx-auto w-full">
-            {/* Back button */}
+          {/* Google sign in */}
+          <div className="flex flex-col gap-6">
             <button
-              onClick={() => router.back()}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-indigo-400 transition-colors w-fit font-mono uppercase tracking-wide"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-full border border-vez-line bg-white px-6 py-3.5 text-base text-vez-ink transition-all duration-300 hover:-translate-y-0.5 hover:bg-vez-surface disabled:opacity-50"
             >
-              <ArrowLeft className="size-4" />
-              Back
+              <GoogleIcon />
+              {loading ? "Signing in…" : "Continue with Google"}
             </button>
 
-            {/* Logo */}
-            <div>
-              <Logo size="md" />
+            {/* Divider */}
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-vez-line" />
+              <span className="text-sm text-vez-mute">or try a demo</span>
+              <div className="h-px flex-1 bg-vez-line" />
             </div>
 
-            {/* Tactical container */}
-            <div className="relative bg-secondary border border-border p-6 md:p-8">
-              {/* Corner brackets */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-indigo-500" />
-              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-indigo-500" />
-              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-indigo-500" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-indigo-500" />
-
-              {/* System label */}
-              <div className="absolute -top-2.5 left-6 bg-background px-3 text-[10px] font-mono text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                <span className="relative flex size-1.5">
-                  <span className="absolute inline-flex size-full rounded-full bg-indigo-400 opacity-75 animate-ping" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-indigo-500" />
-                </span>
-                [AUTH_INTERFACE]
-              </div>
-
-              <div className="space-y-6">
-                {/* Heading */}
-                <div className="space-y-2">
-                  <h1 className="text-2xl md:text-3xl font-bold text-foreground uppercase tracking-tight">
-                    Access Portal
-                  </h1>
-                  <p className="text-sm text-muted-foreground font-mono uppercase tracking-wide">
-                    Sign in to continue
-                  </p>
-
-                  {/* Scan line */}
-                  <div className="flex pt-2">
-                    <div className="h-0.5 w-16 bg-indigo-500/30 overflow-hidden relative">
-                      <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
-                    </div>
-                  </div>
+            {/* Demo login cards */}
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => demoLogin("admin")}
+                disabled={loading}
+                className="group flex flex-col items-center gap-3 rounded-[20px] bg-vez-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-vez-sky/30 disabled:opacity-50"
+              >
+                <div className="flex size-12 items-center justify-center rounded-full bg-white transition-transform duration-300 group-hover:scale-110">
+                  <Shield className="size-5 text-vez-navy" />
                 </div>
-
-                {/* Demo login cards */}
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-3 uppercase tracking-wider font-mono font-semibold">
-                    Quick Demo Access
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => demoLogin("admin")}
-                      disabled={loading}
-                      className="relative group bg-card border border-border p-4 flex flex-col items-center gap-3 hover:border-indigo-500/40 transition-all duration-300 disabled:opacity-50"
-                    >
-                      <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
-                      <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
-                      <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
-                      <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-                      {/* Hover scan */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-                      <div className="relative size-10 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                        <Shield className="size-5 text-indigo-400" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-semibold text-foreground uppercase tracking-wide">Admin</p>
-                        <p className="text-[9px] text-muted-foreground font-mono uppercase tracking-wider">Full Access</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => demoLogin("user")}
-                      disabled={loading}
-                      className="relative group bg-card border border-border p-4 flex flex-col items-center gap-3 hover:border-indigo-500/40 transition-all duration-300 disabled:opacity-50"
-                    >
-                      <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
-                      <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
-                      <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
-                      <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-                      {/* Hover scan */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-                      <div className="relative size-10 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                        <User className="size-5 text-indigo-400" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-semibold text-foreground uppercase tracking-wide">User</p>
-                        <p className="text-[9px] text-muted-foreground font-mono uppercase tracking-wider">Standard</p>
-                      </div>
-                    </button>
-                  </div>
+                <div className="text-center">
+                  <p className="text-base text-vez-ink">Admin</p>
+                  <p className="text-sm text-vez-mute">Full access</p>
                 </div>
+              </button>
 
-                {/* Divider */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Or</span>
-                  <div className="flex-1 h-px bg-border" />
+              <button
+                onClick={() => demoLogin("user")}
+                disabled={loading}
+                className="group flex flex-col items-center gap-3 rounded-[20px] bg-vez-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-vez-sky/30 disabled:opacity-50"
+              >
+                <div className="flex size-12 items-center justify-center rounded-full bg-white transition-transform duration-300 group-hover:scale-110">
+                  <User className="size-5 text-vez-navy" />
                 </div>
-
-                {/* Google sign in */}
-                <button
-                  onClick={handleGoogleLogin}
-                  disabled={loading}
-                  className="relative group w-full flex items-center justify-center gap-3 py-3.5 bg-card border border-border hover:border-indigo-500/40 transition-all duration-300 disabled:opacity-50"
-                >
-                  <div className="absolute top-0 left-0 w-1 h-1 bg-indigo-500" />
-
-                  {/* Hover scan */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-                  <GoogleIcon />
-                  <span className="text-sm font-medium text-foreground uppercase tracking-wide">
-                    {loading ? "Authenticating..." : "Continue with Google"}
-                  </span>
-                </button>
-
-                {/* Error message */}
-                {error && (
-                  <div className="relative bg-destructive/10 border border-destructive/30 p-3">
-                    <div className="absolute top-0 left-0 w-1 h-1 bg-destructive" />
-                    <p className="text-xs text-destructive font-mono">{error}</p>
-                  </div>
-                )}
-
-                {/* Info text */}
-                <p className="text-[10px] text-muted-foreground text-center font-mono uppercase tracking-wide leading-relaxed">
-                  New? Sign in with Google<br />Account created automatically
-                </p>
-              </div>
+                <div className="text-center">
+                  <p className="text-base text-vez-ink">User</p>
+                  <p className="text-sm text-vez-mute">Standard</p>
+                </div>
+              </button>
             </div>
+
+            {/* Error message */}
+            {error && (
+              <div className="rounded-[12px] bg-[#fdecec] px-4 py-3 text-sm text-[#b3261e]">
+                {error}
+              </div>
+            )}
+
+            <p className="text-center text-sm leading-6 text-vez-mute">
+              New here? Sign in with Google — your account is created automatically.
+            </p>
           </div>
         </div>
+      </div>
 
-        {/* Right panel - Image */}
-        <div className="hidden lg:block w-1/2 relative overflow-hidden min-h-screen">
-          <Image
-            src="https://images.pexels.com/photos/7102037/pexels-photo-7102037.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
-            loader={({ src }) => src}
-            fill
-            priority
-            alt="Public notices"
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-[#0B1220]/40 to-[#0B1220]/80" />
+      {/* Right panel — sky-blue brand statement */}
+      <div className="hidden min-h-screen w-1/2 flex-col justify-between bg-vez-sky p-14 lg:flex">
+        <p className="max-w-[14ch] text-[clamp(40px,3.8vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink">
+          Every public notice. One place.
+        </p>
 
-          {/* Quote overlay with tactical design */}
-          <div className="absolute inset-0 flex flex-col justify-end p-10">
-            <div className="relative bg-card backdrop-blur-xl border border-border p-8 max-w-lg">
-              {/* Corner brackets */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-indigo-400" />
-              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-indigo-400" />
-              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-indigo-400" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-indigo-400" />
-
-              <blockquote className="text-foreground">
-                <p className="text-xl font-semibold leading-snug mb-4 uppercase tracking-tight">
-                  "Transparent governance starts with accessible public notices."
-                </p>
-                <div className="h-0.5 w-16 bg-indigo-500/30 overflow-hidden relative mb-4">
-                  <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
-                </div>
-                <footer className="text-sm text-muted-foreground font-mono uppercase tracking-wide">
-                  Suchana AI — Nepal's AI-Powered Notice Platform
-                </footer>
-              </blockquote>
-            </div>
+        <div className="flex flex-col gap-8">
+          <div className="max-w-md rounded-[24px] bg-white p-10">
+            <blockquote>
+              <p className="text-2xl font-normal leading-[1.35] text-vez-ink">
+                “Transparent governance starts with accessible public notices.”
+              </p>
+              <footer className="mt-6 text-base text-vez-mute">
+                Suchana AI — Nepal&apos;s AI-powered notice platform
+              </footer>
+            </blockquote>
           </div>
+
+          <Link
+            href="/notices"
+            className="flex w-fit items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-all duration-300 hover:-translate-y-0.5 hover:opacity-90"
+          >
+            Browse notices without signing in
+            <ArrowUpRight className="size-4" />
+          </Link>
         </div>
       </div>
     </div>

@@ -6,8 +6,6 @@ import {
   CheckCircle, XCircle, ArrowRight, TrendingUp, Zap, Clock,
   Link2, RefreshCw, BarChart3, UserCheck, AlertTriangle,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
 import { useAuth } from "@/lib/auth-context"
@@ -15,7 +13,7 @@ import { mockNotices, mockUsers, mockDocuments, mockScrapingSources } from "@/li
 import Link from "next/link"
 import gsap from "gsap"
 
-function MiniSparkline({ data, color = "stroke-primary" }: { data: number[]; color?: string }) {
+function MiniSparkline({ data }: { data: number[] }) {
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min || 1
@@ -28,48 +26,38 @@ function MiniSparkline({ data, color = "stroke-primary" }: { data: number[]; col
   }).join(" ")
 
   return (
-    <svg width={width} height={height} className="shrink-0 opacity-70">
+    <svg width={width} height={height} className="shrink-0">
       <polyline fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-        points={points} className={color} />
+        points={points} stroke="#a2c5d3" />
     </svg>
   )
 }
 
-function PulseDot({ active }: { active: boolean }) {
+function StatusDot({ active }: { active: boolean }) {
   return (
     <span className="relative flex size-2">
-      {active && <span className="animate-ping absolute inline-flex h-full w-full bg-red-400 opacity-75" />}
-      <span className={`relative inline-flex size-2 border ${active ? "bg-indigo-500 border-red-400" : "bg-destructive border-red-300"}`} />
+      {active && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vez-sky opacity-75" />}
+      <span className={`relative inline-flex size-2 rounded-full ${active ? "bg-vez-navy" : "bg-red-500"}`} />
     </span>
   )
 }
 
-function MetricCard({ icon: Icon, label, value, spark, color, trend, trendUp }: {
+function MetricCard({ icon: Icon, label, value, spark, trend, trendUp }: {
   icon: React.ElementType; label: string; value: number
-  spark: number[]; color: string; trend: string; trendUp: boolean
+  spark: number[]; trend: string; trendUp: boolean
 }) {
   return (
-    <div className="cmd-card bg-card backdrop-blur-xl p-4 relative group hover:bg-card transition-all duration-300">
-      {/* Tactical border */}
-      <div className="absolute inset-0 border border-border pointer-events-none" />
-      <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
-      <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
-      <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
-      <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-      {/* Hover scan effect */}
-      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-      <div className="relative flex items-start justify-between mb-3">
-        <div className="size-9 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-          <Icon className="size-4 text-indigo-400" />
+    <div className="cmd-card rounded-[20px] bg-white p-5">
+      <div className="mb-4 flex items-start justify-between">
+        <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky/30">
+          <Icon className="size-4 text-vez-navy" />
         </div>
-        <MiniSparkline data={spark} color={color} />
+        <MiniSparkline data={spark} />
       </div>
-      <p className="relative text-3xl font-black tracking-tight leading-none mb-1 text-foreground tabular-nums">{value}</p>
-      <div className="relative flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">{label}</span>
-        <span className={`text-[9px] font-mono font-semibold flex items-center gap-0.5 ${trendUp ? "text-indigo-400" : "text-muted-foreground"}`}>
+      <p className="mb-1.5 text-3xl leading-none tracking-[-0.02em] text-vez-ink tabular-nums">{value}</p>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-vez-mute">{label}</span>
+        <span className={`flex items-center gap-0.5 text-[10px] ${trendUp ? "text-vez-navy" : "text-vez-mute"}`}>
           <TrendingUp className="size-3" /> {trend}
         </span>
       </div>
@@ -85,21 +73,26 @@ export default function AdminDashboard() {
     if (!gridRef.current) return
     const cards = gridRef.current.querySelectorAll(".cmd-card")
     gsap.fromTo(cards,
-      { opacity: 0, y: 16, scale: 0.97 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.07, ease: "power3.out" }
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: 0.5, stagger: 0.07, ease: "power3.out" }
     )
   }, [])
 
   if (!user || user.role !== "admin") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-white font-poppins">
         <Header />
         <div className="flex items-center justify-center py-32">
-          <div className="max-w-sm w-full rounded-2xl border border-border bg-card p-8 text-center">
-            <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
-            <h2 className="text-lg font-semibold mb-1">Access Denied</h2>
-            <p className="text-sm text-muted-foreground mb-5">Admin privileges required.</p>
-            <Link href="/login"><Button className="w-full">Sign In as Admin</Button></Link>
+          <div className="w-full max-w-sm rounded-[24px] bg-vez-surface p-10 text-center">
+            <AlertCircle className="mx-auto mb-4 size-10 text-red-500" />
+            <h2 className="mb-1 text-lg text-vez-ink">Access denied</h2>
+            <p className="mb-6 text-sm text-vez-mute">Admin privileges required.</p>
+            <Link
+              href="/login"
+              className="block w-full rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+            >
+              Sign in as admin
+            </Link>
           </div>
         </div>
       </div>
@@ -111,18 +104,18 @@ export default function AdminDashboard() {
   const healthOk = scrapingErrors.length === 0
 
   const metrics = [
-    { icon: FileText, label: "Total Notices", value: mockNotices.length, spark: [3, 5, 4, 7, 6, 8, 10], color: "stroke-primary", trend: "+3 today", trendUp: true },
-    { icon: Users, label: "Active Users", value: activeUsers, spark: [2, 2, 3, 3, 3, 4, 4], color: "stroke-primary", trend: "+1 this week", trendUp: true },
-    { icon: Database, label: "Documents", value: mockDocuments.length, spark: [4, 4, 5, 5, 6, 6, 6], color: "stroke-primary", trend: "Stable", trendUp: false },
-    { icon: Globe, label: "Active Sources", value: mockScrapingSources.filter(s => s.status === "active").length, spark: [3, 3, 4, 4, 4, 4, 4], color: "stroke-destructive", trend: `${scrapingErrors.length} errors`, trendUp: scrapingErrors.length === 0 },
+    { icon: FileText, label: "Total notices", value: mockNotices.length, spark: [3, 5, 4, 7, 6, 8, 10], trend: "+3 today", trendUp: true },
+    { icon: Users, label: "Active users", value: activeUsers, spark: [2, 2, 3, 3, 3, 4, 4], trend: "+1 this week", trendUp: true },
+    { icon: Database, label: "Documents", value: mockDocuments.length, spark: [4, 4, 5, 5, 6, 6, 6], trend: "Stable", trendUp: false },
+    { icon: Globe, label: "Active sources", value: mockScrapingSources.filter(s => s.status === "active").length, spark: [3, 3, 4, 4, 4, 4, 4], trend: `${scrapingErrors.length} errors`, trendUp: scrapingErrors.length === 0 },
   ]
 
   const systemServices = [
-    { label: "API Server", ok: true },
+    { label: "API server", ok: true },
     { label: "Scraper", ok: scrapingErrors.length === 0 },
     { label: "Storage", ok: true },
     { label: "Auth", ok: true },
-    { label: "RAG Engine", ok: true },
+    { label: "RAG engine", ok: true },
     { label: "Notifier", ok: true },
   ]
 
@@ -138,191 +131,167 @@ export default function AdminDashboard() {
   const recentUsers = mockUsers.slice(0, 4)
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
       <AdminLayout>
-        {/* Tactical page header */}
-        <div className="flex items-center justify-between mb-5 border-l-2 border-indigo-500 pl-4 relative">
-          <div className="absolute -left-[2px] top-0 w-3 h-px bg-indigo-500" />
-          <div className="absolute -left-[2px] bottom-0 w-3 h-px bg-indigo-500" />
-
+        {/* Page header */}
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            {/* System status */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex size-full rounded-sm bg-red-400 opacity-75 animate-ping" />
-                <span className="relative inline-flex size-1.5 rounded-sm bg-indigo-500" />
-              </span>
-              <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.2em] text-indigo-400">
-                [ADMIN_CONTROL // SYSTEM_OVERVIEW]
-              </span>
-            </div>
-
-            <h1 className="text-2xl font-bold text-foreground tracking-tight uppercase">Admin Dashboard</h1>
-            <p className="text-xs text-muted-foreground mt-1 font-mono uppercase tracking-wide">
+            <p className="text-sm text-vez-mute">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
+            <h1 className="mt-2 text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+              Admin dashboard.
+            </h1>
           </div>
 
-          <Button variant="outline" size="sm" className="gap-1.5 text-[10px] font-mono uppercase tracking-wide bg-transparent border-border hover:bg-accent hover:border-indigo-500/40">
+          <button className="flex items-center gap-1.5 rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface">
             <RefreshCw className="size-3.5" /> Refresh
-          </Button>
+          </button>
         </div>
 
-        {/* Tactical system health strip */}
-        <div className="cmd-card mb-5 flex items-center gap-3 p-3 bg-card backdrop-blur-xl overflow-x-auto relative">
-          <div className="absolute inset-0 border border-border pointer-events-none" />
-          <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
-          <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
-          <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
-          <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-          <div className="relative flex items-center gap-2 shrink-0">
-            <Activity className="size-4 text-indigo-400" />
-            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-foreground">System Status</span>
+        {/* System health strip */}
+        <div className="cmd-card mb-6 flex items-center gap-4 overflow-x-auto rounded-[16px] bg-white px-5 py-3.5">
+          <div className="flex shrink-0 items-center gap-2">
+            <Activity className="size-4 text-vez-navy" />
+            <span className="text-xs text-vez-ink">System status</span>
           </div>
-          <div className="h-4 w-px bg-border shrink-0" />
+          <div className="h-4 w-px shrink-0 bg-vez-line" />
           {systemServices.map((svc) => (
-            <div key={svc.label} className="relative flex items-center gap-1.5 shrink-0">
-              <PulseDot active={svc.ok} />
-              <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">{svc.label}</span>
+            <div key={svc.label} className="flex shrink-0 items-center gap-1.5">
+              <StatusDot active={svc.ok} />
+              <span className="text-xs text-vez-mute">{svc.label}</span>
             </div>
           ))}
-          <div className="ml-auto flex items-center gap-2 shrink-0 relative">
-            <Badge
-              variant="outline"
-              className={`text-[9px] gap-1 font-mono uppercase tracking-wide ${healthOk ? "border-indigo-500/30 text-indigo-400 bg-indigo-500/10" : "border-destructive/30 text-destructive bg-destructive/10"}`}
-            >
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <span className={`flex items-center gap-1 rounded-full px-3 py-1 text-[10px] ${healthOk ? "bg-vez-sky/30 text-vez-navy" : "bg-red-50 text-red-600"}`}>
               {healthOk ? <CheckCircle className="size-3" /> : <AlertTriangle className="size-3" />}
-              {healthOk ? "All Systems Operational" : `${scrapingErrors.length} Issue${scrapingErrors.length > 1 ? "s" : ""}`}
-            </Badge>
-            <Badge variant="outline" className="text-[9px] gap-1 font-mono bg-slate-100 border-border uppercase tracking-wide">
+              {healthOk ? "All systems operational" : `${scrapingErrors.length} issue${scrapingErrors.length > 1 ? "s" : ""}`}
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-[10px] text-vez-mute">
               <Clock className="size-3" /> 99.9% uptime
-            </Badge>
+            </span>
           </div>
         </div>
 
-        <div ref={gridRef} className="space-y-4">
+        <div ref={gridRef} className="space-y-6">
           {/* Metric cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {metrics.map((m) => (
               <MetricCard key={m.label} {...m} />
             ))}
           </div>
 
-          {/* Tactical error banner */}
+          {/* Error banner */}
           {scrapingErrors.length > 0 && (
-            <div className="cmd-card bg-destructive/[0.08] backdrop-blur-xl p-4 flex items-center gap-3 relative">
-              <div className="absolute inset-0 border border-destructive/20 pointer-events-none" />
-              <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-destructive" />
-              <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-destructive" />
-              <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-destructive" />
-              <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-destructive" />
-
-              <div className="relative size-8 bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0">
-                <AlertCircle className="size-4 text-destructive" />
+            <div className="cmd-card flex items-center gap-4 rounded-[20px] bg-vez-navy p-5">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+                <AlertCircle className="size-4 text-vez-sky" />
               </div>
-              <div className="relative flex-1 min-w-0">
-                <p className="text-sm font-semibold uppercase tracking-wide text-foreground">{scrapingErrors.length} source{scrapingErrors.length > 1 ? "s" : ""} failing</p>
-                <p className="text-xs text-muted-foreground truncate">{scrapingErrors.map(s => s.name).join(", ")}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-white">{scrapingErrors.length} source{scrapingErrors.length > 1 ? "s" : ""} failing</p>
+                <p className="truncate text-xs text-white/60">{scrapingErrors.map(s => s.name).join(", ")}</p>
               </div>
-              <Link href="/admin/scraping">
-                <Button variant="outline" size="sm" className="shrink-0 text-xs">Investigate</Button>
+              <Link
+                href="/admin/scraping"
+                className="shrink-0 rounded-full bg-white/15 px-4 py-2 text-xs text-white transition-colors hover:bg-white/25"
+              >
+                Investigate
               </Link>
             </div>
           )}
 
           {/* Main content row */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
             {/* Live log — 3 cols */}
-            <div className="cmd-card lg:col-span-3 rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Zap className="size-4 text-primary" /> Live System Log
+            <div className="cmd-card rounded-[20px] bg-white p-6 lg:col-span-3">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base text-vez-ink">
+                  <Zap className="size-4 text-vez-navy" /> Live system log
                 </h3>
-                <Badge variant="secondary" className="text-[10px]">Today</Badge>
+                <span className="rounded-full bg-vez-surface px-3 py-1 text-[10px] text-vez-mute">Today</span>
               </div>
-              <div className="space-y-1 font-mono">
+              <div className="space-y-1">
                 {systemLogs.map((log, i) => (
-                  <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-accent/30 text-[11px] transition-colors">
+                  <div key={i} className="flex items-center gap-3 rounded-[12px] px-3 py-2 text-xs transition-colors hover:bg-vez-surface">
                     {log.level === "info" ? (
-                      <CheckCircle className="size-3 text-indigo-500 shrink-0" />
+                      <CheckCircle className="size-3 shrink-0 text-vez-navy" />
                     ) : log.level === "warn" ? (
-                      <AlertTriangle className="size-3 text-destructive shrink-0" />
+                      <AlertTriangle className="size-3 shrink-0 text-amber-500" />
                     ) : (
-                      <XCircle className="size-3 text-destructive shrink-0" />
+                      <XCircle className="size-3 shrink-0 text-red-500" />
                     )}
-                    <span className="text-muted-foreground w-10 shrink-0 tabular-nums">{log.time}</span>
+                    <span className="w-10 shrink-0 text-vez-mute tabular-nums">{log.time}</span>
                     <span
-                      className={`flex-1 truncate ${log.level === "error" ? "text-destructive" : log.level === "warn" ? "text-red-600" : "text-foreground/80"}`}
+                      className={`flex-1 truncate ${log.level === "error" ? "text-red-600" : log.level === "warn" ? "text-amber-600" : "text-vez-ink/80"}`}
                     >
                       {log.msg}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[9px] h-4 px-1.5 shrink-0 ${log.level === "error" ? "border-destructive/30 text-destructive" : log.level === "warn" ? "border-destructive/30 text-red-600" : "border-indigo-500/30 text-indigo-600"}`}
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[9px] ${log.level === "error" ? "bg-red-50 text-red-600" : log.level === "warn" ? "bg-amber-50 text-amber-600" : "bg-vez-sky/30 text-vez-navy"}`}
                     >
                       {log.level}
-                    </Badge>
+                    </span>
                   </div>
                 ))}
               </div>
-              <Link href="/admin/system" className="block mt-3">
-                <Button variant="ghost" size="sm" className="w-full text-xs gap-1">
-                  Full System Logs <ArrowRight className="size-3" />
-                </Button>
+              <Link
+                href="/admin/system"
+                className="mt-4 flex items-center justify-center gap-1 rounded-full bg-vez-surface px-4 py-2.5 text-xs text-vez-mute transition-colors hover:text-vez-navy"
+              >
+                Full system logs <ArrowRight className="size-3" />
               </Link>
             </div>
 
             {/* Right — 2 cols */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="space-y-6 lg:col-span-2">
               {/* Source status */}
-              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Link2 className="size-4 text-primary" /> Scraping Sources
+              <div className="cmd-card rounded-[20px] bg-white p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-base text-vez-ink">
+                    <Link2 className="size-4 text-vez-navy" /> Scraping sources
                   </h3>
-                  <Link href="/admin/sources">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                      Manage <ArrowRight className="size-3" />
-                    </Button>
+                  <Link
+                    href="/admin/sources"
+                    className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                  >
+                    Manage <ArrowRight className="size-3" />
                   </Link>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {mockScrapingSources.map((src) => (
-                    <div key={src.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-accent/20 hover:bg-accent/40 transition-colors">
-                      <PulseDot active={src.status === "active"} />
-                      <span className="text-xs font-medium flex-1 truncate">{src.name}</span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] text-muted-foreground tabular-nums">{src.itemsScraped.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">items</span>
-                      </div>
+                    <div key={src.id} className="flex items-center gap-3 rounded-[12px] bg-vez-surface px-3.5 py-2.5 transition-colors hover:bg-vez-sky/15">
+                      <StatusDot active={src.status === "active"} />
+                      <span className="flex-1 truncate text-xs text-vez-ink">{src.name}</span>
+                      <span className="shrink-0 text-[10px] text-vez-mute tabular-nums">{src.itemsScraped.toLocaleString()} items</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Quick actions */}
-              <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <BarChart3 className="size-4 text-primary" /> Quick Actions
+              <div className="cmd-card rounded-[20px] bg-vez-surface p-6">
+                <h3 className="mb-4 flex items-center gap-2 text-base text-vez-ink">
+                  <BarChart3 className="size-4 text-vez-navy" /> Quick actions
                 </h3>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   {[
                     { href: "/admin/notices", label: "Notices", icon: FileText },
                     { href: "/admin/users", label: "Users", icon: Users },
-                    { href: "/admin/sources", label: "Add Source", icon: Globe },
+                    { href: "/admin/sources", label: "Add source", icon: Globe },
                     { href: "/admin/alerts", label: "Alerts", icon: Activity },
                   ].map((action) => {
                     const Icon = action.icon
                     return (
-                      <Link key={action.href} href={action.href}>
-                        <div className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-all text-center group cursor-pointer">
-                          <div className="size-8 rounded-lg bg-accent/60 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                            <Icon className="size-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                          </div>
-                          <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">{action.label}</span>
+                      <Link
+                        key={action.href}
+                        href={action.href}
+                        className="group flex flex-col items-center gap-2 rounded-[16px] bg-white p-4 text-center transition-transform duration-300 hover:-translate-y-1"
+                      >
+                        <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky/30 transition-colors group-hover:bg-vez-sky/50">
+                          <Icon className="size-4 text-vez-navy" />
                         </div>
+                        <span className="text-xs text-vez-ink">{action.label}</span>
                       </Link>
                     )
                   })}
@@ -332,30 +301,31 @@ export default function AdminDashboard() {
           </div>
 
           {/* Recent users row */}
-          <div className="cmd-card rounded-xl border border-border/60 bg-card/80 backdrop-blur-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <UserCheck className="size-4 text-primary" /> Recent Users
+          <div className="cmd-card rounded-[20px] bg-white p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-base text-vez-ink">
+                <UserCheck className="size-4 text-vez-navy" /> Recent users
               </h3>
-              <Link href="/admin/users">
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                  All Users <ArrowRight className="size-3" />
-                </Button>
+              <Link
+                href="/admin/users"
+                className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+              >
+                All users <ArrowRight className="size-3" />
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {recentUsers.map((u) => (
-                <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg bg-accent/20 hover:bg-accent/40 transition-colors">
-                  <div className="size-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-semibold text-primary">
+                <div key={u.id} className="flex items-center gap-3 rounded-[14px] bg-vez-surface px-4 py-3 transition-colors hover:bg-vez-sky/15">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky">
+                    <span className="text-xs text-vez-navy">
                       {u.username.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium truncate">{u.username}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`size-1.5 rounded-full ${u.status === "active" ? "bg-indigo-500" : "bg-muted-foreground"}`} />
-                      <p className="text-[10px] text-muted-foreground capitalize">{u.role}</p>
+                    <p className="truncate text-xs text-vez-ink">{u.username}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className={`size-1.5 rounded-full ${u.status === "active" ? "bg-vez-navy" : "bg-vez-mute/50"}`} />
+                      <p className="text-[10px] capitalize text-vez-mute">{u.role}</p>
                     </div>
                   </div>
                 </div>
