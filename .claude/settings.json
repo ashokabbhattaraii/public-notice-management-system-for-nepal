@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/auth/me)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/auth/me)",
+      "Bash(echo \"GET /auth/me  -> $\\(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/auth/me\\)  \\(expect 401\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{\\\\\"credential\\\\\":\\\\\"x\\\\\"}')",
+      "Bash(echo \"POST /auth/google \\(bad cred\\) -> $\\(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{\\\\\"credential\\\\\":\\\\\"x\\\\\"}'\\)  \\(expect 401\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{}')"
+    ]
+  }
+}

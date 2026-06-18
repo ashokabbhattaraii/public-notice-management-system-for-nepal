@@ -8,6 +8,10 @@ export interface User {
   createdAt: string
   lastLogin: string
   status: "active" | "inactive"
+  /** Full name from the Google profile (optional; used by real auth). */
+  name?: string
+  /** Profile picture URL from the Google profile (optional). */
+  avatarUrl?: string | null
 }
 
 export interface Notice {

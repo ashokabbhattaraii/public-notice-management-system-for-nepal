@@ -2,60 +2,60 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react"
 import { User } from "./types"
-import { mockUsers } from "./mock-data"
+import { fetchMe, googleLogin, tokenStore } from "./api"
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
-  loginWithGoogle: (role?: "admin" | "user") => Promise<boolean>
+  /** Real sign-in: exchange a Google ID token for a session. Returns the user on success. */
+  loginWithGoogle: (credential: string) => Promise<User | null>
   logout: () => void
 }
 
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const USER_KEY = "pnm_user"
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  // On mount, hydrate from localStorage, then re-validate the token against the API.
   useEffect(() => {
-    const stored = localStorage.getItem("pnm_user")
-    if (stored) {
-      setUser(JSON.parse(stored))
-    }
-    setIsLoading(false)
-  }, [])
-
-  const loginWithGoogle = async (role?: "admin" | "user"): Promise<boolean> => {
-    // If a user is already stored (e.g., dummy login), keep their role.
-    // This prevents always forcing `role: "user"` during dummy/admin login flows.
-    const stored = localStorage.getItem("pnm_user")
+    const stored = localStorage.getItem(USER_KEY)
     if (stored) {
       try {
         setUser(JSON.parse(stored))
-        return true
       } catch {
-        // fall through to mock default
+        localStorage.removeItem(USER_KEY)
       }
     }
 
-    // Default dummy login: pick active user/admin based on requested role.
-    const googleUser =
-      (role === "admin"
-        ? mockUsers.find((u) => u.role === "admin" && u.status === "active")
-        : mockUsers.find((u) => u.role === "user" && u.status === "active")) ??
-      mockUsers.find((u) => u.status === "active") ??
-      mockUsers[0]
+    fetchMe()
+      .then((me) => {
+        if (me) {
+          setUser(me)
+          localStorage.setItem(USER_KEY, JSON.stringify(me))
+        }
+      })
+      .finally(() => setIsLoading(false))
+  }, [])
 
-
-    setUser(googleUser)
-    localStorage.setItem("pnm_user", JSON.stringify(googleUser))
-    return true
+  const loginWithGoogle = async (credential: string): Promise<User | null> => {
+    try {
+      const loggedIn = await googleLogin(credential)
+      setUser(loggedIn)
+      localStorage.setItem(USER_KEY, JSON.stringify(loggedIn))
+      return loggedIn
+    } catch {
+      return null
+    }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem("pnm_user")
+    tokenStore.clear()
+    localStorage.removeItem(USER_KEY)
   }
 
   return (

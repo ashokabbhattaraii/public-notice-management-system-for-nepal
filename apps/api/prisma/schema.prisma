@@ -1,0 +1,37 @@
+// Prisma schema for the public-notice-management API.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+model User {
+  id          String     @id @default(uuid()) @db.Uuid
+  // Google account subject id ("sub" claim) — stable, unique per Google account.
+  googleId    String     @unique @map("google_id")
+  email       String     @unique
+  name        String
+  avatarUrl   String?    @map("avatar_url")
+  role        Role       @default(user)
+  status      UserStatus @default(active)
+  lastLoginAt DateTime?  @map("last_login_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@map("users")
+}
