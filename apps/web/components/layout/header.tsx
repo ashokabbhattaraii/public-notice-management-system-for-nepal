@@ -107,6 +107,15 @@ export function Header() {
           {/* Right actions */}
           <div className="hidden lg:flex items-center gap-2">
             <button
+              onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
+              className="flex items-center gap-1.5 rounded-full bg-vez-navy/10 px-4 py-2 text-base text-vez-navy transition-colors hover:bg-vez-navy hover:text-white"
+              aria-label="Notify"
+            >
+              <Bell className="size-4" />
+              Notify
+            </button>
+
+            <button
               onClick={() => setLanguage(language === "en" ? "ne" : "en")}
               className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-base text-vez-ink transition-colors hover:bg-white/60"
             >
@@ -176,6 +185,13 @@ export function Header() {
 
           {/* Mobile toggle */}
           <div className="flex items-center gap-2 lg:hidden">
+            <button
+              onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
+              className="flex size-10 items-center justify-center rounded-full bg-vez-navy/10 text-vez-navy backdrop-blur-[6px]"
+              aria-label="Notify"
+            >
+              <Bell className="size-4" />
+            </button>
             {user && (
               <button className="relative flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]" aria-label="Notifications">
                 <Bell className="size-4" />
