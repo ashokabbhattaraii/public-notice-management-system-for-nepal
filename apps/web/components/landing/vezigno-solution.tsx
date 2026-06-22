@@ -62,10 +62,10 @@ export function VezignoSolution() {
                       {s.title}
                     </h3>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-vez-sky/40 px-4 py-1.5 text-sm text-vez-ink transition-colors duration-300 group-hover:bg-white">
+                      <span className="rounded-full bg-vez-sky/30 px-4 py-1.5 text-sm text-vez-ink backdrop-blur-sm border border-white/40 transition-all duration-300 group-hover:bg-white/60">
                         {s.tag}
                       </span>
-                      <span className="rounded-full bg-vez-surface px-4 py-1.5 text-sm text-vez-mute transition-colors duration-300 group-hover:bg-white/60 group-hover:text-vez-ink/70">
+                      <span className="rounded-full bg-white/30 px-4 py-1.5 text-sm text-vez-mute backdrop-blur-sm border border-white/30 transition-all duration-300 group-hover:bg-white/60 group-hover:text-vez-ink/70">
                         Solves: {s.solves}
                       </span>
                     </div>

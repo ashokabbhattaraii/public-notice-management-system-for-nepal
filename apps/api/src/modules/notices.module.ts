@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { NoticesController } from './notices.controller';
+import { NoticesController } from '../controllers/notices.controller';
 
 @Module({
   controllers: [NoticesController],

@@ -83,7 +83,7 @@ export function VezignoAbout() {
 
         {/* Stats band */}
         <Reveal className="mt-16 lg:mt-20">
-          <div className="grid grid-cols-2 gap-y-10 rounded-[24px] bg-vez-sky p-10 md:p-12 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-y-10 rounded-[24px] bg-vez-sky/40 p-10 backdrop-blur-md border border-white/40 md:p-12 lg:grid-cols-4">
             {stats.map((stat) => (
               <div key={stat.label}>
                 <p className="text-[clamp(36px,4vw,64px)] font-normal leading-[1.1] tracking-[-0.04em] text-vez-navy">

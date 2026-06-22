@@ -259,6 +259,99 @@
   }
 }
 
+/* ── Premium noise/grain texture overlay ── */
+.vz-noise {
+  position: relative;
+}
+
+.vz-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  z-index: 1;
+  mix-blend-mode: overlay;
+}
+
+/* ── Glassmorphism card variant ── */
+.vz-glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.vz-glass:hover {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Dark glass variant for navy/dark sections */
+.vz-glass-dark {
+  background: rgba(16, 29, 35, 0.5);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Premium shimmer for interactive elements ── */
+@keyframes vz-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.vz-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: vz-shimmer 3s ease-in-out infinite;
+}
+
+/* ── Staggered card entrance (used with GSAP but provides graceful fallback) ── */
+.vz-stagger-child {
+  opacity: 0;
+  transform: translateY(32px) scale(0.97);
+  filter: blur(4px);
+  transition: opacity 0.7s cubic-bezier(0.19, 1, 0.22, 1),
+              transform 0.7s cubic-bezier(0.19, 1, 0.22, 1),
+              filter 0.7s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.vz-stagger-child.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0px);
+}
+
+/* ── Floating/parallax drift for depth ── */
+@keyframes vz-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.vz-float {
+  animation: vz-float 6s ease-in-out infinite;
+}
+
+.vz-float-slow {
+  animation: vz-float 9s ease-in-out infinite;
+  animation-delay: -3s;
+}
+
 /* Vezigno landing — scroll reveal (initial state; GSAP ScrollTrigger animates to clear) */
 .vz-reveal {
   opacity: 0;

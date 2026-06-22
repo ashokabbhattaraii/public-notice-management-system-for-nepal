@@ -13,7 +13,7 @@ const contactInfo = [
 ]
 
 const inputClass =
-  "w-full rounded-[12px] border border-vez-line bg-white px-4 py-3 text-base text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+  "w-full rounded-[12px] border border-white/50 bg-white/50 backdrop-blur-sm px-4 py-3 text-base text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-sky focus:bg-white/70 focus:shadow-sm"
 
 export function VezignoContact() {
   const [formState, setFormState] = useState({ name: "", email: "", subject: "", message: "" })
@@ -46,7 +46,7 @@ export function VezignoContact() {
         <div className="mt-12 grid gap-6 lg:mt-16 lg:grid-cols-[1.2fr_0.8fr]">
           {/* Form card */}
           <Reveal>
-            <form onSubmit={handleSubmit} className="rounded-[24px] bg-vez-surface p-8 md:p-10">
+            <form onSubmit={handleSubmit} className="vz-glass rounded-[24px] p-8 md:p-10">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm text-vez-mute">Name</label>
@@ -124,7 +124,7 @@ export function VezignoContact() {
                 <Reveal key={item.label} delay={i * 80}>
                   <a
                     href={item.href}
-                    className="vz-sweep group flex items-center gap-5 rounded-[20px] bg-vez-surface p-6"
+                    className="vz-sweep vz-glass group flex items-center gap-5 rounded-[20px] p-6"
                   >
                     <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white">
                       <Icon className="size-5 text-vez-navy" />
@@ -139,7 +139,7 @@ export function VezignoContact() {
             })}
 
             <Reveal delay={240}>
-              <div className="rounded-[20px] bg-vez-surface p-6">
+              <div className="vz-glass rounded-[20px] p-6">
                 <p className="text-sm text-vez-mute">Business hours</p>
                 <div className="mt-3 flex justify-between text-base">
                   <span className="text-vez-mute">Sunday – Friday</span>

@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { User } from '@prisma/client';
-import { AuthService } from './auth.service';
-import { CurrentUser } from './current-user.decorator';
-import { GoogleLoginDto } from './dto/google-login.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { Roles } from './roles.decorator';
-import { RolesGuard } from './roles.guard';
+import { AuthService } from '../services/auth.service';
+import { CurrentUser } from '../decorators/current-user.decorator';
+import { GoogleLoginDto } from '../dto/google-login.dto';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { Roles } from '../decorators/roles.decorator';
+import { RolesGuard } from '../guards/roles.guard';
 
 @Controller('auth')
 export class AuthController {

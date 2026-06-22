@@ -24,5 +24,9 @@
   "devDependencies": {
     "turbo": "^2.5.0"
   },
-  "packageManager": "pnpm@10.18.0"
+  "packageManager": "pnpm@10.18.0",
+  "dependencies": {
+    "@nestjs/swagger": "^11.4.4",
+    "swagger-ui-express": "^5.0.1"
+  }
 }

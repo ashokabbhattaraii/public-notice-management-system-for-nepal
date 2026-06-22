@@ -35,7 +35,7 @@ const problems = [
 
 export function VezignoProblem() {
   return (
-    <section id="problem" className="bg-vez-surface">
+    <section id="problem" className="bg-vez-surface vz-noise">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         <Reveal>
           <Eyebrow>The problem</Eyebrow>
@@ -53,7 +53,7 @@ export function VezignoProblem() {
               delay={i * 100}
               className={p.wide ? "lg:col-span-2" : ""}
             >
-              <div className="vz-sweep group flex h-full flex-col justify-between rounded-[20px] bg-white p-8 md:p-10">
+              <div className="vz-sweep vz-glass group flex h-full flex-col justify-between rounded-[20px] p-8 md:p-10">
                 <div className="flex items-start justify-between gap-6">
                   <p className="text-[clamp(48px,5vw,80px)] font-normal leading-[1.05] tracking-[-0.04em] text-vez-ink">
                     <CountUp value={p.stat} />

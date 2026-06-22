@@ -31,7 +31,7 @@ const features = [
 
 export function VezignoFeatures() {
   return (
-    <section id="features" className="bg-vez-surface">
+    <section id="features" className="bg-vez-surface vz-noise">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -56,7 +56,7 @@ export function VezignoFeatures() {
             const Icon = f.icon
             return (
               <Reveal key={f.title} delay={i * 100}>
-                <div className="vz-sweep group flex h-full flex-col rounded-[20px] bg-white p-8">
+                <div className="vz-sweep vz-glass group flex h-full flex-col rounded-[20px] p-8">
                   <div className="flex items-center justify-between">
                     <div className="flex size-12 items-center justify-center rounded-full bg-vez-sky/40 transition-colors duration-300 group-hover:bg-white">
                       <Icon className="size-5 text-vez-navy" />

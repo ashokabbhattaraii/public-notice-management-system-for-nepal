@@ -79,10 +79,10 @@ export function VezignoNotices() {
               <Reveal key={notice.id} delay={i * 100}>
                 <Link
                   href="/notices"
-                  className="vz-sweep group flex h-full flex-col rounded-[20px] bg-vez-surface p-8"
+                  className="vz-sweep vz-glass group flex h-full flex-col rounded-[20px] p-8"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full bg-white px-4 py-1.5 text-sm text-vez-ink">
+                    <span className="rounded-full bg-white/50 px-4 py-1.5 text-sm text-vez-ink backdrop-blur-sm border border-white/50">
                       {categoryLabels[notice.category] ?? notice.category}
                     </span>
                     {notice.priority === "high" && (

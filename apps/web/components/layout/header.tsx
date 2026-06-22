@@ -68,9 +68,9 @@ export function Header() {
     <>
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 w-full transition-colors duration-300",
+          "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300",
           solid
-            ? "bg-white/90 backdrop-blur-[6px] border-b border-vez-line"
+            ? "bg-white/60 backdrop-blur-xl border-b border-white/50 shadow-sm"
             : "bg-transparent"
         )}
       >
@@ -83,8 +83,8 @@ export function Header() {
           {/* Frosted pill nav */}
           <nav
             className={cn(
-              "hidden lg:flex items-center gap-1 rounded-full p-2 backdrop-blur-[6px] transition-colors duration-300",
-              solid ? "bg-vez-surface" : "bg-white/10"
+              "hidden lg:flex items-center gap-1 rounded-full p-2 backdrop-blur-md border transition-all duration-300",
+              solid ? "bg-white/40 border-white/50" : "bg-white/10 border-white/20"
             )}
           >
             {navLinks.map((link) => (
@@ -108,7 +108,7 @@ export function Header() {
           <div className="hidden lg:flex items-center gap-2">
             <button
               onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
-              className="flex items-center gap-1.5 rounded-full bg-vez-navy/10 px-4 py-2 text-base text-vez-navy transition-colors hover:bg-vez-navy hover:text-white"
+              className="flex items-center gap-1.5 rounded-full bg-vez-navy/10 px-4 py-2 text-base text-vez-navy backdrop-blur-sm border border-vez-navy/10 transition-all hover:bg-vez-navy hover:text-white hover:border-vez-navy"
               aria-label="Notify"
             >
               <Bell className="size-4" />

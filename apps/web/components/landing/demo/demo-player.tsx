@@ -12,7 +12,7 @@ import {
 
 /**
  * Remotion player that restarts from frame 0 every time it scrolls
- * back into view, and pauses while off-screen.
+ * into view (or is already visible on mount), and pauses while off-screen.
  */
 export function DemoPlayer() {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -22,11 +22,20 @@ export function DemoPlayer() {
     const el = wrapRef.current
     if (!el) return
 
+    function startPlayback() {
+      if (playerRef.current) {
+        playerRef.current.seekTo(0)
+        playerRef.current.play()
+      } else {
+        // Player ref not ready yet, retry on next frame
+        requestAnimationFrame(startPlayback)
+      }
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          playerRef.current?.seekTo(0)
-          playerRef.current?.play()
+          startPlayback()
         } else {
           playerRef.current?.pause()
         }

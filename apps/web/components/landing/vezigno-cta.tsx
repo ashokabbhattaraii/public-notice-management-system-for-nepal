@@ -12,7 +12,7 @@ export function VezignoCta() {
     <section className="bg-white">
       <div className="mx-auto max-w-[1480px] px-6 pb-16 md:px-8 md:pb-20 lg:px-12 lg:pb-24">
         <Reveal>
-          <div className="group/cta relative overflow-hidden rounded-[24px] bg-vez-sky p-10 md:p-14 lg:p-20">
+          <div className="group/cta relative overflow-hidden rounded-[24px] bg-vez-sky vz-noise p-10 md:p-14 lg:p-20">
             {/* Oversized arrow accent — drifts on card hover */}
             <ArrowUpRight
               className="pointer-events-none absolute -right-8 -top-8 size-48 text-white/25 transition-transform duration-700 ease-out group-hover/cta:translate-x-3 group-hover/cta:-translate-y-3 md:size-64"
@@ -40,7 +40,7 @@ export function VezignoCta() {
                 </Link>
                 <Link
                   href="/notices"
-                  className="group flex items-center gap-2 rounded-full bg-white/40 px-7 py-3.5 text-base text-vez-ink backdrop-blur-[6px] transition-all duration-300 hover:bg-white"
+                  className="group flex items-center gap-2 rounded-full bg-white/30 px-7 py-3.5 text-base text-vez-ink backdrop-blur-md border border-white/50 transition-all duration-300 hover:bg-white/60 hover:shadow-md"
                 >
                   Browse notices
                   <SwapArrow />

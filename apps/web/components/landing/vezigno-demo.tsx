@@ -26,7 +26,7 @@ export function VezignoDemo() {
         />
 
         <Reveal delay={150} className="mt-12 lg:mt-16">
-          <div className="overflow-hidden rounded-[24px] bg-white">
+          <div className="overflow-hidden rounded-[24px] bg-white/90 backdrop-blur-md border border-white/50 shadow-2xl shadow-black/10">
             <NoticesDashboardMockup />
           </div>
         </Reveal>
@@ -36,7 +36,7 @@ export function VezignoDemo() {
           <div className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-4">
             {steps.map((step) => (
               <div key={step.number} className="border-t border-white/15">
-                <div className="vz-sweep group -mx-3 rounded-[14px] px-3 pb-3 pt-5">
+                <div className="vz-sweep group -mx-3 rounded-[14px] bg-white/5 backdrop-blur-sm border border-white/10 px-3 pb-3 pt-5">
                   <p className="text-sm text-vez-sky transition-colors duration-300 group-hover:text-vez-navy">{step.number}</p>
                   <p className="mt-1 text-base text-white/80 transition-colors duration-300 group-hover:text-vez-ink">{step.label}</p>
                 </div>

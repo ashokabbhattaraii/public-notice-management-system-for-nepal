@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { OAuth2Client } from 'google-auth-library';
 import { User } from '@prisma/client';
-import { UsersService } from '../users/users.service';
+import { UsersService } from './users.service';
 
 export interface JwtPayload {
   sub: string;

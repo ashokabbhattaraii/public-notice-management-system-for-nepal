@@ -36,14 +36,15 @@ export function VezignoHero() {
         )
       }
 
-      // Gentle parallax: mockup drifts within the clipped preview card
+      // Gentle parallax: mockup drifts with scale and subtle rotation
       if (previewRef.current) {
         gsap.fromTo(
           previewRef.current,
-          { y: 32, scale: 1.02 },
+          { y: 32, scale: 1.03, rotateX: 2 },
           {
             y: 0,
             scale: 1,
+            rotateX: 0,
             ease: "none",
             scrollTrigger: {
               trigger: previewRef.current,
@@ -65,8 +66,11 @@ export function VezignoHero() {
   }
 
   return (
-    <section ref={sectionRef} className="bg-vez-sky">
-      <div className="mx-auto max-w-[1480px] px-6 pt-[160px] md:px-8 md:pt-[190px] lg:px-12 lg:pt-[220px]">
+    <section ref={sectionRef} className="bg-vez-sky vz-noise">
+      <div className="relative mx-auto max-w-[1480px] px-6 pt-[184px] md:px-8 md:pt-[210px] lg:px-12 lg:pt-[240px]">
+        {/* Floating depth orbs */}
+        <div className="pointer-events-none absolute right-[10%] top-[20%] size-72 rounded-full bg-white/15 blur-3xl vz-float-slow" />
+        <div className="pointer-events-none absolute left-[5%] top-[40%] size-48 rounded-full bg-vez-navy/5 blur-2xl vz-float" />
         {/* Display statement */}
         <h1
           ref={headlineRef}
@@ -96,7 +100,7 @@ export function VezignoHero() {
               </Link>
               <Link
                 href="/rag"
-                className="flex items-center gap-1.5 rounded-full bg-white/40 px-6 py-3 text-base text-vez-ink backdrop-blur-[6px] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/60"
+                className="flex items-center gap-1.5 rounded-full bg-white/30 px-6 py-3 text-base text-vez-ink backdrop-blur-md border border-white/50 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/60 hover:shadow-md"
               >
                 Explore documents
               </Link>
@@ -107,7 +111,7 @@ export function VezignoHero() {
         {/* Search */}
         <Reveal delay={200}>
           <form onSubmit={handleSearch} className="mt-10 max-w-2xl lg:mt-12">
-            <div className="flex items-center gap-2 rounded-full bg-white p-2 transition-transform duration-300 focus-within:scale-[1.01]">
+            <div className="vz-glass flex items-center gap-2 rounded-full p-2 transition-all duration-300 focus-within:scale-[1.01] focus-within:shadow-lg">
               <Search className="ml-4 size-5 shrink-0 text-vez-mute" />
               <input
                 type="text"
@@ -129,7 +133,7 @@ export function VezignoHero() {
                 <Link
                   key={tag}
                   href={`/notices?q=${encodeURIComponent(tag)}`}
-                  className="rounded-full bg-white/40 px-4 py-1.5 text-sm text-vez-ink backdrop-blur-[6px] transition-colors hover:bg-white/70"
+                  className="rounded-full bg-white/30 px-4 py-1.5 text-sm text-vez-ink backdrop-blur-sm border border-white/40 transition-all duration-300 hover:bg-white/60 hover:shadow-sm"
                 >
                   {tag}
                 </Link>
@@ -140,7 +144,7 @@ export function VezignoHero() {
 
         {/* Preview card — rounded top corners, emerges below the fold */}
         <Reveal delay={280} className="mt-16 lg:mt-24">
-          <div className="overflow-hidden rounded-t-[24px] bg-white">
+          <div className="overflow-hidden rounded-t-[24px] bg-white shadow-2xl shadow-vez-navy/5" style={{ perspective: "1200px" }}>
             {/* Inner wrapper parallaxes within the clipped card */}
             <div ref={previewRef}>
               <DemoPlayer />

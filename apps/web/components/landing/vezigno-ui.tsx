@@ -48,7 +48,7 @@ export function ArrowCta({
       className={cn(
         "group flex w-fit items-center gap-2 rounded-full px-6 py-3 text-base transition-all duration-300",
         variant === "navy" && "bg-vez-navy text-white hover:opacity-90",
-        variant === "frost" && "bg-white/40 text-vez-ink backdrop-blur-[6px] hover:bg-white/70",
+        variant === "frost" && "bg-white/30 text-vez-ink backdrop-blur-md border border-white/50 hover:bg-white/60 hover:shadow-md",
         variant === "white" && "bg-white text-vez-ink hover:bg-vez-surface",
         className
       )}
