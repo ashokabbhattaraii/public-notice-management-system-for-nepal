@@ -59,6 +59,10 @@ ENV/
 # Turbo
 .turbo/
 
+# Uploads (keep .gitkeep)
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
+
 # Misc
 *.pem
 *.p12

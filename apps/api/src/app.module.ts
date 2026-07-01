@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './modules/auth.module';
 import { NoticesModule } from './modules/notices.module';
-import {WebhooksModule} from './webhooks/webhooks.module';
+import { DocumentsModule } from './modules/documents.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RagModule } from './modules/rag.module';
 
@@ -12,6 +13,7 @@ import { RagModule } from './modules/rag.module';
     PrismaModule,
     AuthModule,
     NoticesModule,
+    DocumentsModule,
     WebhooksModule,
     RagModule,
   ],

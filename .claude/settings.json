@@ -6,7 +6,18 @@
       "Bash(echo \"GET /auth/me  -> $\\(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/auth/me\\)  \\(expect 401\\)\")",
       "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{\\\\\"credential\\\\\":\\\\\"x\\\\\"}')",
       "Bash(echo \"POST /auth/google \\(bad cred\\) -> $\\(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{\\\\\"credential\\\\\":\\\\\"x\\\\\"}'\\)  \\(expect 401\\)\")",
-      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{}')"
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3001/auth/google -H 'Content-Type: application/json' -d '{}')",
+      "Bash(.venv/bin/python -m ruff check app/)",
+      "Bash(python3 -m ruff check app/)",
+      "Bash(.venv/bin/python -c \"import app.main; print\\('Module loaded successfully'\\); print\\(f'app callable: {app.main.app}'\\)\")",
+      "Bash(npx prisma *)",
+      "Bash(npx nest *)",
+      "Bash(node -e \"const path = require\\('path'\\); console.log\\(path.resolve\\('dist/controllers', '..', '..', 'uploads'\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(python3 -m py_compile app/main.py)",
+      "Bash(python3 -m py_compile app/config.py)",
+      "Bash(python3 -m py_compile app/chunker.py)",
+      "Bash(python3 -m py_compile app/extractor.py)"
     ]
   }
 }

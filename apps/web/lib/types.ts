@@ -53,15 +53,41 @@ export interface AlertRule {
   matchCount: number
 }
 
+export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "FAILED"
+
 export interface RagDocument {
   id: string
   title: string
-  category: string
-  uploadedAt: string
-  fileSize: string
-  viewCount: number
-  summary: string
-  format: "pdf" | "docx" | "txt"
+  filename: string
+  mimeType: string
+  fileSize: number
+  status: DocumentStatus
+  isOcr: boolean
+  textLength: number | null
+  chunkCount: number | null
+  uploadedBy: string
+  createdAt: string
+  updatedAt: string
+  indexedAt: string | null
+  user?: { id: string; name: string; email: string }
+}
+
+export interface RagDocumentListResponse {
+  data: RagDocument[]
+  meta: { page: number; limit: number; total: number; totalPages: number }
+}
+
+export interface RagSource {
+  doc_id: string
+  chunk_index: number
+  content: string
+  score: number
+}
+
+export interface RagQueryResponse {
+  answer: string
+  sources: RagSource[]
+  model_used: string | null
 }
 
 export interface ChatMessage {
@@ -69,7 +95,7 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   timestamp: string
-  sources?: string[]
+  sources?: RagSource[]
 }
 
 export interface ScrapingSource {

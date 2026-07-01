@@ -1,4 +1,4 @@
-import { User } from "./types"
+import { User, RagDocument, RagDocumentListResponse, RagQueryResponse, DocumentStatus } from "./types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
@@ -71,4 +71,55 @@ export async function fetchMe(): Promise<User | null> {
     tokenStore.clear()
     return null
   }
+}
+
+// ─── Documents API ───────────────────────────────────────────────────────────
+
+export async function uploadDocument(file: File, title: string): Promise<RagDocument> {
+  const token = tokenStore.get()
+  const form = new FormData()
+  form.append("file", file)
+  form.append("title", title)
+
+  const res = await fetch(`${API_URL}/documents`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(err || `Upload failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchDocuments(
+  page = 1,
+  limit = 50,
+  status?: DocumentStatus,
+): Promise<RagDocumentListResponse> {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  if (status) params.set("status", status)
+  return apiFetch<RagDocumentListResponse>(`/documents?${params}`)
+}
+
+export async function fetchDocument(id: string): Promise<RagDocument> {
+  return apiFetch<RagDocument>(`/documents/${id}`)
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  await apiFetch<{ message: string }>(`/documents/${id}`, { method: "DELETE" })
+}
+
+// ─── RAG Query API ───────────────────────────────────────────────────────────
+
+export async function ragQuery(
+  question: string,
+  documentId?: string,
+  topK = 5,
+): Promise<RagQueryResponse> {
+  return apiFetch<RagQueryResponse>("/rag/query", {
+    method: "POST",
+    body: JSON.stringify({ question, documentId, topK }),
+  })
 }

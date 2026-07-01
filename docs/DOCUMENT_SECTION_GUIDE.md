@@ -1,1848 +1,1023 @@
-# Document Section — From Scratch, End-to-End Implementation Guide
+# Document Intelligence & RAG — Full Implementation Guide
 
-> AI-Powered Cloud-Based Public Notice Management System for Nepal
-> Author: Ashok Bhattarai (NP069811) — derived from the FYP investigation report.
-
-This guide walks you through building the **Document section** of the platform
-from nothing to a working vertical slice: upload → store → extract text →
-OCR (Tesseract) → chunk → embed → index in a vector store → expose to the RAG
-chat. It is written to match the conventions **already used in this monorepo**
-so the new code drops cleanly into the existing apps.
-
-It is deliberately long and explains *why* at each step, not just *what*.
+> Complete technical reference for the Document upload, indexing, and Retrieval-Augmented Generation system.
+> Part of: AI-Powered Cloud-Based Public Notice Management System for Nepal
 
 ---
 
 ## Table of Contents
 
-1. [What "Document section" means here](#1-what-document-section-means-here)
-2. [Tech stack for this feature](#2-tech-stack-for-this-feature)
-3. [Architecture & data flow](#3-architecture--data-flow)
-4. [Phase 0 — Prerequisites & environment](#4-phase-0--prerequisites--environment)
-5. [Phase 1 — Shared types](#5-phase-1--shared-types)
-6. [Phase 2 — Database model (Prisma)](#6-phase-2--database-model-prisma)
-7. [Phase 3 — Storage abstraction (local → S3)](#7-phase-3--storage-abstraction-local--s3)
-8. [Phase 4 — NestJS Documents module (API)](#8-phase-4--nestjs-documents-module-api)
-9. [Phase 5 — AI service: extraction, OCR, embeddings, vector index](#9-phase-5--ai-service-extraction-ocr-embeddings-vector-index)
-10. [Phase 6 — Wiring API → AI service](#10-phase-6--wiring-api--ai-service)
-11. [Phase 7 — Frontend Document section (Next.js)](#11-phase-7--frontend-document-section-nextjs)
-12. [Phase 8 — Connect documents to the RAG chat](#12-phase-8--connect-documents-to-the-rag-chat)
-13. [Phase 9 — Testing](#13-phase-9--testing)
-14. [Phase 10 — Deployment notes (AWS)](#14-phase-10--deployment-notes-aws)
-15. [Build order checklist](#15-build-order-checklist)
+1. [System Overview & Data Flow](#1-system-overview--data-flow)
+2. [Architecture Decisions](#2-architecture-decisions)
+3. [Python AI Service (apps/ai)](#3-python-ai-service-appsai)
+   - [3.1 Configuration](#31-configuration)
+   - [3.2 Text Extraction](#32-text-extraction)
+   - [3.3 Text Chunking](#33-text-chunking)
+   - [3.4 Embeddings](#34-embeddings)
+   - [3.5 Vector Store (Qdrant)](#35-vector-store-qdrant)
+   - [3.6 LLM Generation (Groq)](#36-llm-generation-groq)
+   - [3.7 RAG Pipeline](#37-rag-pipeline)
+   - [3.8 ASGI Application & Endpoints](#38-asgi-application--endpoints)
+4. [NestJS API Gateway (apps/api)](#4-nestjs-api-gateway-appsapi)
+   - [4.1 Database Schema (Prisma)](#41-database-schema-prisma)
+   - [4.2 Documents Module](#42-documents-module)
+   - [4.3 RAG Module](#43-rag-module)
+   - [4.4 Validation DTOs](#44-validation-dtos)
+5. [Frontend Integration (apps/web)](#5-frontend-integration-appsweb)
+   - [5.1 API Client Functions](#51-api-client-functions)
+   - [5.2 TypeScript Types](#52-typescript-types)
+   - [5.3 Page Behavior](#53-page-behavior)
+6. [Complete Request Flows](#6-complete-request-flows)
+7. [Error Handling & Resilience](#7-error-handling--resilience)
+8. [Environment Configuration](#8-environment-configuration)
+9. [Running the System](#9-running-the-system)
+10. [Dependencies](#10-dependencies)
 
 ---
 
-## 1. What "Document section" means here
+## 1. System Overview & Data Flow
 
-In this system a **Document** is an uploaded or scraped file (PDF, DOCX, image,
-or TXT) that backs a public notice and/or feeds the RAG knowledge base. The
-`Document` domain type already exists in `packages/types/src/index.ts`:
+The Document section implements a three-tier RAG system where:
 
-```ts
-export interface Document {
-  id: string
-  noticeId?: string
-  filename: string
-  mimeType: string
-  sizeBytes: number
-  isOcr: boolean
-  uploadedAt: string
+- **Frontend (Next.js)** handles user interaction — file upload UI, chat interface, document library
+- **API Gateway (NestJS)** handles authentication, validation, file persistence, database records, and proxies to the AI service
+- **AI Service (Python)** handles all ML/AI operations — text extraction, OCR, chunking, embedding, vector storage, similarity search, and LLM answer generation
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                         DOCUMENT UPLOAD FLOW                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+Browser (Next.js)                NestJS API (:5005)              Python AI (:8000)
+      │                               │                               │
+      │  POST /documents              │                               │
+      │  (multipart: file + title)    │                               │
+      │──────────────────────────────▶│                               │
+      │                               │                               │
+      │                               │ 1. Validate file type/size    │
+      │                               │ 2. Save to disk (uploads/)    │
+      │                               │ 3. Create DB record           │
+      │                               │    (status: PENDING)          │
+      │                               │                               │
+      │  ◀─── 201 { document }────────│                               │
+      │                               │                               │
+      │                               │── ASYNC (non-blocking) ──────▶│
+      │                               │   POST /documents             │
+      │                               │   (multipart: file stream)    │
+      │                               │                               │
+      │                               │   Update status: PROCESSING   │
+      │                               │                               │
+      │                               │                    ┌──────────┤
+      │                               │                    │ Extract  │
+      │                               │                    │ Chunk    │
+      │                               │                    │ Embed    │
+      │                               │                    │ Index    │
+      │                               │                    └──────────┤
+      │                               │                               │
+      │                               │◀─── { doc_id, chunk_count,   │
+      │                               │       text_length, is_ocr }   │
+      │                               │                               │
+      │                               │ Update DB: status=INDEXED      │
+      │                               │ chunkCount, textLength, isOcr │
+      │                               │ indexedAt = now()              │
+      │                               │                               │
+      │  (Frontend polls GET /documents to see status change)         │
+      │                               │                               │
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                          RAG QUERY FLOW                                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+Browser                          NestJS API                    Python AI
+      │                               │                               │
+      │  POST /rag/query              │                               │
+      │  { question, documentId? }    │                               │
+      │──────────────────────────────▶│                               │
+      │                               │                               │
+      │                               │  POST /query                  │
+      │                               │  { question, doc_id?, top_k } │
+      │                               │──────────────────────────────▶│
+      │                               │                               │
+      │                               │                    ┌──────────┤
+      │                               │                    │ 1. Embed │
+      │                               │                    │    query │
+      │                               │                    │ 2. Qdrant│
+      │                               │                    │    search│
+      │                               │                    │ 3. LLM   │
+      │                               │                    │    answer│
+      │                               │                    └──────────┤
+      │                               │                               │
+      │                               │◀── { answer, sources,        │
+      │                               │      model_used }             │
+      │                               │                               │
+      │◀── { answer, sources,         │                               │
+      │      model_used }             │                               │
+```
+
+---
+
+## 2. Architecture Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Vector DB | **Qdrant** (not ChromaDB) | Production-ready, horizontally scalable, Rust-based, free self-host + free 1 GB cloud tier. ChromaDB is in-process and not suitable for production. |
+| Embedding model | **paraphrase-multilingual-MiniLM-L12-v2** | 384-dim vectors, supports 50+ languages including Nepali, runs locally (no API cost), fast inference |
+| LLM for answers | **Groq API (llama-3.1-8b-instant)** | Free tier with generous limits, extremely fast inference (~200ms), no GPU needed locally, falls back to extractive answers if unavailable |
+| Python framework | **Raw ASGI (uvicorn)** | Deliberately framework-light per project spec. No FastAPI dependency — fewer moving parts, full control over multipart parsing |
+| File storage | **Local disk** (S3-ready) | `uploads/` directory with UUID filenames. The filePath is stored in Prisma so switching to S3 requires only changing the storage driver |
+| Processing model | **Synchronous in AI, async from API** | NestJS fires-and-forgets the AI call so the upload response is instant. The AI service processes synchronously (simpler, no job queue needed at this scale) |
+| ID consistency | **Prisma UUID passed to Qdrant** | The same document ID exists in PostgreSQL and as the `doc_id` field in all Qdrant points, enabling consistent cross-system queries and deletions |
+
+---
+
+## 3. Python AI Service (apps/ai)
+
+### 3.1 Configuration
+
+**File:** `app/config.py`
+
+All configuration is loaded from environment variables at module import time:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `8000` | Uvicorn listen port |
+| `ENVIRONMENT` | `development` | Runtime environment identifier |
+| `EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | HuggingFace model ID for embeddings |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant server address |
+| `QDRANT_COLLECTION` | `documents` | Qdrant collection name |
+| `CHUNK_SIZE` | `512` | Maximum characters per chunk |
+| `CHUNK_OVERLAP` | `50` | Overlap characters between adjacent chunks |
+| `GROQ_API_KEY` | (empty) | Groq API key; if unset, falls back to extractive answers |
+| `TESSERACT_LANG` | `nep+eng` | Tesseract language packs (Nepali + English) |
+| `UPLOAD_DIR` | `./data/uploads` | Directory for uploaded files |
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5005` | Allowed CORS origins |
+
+The `ensure_upload_dir()` function creates the upload directory tree if it doesn't exist, called during ASGI lifespan startup.
+
+---
+
+### 3.2 Text Extraction
+
+**File:** `app/extractor.py`
+
+Handles four document types with a unified interface:
+
+```python
+def extract_text(file_path: str, mime_type: str) -> dict:
+    # Returns: {"text": str, "is_ocr": bool, "page_count": int}
+```
+
+**PDF Extraction Strategy (two-pass):**
+1. First attempt: `pypdf.PdfReader` extracts text from each page
+2. Quality check: if average text per page < 100 characters, assume scanned document
+3. Fallback: OCR pipeline — `pdf2image.convert_from_path()` renders pages to images, then `pytesseract.image_to_string()` with configured language packs (`nep+eng`)
+4. Sets `is_ocr=True` when fallback is used
+
+**DOCX Extraction:**
+- `python-docx` loads the document
+- Iterates `doc.paragraphs`, joins with newlines
+- Sets `page_count=1` (DOCX doesn't have native page markers)
+
+**Image Extraction (PNG/JPEG):**
+- Direct OCR via `pytesseract.image_to_string(Image.open(path))`
+- Always sets `is_ocr=True`
+
+**Plain Text:**
+- Reads with UTF-8 encoding, falls back to Latin-1 if decode fails
+- No OCR needed
+
+---
+
+### 3.3 Text Chunking
+
+**File:** `app/chunker.py`
+
+```python
+def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> list[dict]:
+    # Returns: [{"content": str, "index": int, "char_start": int, "char_end": int}]
+```
+
+**Algorithm — hierarchical splitting:**
+
+1. **Split by paragraphs** (double newlines `\n\n`)
+2. For each paragraph:
+   - If it fits within `chunk_size` → add directly as a chunk
+   - If too large → **split by sentences** using regex that respects:
+     - English punctuation: `.` `!` `?` followed by space or newline
+     - Nepali punctuation: `।` (Devanagari danda)
+   - Accumulate sentences until the buffer exceeds `chunk_size`, then flush
+3. For individual sentences that still exceed `chunk_size`:
+   - **Split by words** as a last resort
+   - Accumulate words until buffer is full
+
+**Overlap handling:**
+- After flushing a chunk, the last `overlap` characters are prepended to the next chunk
+- This ensures context continuity at chunk boundaries (important for RAG retrieval quality)
+
+**Output metadata:**
+- `char_start` / `char_end`: character offsets in the original text (for source highlighting)
+- `index`: sequential chunk number within the document
+
+---
+
+### 3.4 Embeddings
+
+**File:** `app/embeddings.py`
+
+**Singleton pattern** — the model is loaded once on first use and reused:
+
+```python
+_model = None  # Lazy-loaded
+
+def get_embedding(text: str) -> list[float]:
+    # Returns normalized 384-dimensional vector
+
+def get_embeddings(texts: list[str]) -> list[list[float]]:
+    # Batch embedding — more efficient for multiple texts
+
+def is_loaded() -> bool:
+    # Health check for the /health endpoint
+```
+
+**Model details:**
+- `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+- Output dimension: **384**
+- Supports: 50+ languages including Nepali, English, Hindi
+- Runs on CPU — no GPU required
+- First load: ~2-5 seconds (downloads model if not cached)
+- Subsequent embeddings: ~5-50ms per text depending on length
+
+**Normalization:**
+- All vectors are L2-normalized after encoding (`normalize_embeddings=True`)
+- This is required for cosine similarity to work correctly in Qdrant
+
+---
+
+### 3.5 Vector Store (Qdrant)
+
+**File:** `app/store.py`
+
+**Collection configuration:**
+- Name: configurable via `QDRANT_COLLECTION` (default: `documents`)
+- Vector size: `384` (matches MiniLM output)
+- Distance metric: `COSINE`
+- Auto-created on startup if not present
+
+**Indexing (`index_document`):**
+```python
+def index_document(doc_id: str, chunks: list[dict], embeddings: list[list[float]], metadata: dict) -> int:
+```
+
+- Creates one Qdrant `PointStruct` per chunk
+- **Point ID**: deterministic UUID5 derived from `f"{doc_id}:{chunk_index}"` — ensures idempotent re-indexing
+- **Payload** stored per point:
+  - `doc_id` — links back to PostgreSQL Document.id
+  - `chunk_index` — position within the document
+  - `content` — the actual text chunk (for retrieval without re-reading files)
+  - `char_start`, `char_end` — character offsets
+  - `original_filename`, `mime_type` — from upload metadata
+  - `title` — document title (if provided)
+- **Batch upsert**: points are uploaded in batches of 100 to avoid memory issues with large documents
+
+**Search (`search`):**
+```python
+def search(query_embedding: list[float], top_k: int = 5, filter_doc_id: str = None) -> list[dict]:
+```
+
+- Uses `client.query_points()` for similarity search
+- Optional `filter_doc_id`: creates a `Filter` with `FieldCondition(key="doc_id", match=MatchValue(value=...))` to restrict results to a single document
+- Returns list of `{content, score, doc_id, chunk_index, metadata}`
+- Score range: 0.0 (no similarity) to 1.0 (identical) for cosine
+
+**Deletion (`delete_document`):**
+- Removes all points matching `doc_id` field via filter-based delete
+- No need to know individual point IDs
+
+**Health check (`is_connected`):**
+- Attempts `client.get_collections()` — if it succeeds, Qdrant is reachable
+
+---
+
+### 3.6 LLM Generation (Groq)
+
+**File:** `app/llm.py`
+
+**Configuration:**
+- API endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- Model: `llama-3.1-8b-instant`
+- Temperature: `0.3` (low for factual accuracy)
+- Max tokens: `1024`
+- Timeout: `30 seconds`
+
+**System prompt:**
+```
+You are a helpful assistant answering questions about Nepalese public notices
+and government documents. Answer based ONLY on the provided context.
+If the context doesn't contain enough information, say so.
+Be concise and cite which source chunks you used.
+```
+
+**Language support:**
+- If `language="ne"`, appends: `" Respond in Nepali (Devanagari script)."`
+- Enables bilingual operation for Nepali government documents
+
+**Context formatting:**
+```
+[Source 1]: <chunk text>
+
+---
+
+[Source 2]: <chunk text>
+
+---
+
+[Source 3]: <chunk text>
+```
+
+**Fallback behavior:**
+- If `GROQ_API_KEY` is empty OR the API call returns non-200 → falls back to extractive answer
+- Extractive answer = top-k chunks concatenated with source labels (no LLM, no cost, deterministic)
+
+---
+
+### 3.7 RAG Pipeline
+
+**File:** `app/rag.py`
+
+The main orchestration function:
+
+```python
+async def query(question: str, doc_id: str = None, top_k: int = 5, language: str = "en") -> dict:
+```
+
+**Pipeline steps:**
+
+1. **Embed the question** — `embeddings.get_embedding(question)` → 384-dim vector
+2. **Similarity search** — `store.search(query_embedding, top_k, filter_doc_id=doc_id)` → ranked chunks
+3. **Early exit** — if no results found, return "No relevant documents found" with empty sources
+4. **Generate answer** — `llm.generate_answer(question, context_chunks, language)` → natural language answer (or extractive fallback)
+5. **Format response:**
+
+```json
+{
+  "answer": "The Constitution of Nepal 2072 establishes...",
+  "sources": [
+    {
+      "doc_id": "uuid-here",
+      "chunk_index": 4,
+      "content": "Article 18 guarantees...",
+      "score": 0.87
+    }
+  ],
+  "model_used": "llama-3.1-8b-instant"
 }
 ```
 
-The Document section is responsible for the full lifecycle:
-
-| Stage | Where it runs | Responsibility |
-|-------|---------------|----------------|
-| Upload | `apps/web` → `apps/api` | Accept a file from an admin, validate it |
-| Persist file | `apps/api` (storage layer) | Write bytes to disk / S3, record metadata in Postgres |
-| Extract text | `apps/ai` | PDF/DOCX/TXT text extraction |
-| OCR | `apps/ai` | Tesseract for scanned PDFs/images (`nep+eng`) |
-| Chunk + embed | `apps/ai` | Split text, create embeddings |
-| Index | `apps/ai` | Store vectors in Qdrant |
-| Query | `apps/ai` ← `apps/api` ← `apps/web` | RAG answers cite document chunks |
-
-Access control (from the system overview): **only Admins** upload/manage
-documents; Users and Admins can query them through RAG.
-
 ---
 
-## 2. Tech stack for this feature
+### 3.8 ASGI Application & Endpoints
 
-Everything below is already in the repo unless marked **(add)**.
+**File:** `app/main.py`
 
-### Backend API (`apps/api`) — NestJS 11 + Prisma 6
-- `@nestjs/platform-express` + **`multer`** (installed) for multipart upload via `FileInterceptor`.
-- **`file-type`** (installed) to verify the real MIME type from magic bytes (never trust the client-sent type).
-- **`uuid`** (installed) for storage keys.
-- Existing auth primitives: `JwtAuthGuard`, `RolesGuard`, `@Roles('admin')`, `@CurrentUser()`.
-- **(add)** `@aws-sdk/client-s3` only when you move from local disk to S3.
+Raw ASGI application — no framework. Handles HTTP request routing, CORS, multipart parsing, and lifespan management.
 
-### AI service (`apps/ai`) — Python ASGI + uvicorn
-Current `requirements.txt` is minimal (`uvicorn`, `httpx`, `ruff`). **Add**:
+**Lifespan (startup):**
+1. Create upload directory (`config.ensure_upload_dir()`)
+2. Ensure Qdrant collection exists (`store.ensure_collection()`) — graceful if Qdrant is down
 
-```txt
-# Text extraction
-pypdf>=4.2.0
-python-docx>=1.1.0
-# OCR
-pytesseract>=0.3.10
-pdf2image>=1.17.0
-Pillow>=10.3.0
-# Embeddings + vector store
-sentence-transformers>=3.0.0
-qdrant-client>=1.9.0
-# RAG orchestration (optional but in the report's stack)
-langchain>=0.2.0
-langchain-community>=0.2.0
-```
+**Routing:**
 
-System packages (the report names Tesseract; `pdf2image` needs Poppler):
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Service info: name, version, status |
+| `GET` | `/health` | Health: `{status, qdrant: bool, model_loaded: bool}` |
+| `POST` | `/documents` | Upload & index a document |
+| `GET` | `/documents/{id}/status` | Check indexing status & chunk count |
+| `DELETE` | `/documents/{id}` | Remove document from vector store |
+| `POST` | `/query` | RAG question answering |
+| `OPTIONS` | `*` | CORS preflight response |
 
-```bash
-# macOS
-brew install tesseract tesseract-lang poppler
-# Debian/Ubuntu (for AWS EC2 deploy)
-sudo apt-get install -y tesseract-ocr tesseract-ocr-nep poppler-utils
-```
+**POST /documents — Multipart upload flow:**
 
-### Frontend (`apps/web`) — Next.js 15 + Tailwind 4 + shadcn/ui
-- Reuse existing `components/ui/*` (`button`, `card`, `dialog`, `badge`, `input`, `tabs`).
-- Reuse `lib/api.ts` (`apiFetch`, `tokenStore`) — extend it with a multipart helper.
+1. Validate `Content-Type: multipart/form-data` with boundary
+2. Parse multipart body manually (custom `_parse_multipart()`)
+3. Extract fields:
+   - `file` (required): binary file data + filename + content-type
+   - `document_id` (optional): if provided by NestJS, use it; otherwise generate UUID
+   - `title` (optional): stored in metadata
+   - `metadata` (optional): JSON object merged into point payloads
+4. Save file to `UPLOAD_DIR/{doc_id}{extension}`
+5. Extract text → chunk → embed → index in Qdrant
+6. Return `201 Created` with results or appropriate error code
 
----
+**POST /query — JSON body:**
 
-## 3. Architecture & data flow
-
-```
-            ┌──────────────────── apps/web (Next.js) ────────────────────┐
-            │  /admin/documents      DocumentUpload     DocumentList      │
-            └───────────────┬───────────────────────────────┬───────────┘
-                            │ multipart POST /documents       │ GET /documents
-                            ▼ (Bearer JWT, admin)             ▼
-            ┌──────────────────── apps/api (NestJS) ─────────────────────┐
-            │  DocumentsController → DocumentsService                     │
-            │     • validate (size, magic-byte MIME)                      │
-            │     • StorageService.save(bytes)  ── disk/S3                │
-            │     • prisma.document.create(...)                           │
-            │     • POST file/text to AI service for indexing            │
-            └───────────────┬─────────────────────────────┬─────────────┘
-                            │ Postgres (metadata)           │ httpx POST /documents
-                            ▼                                ▼
-                    ┌───────────────┐         ┌──────────── apps/ai (Python) ───────────┐
-                    │  PostgreSQL   │         │  extract → OCR(Tesseract) → chunk        │
-                    │  documents    │         │  → embed(MiniLM) → Qdrant upsert         │
-                    └───────────────┘         │  /query: retrieve + answer (+ sources)   │
-                                              └──────────────────────────────────────────┘
-```
-
-Two payload strategies for API → AI (pick one, this guide implements **A**):
-
-- **A. API extracts nothing; sends the file** to AI which does extraction/OCR. Keeps all heavy AI libs in one place. Recommended.
-- **B. API sends only a storage URL/S3 key**; AI fetches the bytes itself. Better once you are fully on S3.
-
----
-
-## 4. Phase 0 — Prerequisites & environment
-
-Add the document-related variables. **Do not commit real secrets** — update the
-`.env.example` files and put real values in the git-ignored `.env`.
-
-`apps/api/.env.example` (append):
-
-```bash
-# ── Documents ─────────────────────────────────────────
-# local | s3
-STORAGE_DRIVER=local
-# Used when STORAGE_DRIVER=local. Folder is created on boot.
-STORAGE_LOCAL_DIR=./storage/documents
-# Max upload size in bytes (10 MB)
-MAX_UPLOAD_BYTES=10485760
-# Allowed MIME types (comma-separated)
-ALLOWED_MIME=application/pdf,image/png,image/jpeg,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document
-
-# Used when STORAGE_DRIVER=s3
-S3_BUCKET=
-S3_REGION=ap-south-1
-# Leave blank on EC2/ECS to use the instance IAM role
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-
-# AI service base URL (already present)
-AI_SERVICE_URL=http://localhost:8000
-```
-
-`apps/ai/.env.example` — replace the old `VECTOR_DB_PATH` line with Qdrant settings:
-
-```bash
-EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-TESSERACT_LANG=nep+eng
-
-# Qdrant vector store
-# Local dev: run Qdrant via Docker (see Phase 5.5). Prod: managed Qdrant Cloud URL.
-QDRANT_URL=http://localhost:6333
-# Leave blank for local; set for Qdrant Cloud.
-QDRANT_API_KEY=
-QDRANT_COLLECTION=notices
-# Embedding dimension — must match the model (MiniLM-L12-v2 = 384).
-EMBEDDING_DIM=384
-```
-
-Add `storage/` and the local Qdrant data directory to `.gitignore`:
-
-```gitignore
-storage/
-apps/ai/qdrant_storage/
-```
-
----
-
-## 5. Phase 1 — Shared types
-
-Extend the canonical `Document` type so every app agrees on its shape.
-Edit `packages/types/src/index.ts`:
-
-```ts
-// Document processing lifecycle status.
-export type DocumentStatus =
-  | "pending"      // saved, not yet sent to AI
-  | "processing"   // AI extracting/indexing
-  | "indexed"      // searchable in RAG
-  | "failed"       // extraction/indexing error
-
-export interface Document {
-  id: string
-  noticeId?: string
-  filename: string
-  mimeType: string
-  sizeBytes: number
-  isOcr: boolean
-  status: DocumentStatus
-  // Storage key (disk path or S3 object key). Not exposed publicly.
-  storageKey?: string
-  // Extracted plain text length, handy for the admin UI.
-  textLength?: number
-  // Number of vector chunks indexed.
-  chunkCount?: number
-  errorMessage?: string
-  uploadedAt: string
-}
-
-// Request body the API sends to the AI service for indexing.
-export interface IndexDocumentRequest {
-  documentId: string
-  filename: string
-  mimeType: string
-}
-
-// Response from the AI service after indexing.
-export interface IndexDocumentResult {
-  documentId: string
-  isOcr: boolean
-  textLength: number
-  chunkCount: number
+```json
+{
+  "question": "What are fundamental rights?",
+  "doc_id": "optional-uuid",
+  "top_k": 5,
+  "language": "en"
 }
 ```
 
-> The web app keeps its own richer `RagDocument` type in `apps/web/lib/types.ts`.
-> Keep that for the existing RAG UI, but new code should prefer the shared
-> `Document` type where possible.
+**CORS middleware:**
+- Validates `Origin` header against configured `CORS_ORIGINS`
+- Returns appropriate `Access-Control-Allow-*` headers
+- `OPTIONS` requests get a `204 No Content` preflight response
 
 ---
 
-## 6. Phase 2 — Database model (Prisma)
+## 4. NestJS API Gateway (apps/api)
 
-The existing schema (`apps/api/prisma/schema.prisma`) only has `User`. Add the
-`Document` model and a status enum, mirroring the snake_case `@map` convention
-already used.
+### 4.1 Database Schema (Prisma)
+
+**File:** `prisma/schema.prisma`
 
 ```prisma
 enum DocumentStatus {
-  pending
-  processing
-  indexed
-  failed
+  PENDING       // Just uploaded, not yet sent to AI
+  PROCESSING    // Sent to AI, awaiting results
+  INDEXED       // Successfully processed and indexed in Qdrant
+  FAILED        // Processing failed (AI service error, extraction error, etc.)
 }
 
 model Document {
-  id           String         @id @default(uuid()) @db.Uuid
-  // Optional link to a notice (attachments). Null for standalone RAG uploads.
-  noticeId     String?        @map("notice_id") @db.Uuid
-  filename     String
-  mimeType     String         @map("mime_type")
-  sizeBytes    Int            @map("size_bytes")
-  // Storage key: relative disk path or S3 object key.
-  storageKey   String         @map("storage_key")
-  isOcr        Boolean        @default(false) @map("is_ocr")
-  status       DocumentStatus @default(pending)
-  textLength   Int?           @map("text_length")
-  chunkCount   Int?           @map("chunk_count")
-  errorMessage String?        @map("error_message")
-  // Who uploaded it (admin). FK to users.
-  uploadedById String         @map("uploaded_by_id") @db.Uuid
-  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  id          String         @id @default(uuid()) @db.Uuid
+  title       String                              // User-provided title
+  filename    String                              // Original filename
+  mimeType    String         @map("mime_type")    // e.g. "application/pdf"
+  fileSize    Int            @map("file_size")    // Bytes
+  filePath    String         @map("file_path")    // Absolute path on disk
+  status      DocumentStatus @default(PENDING)
+  isOcr       Boolean        @default(false) @map("is_ocr")
+  textLength  Int?           @map("text_length")  // Characters extracted
+  chunkCount  Int?           @map("chunk_count")  // Chunks in Qdrant
+  uploadedBy  String         @map("uploaded_by") @db.Uuid
+  user        User           @relation(fields: [uploadedBy], references: [id])
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  indexedAt   DateTime?      @map("indexed_at")   // When indexing completed
 
-  @@index([status])
-  @@index([noticeId])
   @@map("documents")
 }
 ```
 
-Add the back-relation to the existing `User` model:
-
-```prisma
-model User {
-  // ... existing fields ...
-  documents   Document[]     // add this line
-  // ... existing @@map("users") ...
-}
-```
-
-Generate the migration and client:
-
-```bash
-cd apps/api
-pnpm prisma:migrate --name add_documents   # prisma migrate dev --name add_documents
-pnpm prisma:generate
-```
-
-This produces a new SQL migration alongside the existing
-`20260615185609_init`. After it runs, `PrismaService` exposes
-`prisma.document`.
+**Relationship:** Each Document belongs to a User (`uploadedBy` FK → User.id). The User model has `documents Document[]` for the reverse relation.
 
 ---
 
-## 7. Phase 3 — Storage abstraction (local → S3)
+### 4.2 Documents Module
 
-Keep storage behind an interface so you can develop locally on disk and switch
-to S3 in production by changing one env var. Create `apps/api/src/storage/`.
+**Files:**
+- `src/modules/documents.module.ts` — Module definition
+- `src/controllers/documents.controller.ts` — HTTP endpoints
+- `src/services/documents.service.ts` — Business logic
 
-`apps/api/src/storage/storage.interface.ts`:
+#### Controller Endpoints
 
-```ts
-export interface SavedObject {
-  /** Storage key used to retrieve/delete the object later. */
-  key: string;
-}
+All endpoints require JWT authentication (`@UseGuards(JwtAuthGuard)` at class level). Any authenticated user can upload, list, and delete documents.
 
-export interface StorageDriver {
-  save(key: string, bytes: Buffer, mimeType: string): Promise<SavedObject>;
-  read(key: string): Promise<Buffer>;
-  delete(key: string): Promise<void>;
-}
+**`POST /documents`** — Upload a document
 
-export const STORAGE_DRIVER = Symbol('STORAGE_DRIVER');
-```
+- Uses `@UseInterceptors(FileInterceptor('file', { storage, limits, fileFilter }))`
+- **Multer config:**
+  - Storage: disk at `apps/api/uploads/`
+  - Filename: `{uuid}{extension}` (collision-free)
+  - Max size: 50 MB
+  - Allowed MIME types: `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/plain`, `image/png`, `image/jpeg`
+- Request body (form fields): `title` (validated via UploadDocumentDto)
+- Creates Prisma Document record with `status: PENDING`
+- Triggers async processing (does NOT block response)
+- Returns the Document object immediately
 
-`apps/api/src/storage/local.storage.ts`:
+**`GET /documents`** — List documents (paginated)
 
-```ts
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { SavedObject, StorageDriver } from './storage.interface';
+- Query params: `page` (default 1), `limit` (default 20, max 100), `status` (optional filter)
+- Returns: `{ data: Document[], meta: { page, limit, total, totalPages } }`
+- Includes related `user` with `{ id, name, email }`
+- Ordered by `createdAt DESC`
 
-@Injectable()
-export class LocalStorage implements StorageDriver {
-  private readonly root: string;
+**`GET /documents/:id`** — Get single document
 
-  constructor(config: ConfigService) {
-    this.root = path.resolve(
-      config.get<string>('STORAGE_LOCAL_DIR') ?? './storage/documents',
-    );
-  }
+- Validates UUID format via `ParseUUIDPipe`
+- Returns full Document with user info
+- Throws `404 NotFoundException` if not found
 
-  private full(key: string) {
-    // Prevent path traversal: keys are uuid-based and must stay under root.
-    const resolved = path.resolve(this.root, key);
-    if (!resolved.startsWith(this.root)) {
-      throw new Error('Invalid storage key');
-    }
-    return resolved;
-  }
+**`DELETE /documents/:id`** — Delete document
 
-  async save(key: string, bytes: Buffer): Promise<SavedObject> {
-    const dest = this.full(key);
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, bytes);
-    return { key };
-  }
+- Three-phase deletion:
+  1. Call AI service `DELETE /documents/{id}` (graceful — continues even if AI service is down)
+  2. Delete file from disk (graceful — continues if file already removed)
+  3. Delete Prisma record
+- Returns `{ message: "Document deleted successfully" }`
 
-  read(key: string): Promise<Buffer> {
-    return fs.readFile(this.full(key));
-  }
+**`GET /documents/:id/download`** — Download original file
 
-  async delete(key: string): Promise<void> {
-    await fs.rm(this.full(key), { force: true });
-  }
-}
-```
+- Streams file with correct `Content-Type` and `Content-Disposition` headers
+- Uses `res.sendFile(absolutePath)`
 
-`apps/api/src/storage/s3.storage.ts` (used when `STORAGE_DRIVER=s3`; requires
-`pnpm add @aws-sdk/client-s3` in `apps/api`):
+#### Service — Async Processing
 
-```ts
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import { SavedObject, StorageDriver } from './storage.interface';
+The critical `processDocument()` method:
 
-@Injectable()
-export class S3Storage implements StorageDriver {
-  private readonly client: S3Client;
-  private readonly bucket: string;
+```typescript
+async processDocument(document: Document): Promise<void> {
+  // 1. Mark as PROCESSING
+  await this.prisma.document.update({
+    where: { id: document.id },
+    data: { status: DocumentStatus.PROCESSING },
+  });
 
-  constructor(config: ConfigService) {
-    this.bucket = config.get<string>('S3_BUCKET')!;
-    this.client = new S3Client({ region: config.get('S3_REGION') });
-    // On EC2/ECS the SDK uses the instance role automatically when keys are absent.
-  }
+  // 2. Stream file to AI service
+  const form = new FormData();
+  form.append('file', fs.createReadStream(fullPath), { filename, contentType });
+  form.append('document_id', document.id);   // Same UUID for Qdrant
+  form.append('title', document.title);
 
-  async save(key: string, bytes: Buffer, mimeType: string): Promise<SavedObject> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: bytes,
-        ContentType: mimeType,
-      }),
-    );
-    return { key };
-  }
+  const response = await this.httpService.post(
+    `${aiServiceUrl}/documents`, form,
+    { headers: form.getHeaders(), timeout: 120000 }
+  );
 
-  async read(key: string): Promise<Buffer> {
-    const res = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
-    return Buffer.from(await res.Body!.transformToByteArray());
-  }
-
-  async delete(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
-  }
-}
-```
-
-`apps/api/src/storage/storage.module.ts` — pick the driver from config:
-
-```ts
-import { Global, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { LocalStorage } from './local.storage';
-import { S3Storage } from './s3.storage';
-import { STORAGE_DRIVER } from './storage.interface';
-
-@Global()
-@Module({
-  providers: [
-    {
-      provide: STORAGE_DRIVER,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        config.get('STORAGE_DRIVER') === 's3'
-          ? new S3Storage(config)
-          : new LocalStorage(config),
+  // 3. Update with results
+  await this.prisma.document.update({
+    where: { id: document.id },
+    data: {
+      status: DocumentStatus.INDEXED,
+      chunkCount: response.data.chunk_count,
+      textLength: response.data.text_length,
+      isOcr: response.data.is_ocr,
+      indexedAt: new Date(),
     },
-  ],
-  exports: [STORAGE_DRIVER],
-})
-export class StorageModule {}
+  });
+}
 ```
 
-Register `StorageModule` in `apps/api/src/app.module.ts` imports.
-
-> Tip: if you skip S3 entirely for now, you can delete `s3.storage.ts` and the
-> factory branch. Add it back when you do the AWS phase.
+**Key design:** The `document.id` (Prisma UUID) is sent as `document_id` to the AI service, which uses it as the `doc_id` field in Qdrant. This means the same UUID exists in PostgreSQL and Qdrant, enabling consistent queries and deletions.
 
 ---
 
-## 8. Phase 4 — NestJS Documents module (API)
+### 4.3 RAG Module
 
-### 8.1 DTOs
+**Files:**
+- `src/modules/rag.module.ts` — Module definition
+- `src/controllers/rag.controller.ts` — Single endpoint
+- `src/services/rag.service.ts` — AI service proxy
 
-`apps/api/src/documents/dto/list-documents.dto.ts`:
+#### Controller
 
-```ts
-import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class ListDocumentsDto {
-  @IsOptional()
-  @IsUUID()
-  noticeId?: string;
-
-  @IsOptional()
-  @IsIn(['pending', 'processing', 'indexed', 'failed'])
-  status?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit = 20;
-}
-```
-
-`apps/api/src/documents/dto/create-document.dto.ts` (optional metadata sent
-alongside the file in the multipart form):
-
-```ts
-import { IsOptional, IsUUID } from 'class-validator';
-
-export class CreateDocumentDto {
-  // Link the upload to an existing notice, if any.
-  @IsOptional()
-  @IsUUID()
-  noticeId?: string;
-}
-```
-
-### 8.2 Service
-
-`apps/api/src/documents/documents.service.ts`:
-
-```ts
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { fileTypeFromBuffer } from 'file-type';
-import { v4 as uuid } from 'uuid';
-import { PrismaService } from '../prisma/prisma.service';
-import { STORAGE_DRIVER, StorageDriver } from '../storage/storage.interface';
-import { AiClient } from './ai.client';
-import { ListDocumentsDto } from './dto/list-documents.dto';
-
-// text/plain has no magic bytes, so allow it explicitly by extension.
-const TEXT_EXT = ['.txt'];
-
-@Injectable()
-export class DocumentsService {
-  private readonly logger = new Logger(DocumentsService.name);
-  private readonly maxBytes: number;
-  private readonly allowedMime: Set<string>;
-
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
-    private readonly ai: AiClient,
-    config: ConfigService,
-  ) {
-    this.maxBytes = Number(config.get('MAX_UPLOAD_BYTES') ?? 10_485_760);
-    this.allowedMime = new Set(
-      (config.get<string>('ALLOWED_MIME') ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    );
-  }
-
-  async upload(
-    file: Express.Multer.File,
-    uploadedById: string,
-    noticeId?: string,
-  ) {
-    if (!file) throw new BadRequestException('No file provided');
-    if (file.size > this.maxBytes) {
-      throw new BadRequestException('File exceeds maximum allowed size');
-    }
-
-    // Verify the REAL type from magic bytes; fall back to client type for .txt.
-    const detected = await fileTypeFromBuffer(file.buffer);
-    const isText =
-      !detected && TEXT_EXT.some((e) => file.originalname.endsWith(e));
-    const mimeType = detected?.mime ?? (isText ? 'text/plain' : file.mimetype);
-
-    if (!this.allowedMime.has(mimeType)) {
-      throw new BadRequestException(`Unsupported file type: ${mimeType}`);
-    }
-
-    // Storage key: random uuid keeps user-controlled filenames out of the path.
-    const ext = detected?.ext ?? (isText ? 'txt' : 'bin');
-    const key = `${uuid()}.${ext}`;
-    await this.storage.save(key, file.buffer, mimeType);
-
-    const doc = await this.prisma.document.create({
-      data: {
-        noticeId: noticeId ?? null,
-        filename: file.originalname,
-        mimeType,
-        sizeBytes: file.size,
-        storageKey: key,
-        status: 'pending',
-        uploadedById,
-      },
-    });
-
-    // Kick off indexing without blocking the HTTP response.
-    void this.index(doc.id, file.buffer, doc.filename, mimeType);
-
-    return this.toPublic(doc);
-  }
-
-  /** Send bytes to the AI service and persist the result. */
-  private async index(
-    id: string,
-    bytes: Buffer,
-    filename: string,
-    mimeType: string,
-  ) {
-    await this.prisma.document.update({
-      where: { id },
-      data: { status: 'processing' },
-    });
-    try {
-      const res = await this.ai.indexDocument(id, bytes, filename, mimeType);
-      await this.prisma.document.update({
-        where: { id },
-        data: {
-          status: 'indexed',
-          isOcr: res.isOcr,
-          textLength: res.textLength,
-          chunkCount: res.chunkCount,
-          errorMessage: null,
-        },
-      });
-    } catch (err) {
-      this.logger.error(`Indexing failed for ${id}`, err as Error);
-      await this.prisma.document.update({
-        where: { id },
-        data: {
-          status: 'failed',
-          errorMessage: (err as Error).message.slice(0, 500),
-        },
-      });
-    }
-  }
-
-  async list(q: ListDocumentsDto) {
-    const where = {
-      ...(q.noticeId ? { noticeId: q.noticeId } : {}),
-      ...(q.status ? { status: q.status as any } : {}),
-    };
-    const [items, total] = await Promise.all([
-      this.prisma.document.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (q.page - 1) * q.limit,
-        take: q.limit,
-      }),
-      this.prisma.document.count({ where }),
-    ]);
-    return {
-      data: items.map((d) => this.toPublic(d)),
-      total,
-      page: q.page,
-      limit: q.limit,
-    };
-  }
-
-  async findOne(id: string) {
-    const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Document not found');
-    return this.toPublic(doc);
-  }
-
-  async download(id: string) {
-    const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Document not found');
-    const bytes = await this.storage.read(doc.storageKey);
-    return { doc, bytes };
-  }
-
-  async remove(id: string) {
-    const doc = await this.prisma.document.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Document not found');
-    await this.storage.delete(doc.storageKey).catch(() => undefined);
-    await this.ai.deleteDocument(id).catch(() => undefined);
-    await this.prisma.document.delete({ where: { id } });
-    return { id, deleted: true };
-  }
-
-  // Never leak the raw storage key to clients.
-  private toPublic(d: {
-    id: string;
-    noticeId: string | null;
-    filename: string;
-    mimeType: string;
-    sizeBytes: number;
-    isOcr: boolean;
-    status: string;
-    textLength: number | null;
-    chunkCount: number | null;
-    errorMessage: string | null;
-    createdAt: Date;
-  }) {
-    return {
-      id: d.id,
-      noticeId: d.noticeId ?? undefined,
-      filename: d.filename,
-      mimeType: d.mimeType,
-      sizeBytes: d.sizeBytes,
-      isOcr: d.isOcr,
-      status: d.status,
-      textLength: d.textLength ?? undefined,
-      chunkCount: d.chunkCount ?? undefined,
-      errorMessage: d.errorMessage ?? undefined,
-      uploadedAt: d.createdAt.toISOString(),
-    };
-  }
-}
-```
-
-### 8.3 AI client (API → Python)
-
-`apps/api/src/documents/ai.client.ts` — uses Node's built-in `fetch`
-(`FormData`/`Blob` are global in Node 18+; this repo targets Node 22):
-
-```ts
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { IndexDocumentResult } from '@pnm/types';
-
-@Injectable()
-export class AiClient {
-  private readonly base: string;
-
-  constructor(config: ConfigService) {
-    this.base = config.get<string>('AI_SERVICE_URL') ?? 'http://localhost:8000';
-  }
-
-  async indexDocument(
-    documentId: string,
-    bytes: Buffer,
-    filename: string,
-    mimeType: string,
-  ): Promise<IndexDocumentResult> {
-    const form = new FormData();
-    form.append('document_id', documentId);
-    form.append(
-      'file',
-      new Blob([bytes], { type: mimeType }),
-      filename,
-    );
-
-    const res = await fetch(`${this.base}/documents`, {
-      method: 'POST',
-      body: form,
-    });
-    if (!res.ok) {
-      throw new Error(`AI index failed (${res.status}): ${await res.text()}`);
-    }
-    return (await res.json()) as IndexDocumentResult;
-  }
-
-  async deleteDocument(documentId: string): Promise<void> {
-    await fetch(`${this.base}/documents/${documentId}`, { method: 'DELETE' });
-  }
-}
-```
-
-### 8.4 Controller
-
-`apps/api/src/documents/documents.controller.ts` — note the reuse of the
-existing `JwtAuthGuard`, `RolesGuard`, `@Roles`, `@CurrentUser`:
-
-```ts
-import {
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Query,
-  Res,
-  UploadedFile,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { Body } from '@nestjs/common';
-import type { Response } from 'express';
-import { User } from '@prisma/client';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { DocumentsService } from './documents.service';
-import { CreateDocumentDto } from './dto/create-document.dto';
-import { ListDocumentsDto } from './dto/list-documents.dto';
-
-@Controller('documents')
-export class DocumentsController {
-  constructor(private readonly documents: DocumentsService) {}
-
-  // Admin-only upload. multipart/form-data: field "file" + optional "noticeId".
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @Post()
-  @UseInterceptors(FileInterceptor('file'))
-  upload(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() dto: CreateDocumentDto,
-    @CurrentUser() user: User,
-  ) {
-    return this.documents.upload(file, user.id, dto.noticeId);
-  }
-
-  // Listing requires login (User or Admin).
-  @UseGuards(JwtAuthGuard)
-  @Get()
-  list(@Query() query: ListDocumentsDto) {
-    return this.documents.list(query);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.documents.findOne(id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':id/download')
-  async download(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Res() res: Response,
-  ) {
-    const { doc, bytes } = await this.documents.download(id);
-    res.setHeader('Content-Type', doc.mimeType);
-    res.setHeader(
-      'Content-Disposition',
-      `inline; filename="${encodeURIComponent(doc.filename)}"`,
-    );
-    res.send(bytes);
-  }
-
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @Delete(':id')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.documents.remove(id);
-  }
-}
-```
-
-### 8.5 Module + registration
-
-`apps/api/src/documents/documents.module.ts`:
-
-```ts
-import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { AiClient } from './ai.client';
-import { DocumentsController } from './documents.controller';
-import { DocumentsService } from './documents.service';
-
-@Module({
-  imports: [AuthModule], // for JwtAuthGuard/JwtStrategy availability
-  controllers: [DocumentsController],
-  providers: [DocumentsService, AiClient],
-})
-export class DocumentsModule {}
-```
-
-Add `StorageModule` and `DocumentsModule` to `app.module.ts`:
-
-```ts
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    PrismaModule,
-    StorageModule,   // add
-    AuthModule,
-    NoticesModule,
-    DocumentsModule, // add
-    RagModule,
-  ],
-})
-export class AppModule {}
-```
-
-> **Body size limit:** `FileInterceptor` streams through multer in memory by
-> default. For 10 MB files that is fine. If you raise `MAX_UPLOAD_BYTES`
-> significantly, configure multer limits in the interceptor
-> (`FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } })`) and
-> raise the Express body limit.
-
----
-
-## 9. Phase 5 — AI service: extraction, OCR, embeddings, vector index
-
-The current `apps/ai/app/main.py` is a single bare ASGI handler. We will keep
-the ASGI style (no framework, matching the repo) but split logic into modules
-and add real multipart parsing for the `/documents` upload.
-
-> **Why multipart parsing manually?** The repo deliberately uses raw ASGI with
-> no Starlette/FastAPI. The simplest robust option is to add a tiny multipart
-> parser via the `python-multipart` package, OR switch this service to FastAPI.
-> If you are allowed to add FastAPI, it makes file uploads trivial. Below shows
-> **both**; choose one.
-
-### 9.1 Module layout
-
-```
-apps/ai/app/
-├── main.py            # ASGI entry (router)
-├── extract.py         # PDF/DOCX/TXT text extraction + OCR
-├── chunking.py        # text splitting
-├── store.py           # Qdrant client + embeddings
-└── config.py          # env settings
-```
-
-### 9.2 Config
-
-`apps/ai/app/config.py`:
-
-```python
-import os
-
-EMBEDDING_MODEL = os.getenv(
-    "EMBEDDING_MODEL",
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-)
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))  # MiniLM-L12-v2 = 384
-TESSERACT_LANG = os.getenv("TESSERACT_LANG", "nep+eng")
-
-# Qdrant connection
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "notices")
-
-# If a PDF yields fewer than this many characters of embedded text,
-# treat it as scanned and run OCR.
-OCR_TEXT_THRESHOLD = int(os.getenv("OCR_TEXT_THRESHOLD", "100"))
-```
-
-### 9.3 Extraction + OCR
-
-`apps/ai/app/extract.py`:
-
-```python
-"""Text extraction for PDF, DOCX, TXT, and images, with Tesseract OCR fallback."""
-import io
-
-import pytesseract
-from pdf2image import convert_from_bytes
-from PIL import Image
-
-from .config import OCR_TEXT_THRESHOLD, TESSERACT_LANG
-
-
-def extract_text(data: bytes, mime_type: str, filename: str) -> tuple[str, bool]:
-    """Return (text, used_ocr)."""
-    name = filename.lower()
-
-    if mime_type == "application/pdf" or name.endswith(".pdf"):
-        return _extract_pdf(data)
-    if name.endswith(".docx") or "wordprocessingml" in mime_type:
-        return _extract_docx(data), False
-    if mime_type.startswith("image/"):
-        return _ocr_image(data), True
-    # text/plain and everything else
-    return data.decode("utf-8", errors="ignore"), False
-
-
-def _extract_pdf(data: bytes) -> tuple[str, bool]:
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(data))
-    text = "\n".join((page.extract_text() or "") for page in reader.pages)
-
-    # Scanned PDFs have little/no embedded text → OCR each rendered page.
-    if len(text.strip()) >= OCR_TEXT_THRESHOLD:
-        return text, False
-
-    ocr_pages = []
-    for image in convert_from_bytes(data, dpi=300):
-        ocr_pages.append(pytesseract.image_to_string(image, lang=TESSERACT_LANG))
-    return "\n".join(ocr_pages), True
-
-
-def _extract_docx(data: bytes) -> str:
-    import docx
-
-    document = docx.Document(io.BytesIO(data))
-    return "\n".join(p.text for p in document.paragraphs)
-
-
-def _ocr_image(data: bytes) -> str:
-    image = Image.open(io.BytesIO(data))
-    return pytesseract.image_to_string(image, lang=TESSERACT_LANG)
-```
-
-### 9.4 Chunking
-
-`apps/ai/app/chunking.py`:
-
-```python
-"""Split long text into overlapping chunks for embedding."""
-
-
-def chunk_text(text: str, size: int = 800, overlap: int = 150) -> list[str]:
-    text = " ".join(text.split())  # normalise whitespace
-    if not text:
-        return []
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + size, len(text))
-        chunks.append(text[start:end])
-        if end == len(text):
-            break
-        start = end - overlap  # overlap preserves context across boundaries
-    return chunks
-```
-
-> You can replace this with LangChain's `RecursiveCharacterTextSplitter`
-> (named in the report). The hand-rolled version keeps the dependency surface
-> small and is easy to explain in the dissertation.
-
-### 9.5 Vector store (Qdrant + embeddings)
-
-We use **Qdrant** as the vector database. Unlike an embedded store, Qdrant runs
-as its own service (a Docker container locally, or managed **Qdrant Cloud** in
-production), and the AI service talks to it over HTTP/gRPC via `qdrant-client`.
-We compute embeddings ourselves with `sentence-transformers` (multilingual
-MiniLM, 384-dim) and pass the raw vectors to Qdrant — this keeps the embedding
-model identical across index and query time.
-
-`apps/ai/app/store.py`:
-
-```python
-"""Qdrant-backed vector store with multilingual sentence-transformer embeddings."""
-import uuid
-from functools import lru_cache
-
-from qdrant_client import QdrantClient
-from qdrant_client.http import models as qm
-
-from .config import (
-    EMBEDDING_DIM,
-    EMBEDDING_MODEL,
-    QDRANT_API_KEY,
-    QDRANT_COLLECTION,
-    QDRANT_URL,
-)
-
-
-@lru_cache(maxsize=1)
-def _embedder():
-    # Loaded once and cached; downloads the model on first use.
-    from sentence_transformers import SentenceTransformer
-
-    return SentenceTransformer(EMBEDDING_MODEL)
-
-
-def _embed(texts: list[str]) -> list[list[float]]:
-    return _embedder().encode(texts, normalize_embeddings=True).tolist()
-
-
-@lru_cache(maxsize=1)
-def _client() -> QdrantClient:
-    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-    # Create the collection once (idempotent). Cosine distance pairs well with
-    # normalized embeddings.
-    existing = {c.name for c in client.get_collections().collections}
-    if QDRANT_COLLECTION not in existing:
-        client.create_collection(
-            collection_name=QDRANT_COLLECTION,
-            vectors_config=qm.VectorParams(
-                size=EMBEDDING_DIM, distance=qm.Distance.COSINE
-            ),
-        )
-        # Index the document_id payload field so deletes/filters are fast.
-        client.create_payload_index(
-            collection_name=QDRANT_COLLECTION,
-            field_name="document_id",
-            field_schema=qm.PayloadSchemaType.KEYWORD,
-        )
-    return client
-
-
-def _point_id(document_id: str, chunk: int) -> str:
-    # Qdrant point IDs must be UUIDs or ints; derive a stable UUID per chunk.
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document_id}:{chunk}"))
-
-
-def index_chunks(document_id: str, chunks: list[str], filename: str) -> int:
-    client = _client()
-    # Remove any previous version of this document first (idempotent re-index).
-    delete_document(document_id)
-    if not chunks:
-        return 0
-
-    vectors = _embed(chunks)
-    points = [
-        qm.PointStruct(
-            id=_point_id(document_id, i),
-            vector=vectors[i],
-            payload={
-                "document_id": document_id,
-                "filename": filename,
-                "chunk": i,
-                "text": chunks[i],
-            },
-        )
-        for i in range(len(chunks))
-    ]
-    client.upsert(collection_name=QDRANT_COLLECTION, points=points)
-    return len(chunks)
-
-
-def delete_document(document_id: str) -> None:
-    client = _client()
-    client.delete(
-        collection_name=QDRANT_COLLECTION,
-        points_selector=qm.FilterSelector(
-            filter=qm.Filter(
-                must=[
-                    qm.FieldCondition(
-                        key="document_id",
-                        match=qm.MatchValue(value=document_id),
-                    )
-                ]
-            )
-        ),
-    )
-
-
-def query(question: str, top_k: int = 4) -> dict:
-    client = _client()
-    vector = _embed([question])[0]
-    hits = client.query_points(
-        collection_name=QDRANT_COLLECTION,
-        query=vector,
-        limit=top_k,
-        with_payload=True,
-    ).points
-
-    context = [h.payload.get("text", "") for h in hits]
-    sources = [
-        {
-            "id": h.payload.get("document_id"),
-            "title": h.payload.get("filename"),
-            "score": round(h.score, 4),  # cosine similarity (higher = closer)
-        }
-        for h in hits
-    ]
-    return {"context": context, "sources": sources}
-```
-
-> **Why store the chunk text in the payload?** Qdrant returns the matching
-> points; keeping the original chunk text in `payload["text"]` means the AI
-> service can build the answer context without a second round-trip to Postgres.
-
-### 9.5b Running Qdrant locally
-
-Qdrant is a separate service. Run it with Docker for development:
-
-```bash
-# Persists data in ./apps/ai/qdrant_storage so it survives restarts.
-docker run -p 6333:6333 -p 6334:6334 \
-  -v "$(pwd)/apps/ai/qdrant_storage:/qdrant/storage" \
-  qdrant/qdrant
-```
-
-The dashboard is then at `http://localhost:6333/dashboard`. For production use
-**Qdrant Cloud** (free 1 GB cluster) and set `QDRANT_URL` + `QDRANT_API_KEY`.
-
-### 9.6 ASGI entry (raw style, matching the repo)
-
-`apps/ai/app/main.py` — replaces the stub. Adds multipart handling for
-`/documents`, a `DELETE /documents/{id}` route, and a real `/query`:
-
-```python
-import json
-
-from .chunking import chunk_text
-from .extract import extract_text
-from .store import delete_document, index_chunks, query as vector_query
-
-
-async def app(scope, receive, send):
-    if scope["type"] == "lifespan":
-        await _handle_lifespan(receive, send)
-        return
-
-    assert scope["type"] == "http"
-    path = scope["path"]
-    method = scope["method"]
-
-    if method == "GET" and path == "/health":
-        return await json_response(send, {"status": "healthy"})
-
-    if method == "POST" and path == "/documents":
-        return await _index_document(scope, receive, send)
-
-    if method == "DELETE" and path.startswith("/documents/"):
-        doc_id = path.rsplit("/", 1)[-1]
-        delete_document(doc_id)
-        return await json_response(send, {"documentId": doc_id, "deleted": True})
-
-    if method == "POST" and path == "/query":
-        body = await read_body(receive)
-        return await _query(send, body)
-
-    await json_response(send, {"error": "Not found"}, status=404)
-
-
-async def _index_document(scope, receive, send):
-    # Parse multipart/form-data: fields document_id + file.
-    from .multipart import parse_multipart  # see 9.7
-
-    headers = dict(scope["headers"])
-    content_type = headers.get(b"content-type", b"").decode()
-    raw = await read_raw(receive)
-    fields, files = parse_multipart(raw, content_type)
-
-    document_id = fields.get("document_id", "")
-    upload = files.get("file")
-    if not upload:
-        return await json_response(send, {"error": "file required"}, status=400)
-
-    text, used_ocr = extract_text(
-        upload["data"], upload["content_type"], upload["filename"]
-    )
-    chunks = chunk_text(text)
-    count = index_chunks(document_id, chunks, upload["filename"])
-
-    await json_response(
-        send,
-        {
-            "documentId": document_id,
-            "isOcr": used_ocr,
-            "textLength": len(text),
-            "chunkCount": count,
-        },
-        status=201,
-    )
-
-
-async def _query(send, body):
-    question = body.get("question", "")
-    top_k = int(body.get("topK", 4))
-    result = vector_query(question, top_k=top_k)
-
-    # Without an LLM key, return the retrieved context as a naive answer.
-    # With OPENAI_API_KEY/ANTHROPIC_API_KEY, feed result["context"] to the LLM.
-    answer = _compose_answer(question, result["context"])
-    await json_response(
-        send, {"question": question, "answer": answer, "sources": result["sources"]}
-    )
-
-
-def _compose_answer(question: str, context: list[str]) -> str:
-    if not context:
-        return "No relevant documents were found for your question."
-    # Placeholder extractive answer. Swap for an LLM call in production.
-    return context[0][:600]
-
-
-async def _handle_lifespan(receive, send):
-    while True:
-        message = await receive()
-        if message["type"] == "lifespan.startup":
-            await send({"type": "lifespan.startup.complete"})
-        elif message["type"] == "lifespan.shutdown":
-            await send({"type": "lifespan.shutdown.complete"})
-            return
-
-
-async def read_raw(receive) -> bytes:
-    body, more = b"", True
-    while more:
-        message = await receive()
-        body += message.get("body", b"")
-        more = message.get("more_body", False)
-    return body
-
-
-async def read_body(receive) -> dict:
-    raw = await read_raw(receive)
-    try:
-        return json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        return {}
-
-
-async def json_response(send, data, status=200):
-    body = json.dumps(data).encode("utf-8")
-    await send({
-        "type": "http.response.start",
-        "status": status,
-        "headers": [[b"content-type", b"application/json"]],
-    })
-    await send({"type": "http.response.body", "body": body})
-```
-
-### 9.7 Minimal multipart parser
-
-Add `python-multipart` to `requirements.txt` and wrap it.
-`apps/ai/app/multipart.py`:
-
-```python
-"""Thin wrapper over python-multipart for raw-ASGI file uploads."""
-from streaming_form_data import StreamingFormDataParser  # if you prefer this lib
-# Simpler: use the `multipart` package's MultipartParser.
-
-from multipart import MultipartParser, parse_options_header
-
-
-def parse_multipart(body: bytes, content_type: str):
-    _, options = parse_options_header(content_type)
-    boundary = options.get("boundary")
-    fields: dict[str, str] = {}
-    files: dict[str, dict] = {}
-
-    parser = MultipartParser(body, boundary)
-    for part in parser.parts():
-        if part.filename:
-            files[part.name] = {
-                "filename": part.filename,
-                "content_type": part.content_type or "application/octet-stream",
-                "data": part.raw,
-            }
-        else:
-            fields[part.name] = part.value
-    return fields, files
-```
-
-> **Strong recommendation:** if your supervisor allows it, convert `apps/ai`
-> to **FastAPI**. Then `/documents` becomes:
-> ```python
-> @app.post("/documents")
-> async def index(document_id: str = Form(...), file: UploadFile = File(...)):
->     data = await file.read()
->     text, ocr = extract_text(data, file.content_type, file.filename)
->     ...
-> ```
-> This removes the hand-rolled multipart and lifespan code entirely. The rest
-> of the modules (`extract`, `chunking`, `store`) are unchanged.
-
-### 9.8 Run it
-
-```bash
-cd apps/ai
-source .venv/bin/activate
-pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --port 8000
-# Smoke test:
-curl -F "document_id=test-1" -F "file=@../../docs/sample.pdf" http://localhost:8000/documents
-```
-
----
-
-## 10. Phase 6 — Wiring API → AI service
-
-This is already implemented by `AiClient` (Phase 4.3) and consumed in
-`DocumentsService.index()`. The flow is:
-
-1. Admin uploads → API saves bytes + metadata (`status=pending`).
-2. API immediately responds with the document record (good UX — no waiting).
-3. In the background, API sets `status=processing`, POSTs the file to
-   `AI /documents`, and on success stores `isOcr`, `textLength`, `chunkCount`,
-   `status=indexed`. On error → `status=failed` with `errorMessage`.
-
-The web UI polls `GET /documents/:id` (or the list) to reflect status changes.
-
-> **Production hardening:** replace the fire-and-forget `void this.index(...)`
-> with a real job queue (BullMQ + Redis) so indexing survives API restarts and
-> can retry. For the FYP scope, fire-and-forget with DB status tracking is an
-> acceptable, demonstrable design — just call it out as future work.
-
-Also update the existing `RagController` to proxy `/rag/query` to the AI
-`/query` so the chat uses the same index:
-
-```ts
-// apps/api/src/rag/rag.controller.ts
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AiClient } from '../documents/ai.client';
-
+```typescript
 @Controller('rag')
+@UseGuards(JwtAuthGuard)
 export class RagController {
-  constructor(private readonly ai: AiClient) {}
-
-  @UseGuards(JwtAuthGuard)
   @Post('query')
-  async query(@Body() body: { question: string; topK?: number }) {
-    const res = await fetch(`${process.env.AI_SERVICE_URL}/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return res.json();
+  async query(@Body() dto: RagQueryDto) {
+    return this.ragService.query(dto.question, dto.documentId, dto.topK);
   }
 }
 ```
 
-(Export `AiClient` from `DocumentsModule` and import it into `RagModule`, or
-move `AiClient` to a small shared `ai` module.)
+#### Service
+
+```typescript
+async query(question: string, documentId?: string, topK?: number): Promise<RagQueryResult> {
+  const payload = { question };
+  if (documentId) payload.doc_id = documentId;
+  if (topK) payload.top_k = topK;
+
+  const response = await this.httpService.post(`${aiServiceUrl}/query`, payload, {
+    timeout: 60000,
+  });
+
+  return {
+    answer: response.data.answer,
+    sources: response.data.sources,
+    model_used: response.data.model_used,
+  };
+}
+```
+
+**Error handling:** If the AI service is unreachable (`ECONNREFUSED`), returns a graceful message instead of throwing — the frontend shows "AI service unavailable" rather than a generic error.
 
 ---
 
-## 11. Phase 7 — Frontend Document section (Next.js)
+### 4.4 Validation DTOs
 
-### 11.1 API helpers
+**UploadDocumentDto:**
+```typescript
+title: string  // @IsString, @IsNotEmpty, @MaxLength(200)
+```
 
-Extend `apps/web/lib/api.ts` with document calls. `apiFetch` sets a JSON
-`Content-Type`, so add a dedicated multipart helper (the browser must set the
-multipart boundary itself — never set `Content-Type` manually for `FormData`).
+**ListDocumentsDto:**
+```typescript
+page?: number    // @IsOptional, @Type(() => Number), @IsInt, @Min(1), default 1
+limit?: number   // @IsOptional, @Type(() => Number), @IsInt, @Min(1), @Max(100), default 20
+status?: DocumentStatus  // @IsOptional, @IsEnum(DocumentStatus)
+```
 
-```ts
-// apps/web/lib/documents.ts
-import { apiFetch, tokenStore } from "./api"
+**RagQueryDto:**
+```typescript
+question: string      // @IsString, @IsNotEmpty
+documentId?: string   // @IsOptional, @IsUUID
+topK?: number         // @IsOptional, @Type(() => Number), @IsInt, @Min(1), @Max(50)
+```
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
+All DTOs use `class-validator` decorators. The global `ValidationPipe` in `main.ts` is configured with `whitelist: true` (strips unknown fields) and `forbidNonWhitelisted: true` (rejects requests with extra fields).
 
-export interface DocumentDTO {
+---
+
+## 5. Frontend Integration (apps/web)
+
+### 5.1 API Client Functions
+
+**File:** `lib/api.ts`
+
+```typescript
+// Upload a document (multipart FormData — no Content-Type header, browser sets boundary)
+uploadDocument(file: File, title: string): Promise<RagDocument>
+
+// List documents with pagination and optional status filter
+fetchDocuments(page?: number, limit?: number, status?: DocumentStatus): Promise<RagDocumentListResponse>
+
+// Get single document details
+fetchDocument(id: string): Promise<RagDocument>
+
+// Delete a document (removes from DB, disk, and vector store)
+deleteDocument(id: string): Promise<void>
+
+// Send a RAG query — returns answer + sources
+ragQuery(question: string, documentId?: string, topK?: number): Promise<RagQueryResponse>
+```
+
+**Authentication:** All functions use `tokenStore.get()` to attach `Authorization: Bearer <jwt>` header. The `uploadDocument` function uses raw `fetch` with `FormData` (not `apiFetch`) because `apiFetch` sets `Content-Type: application/json` which breaks multipart uploads.
+
+---
+
+### 5.2 TypeScript Types
+
+**File:** `lib/types.ts`
+
+```typescript
+type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "FAILED"
+
+interface RagDocument {
   id: string
-  noticeId?: string
+  title: string
   filename: string
   mimeType: string
-  sizeBytes: number
+  fileSize: number           // bytes
+  status: DocumentStatus
   isOcr: boolean
-  status: "pending" | "processing" | "indexed" | "failed"
-  textLength?: number
-  chunkCount?: number
-  errorMessage?: string
-  uploadedAt: string
+  textLength: number | null
+  chunkCount: number | null
+  uploadedBy: string
+  createdAt: string          // ISO 8601
+  updatedAt: string
+  indexedAt: string | null
+  user?: { id: string; name: string; email: string }
 }
 
-interface Paginated<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
+interface RagDocumentListResponse {
+  data: RagDocument[]
+  meta: { page: number; limit: number; total: number; totalPages: number }
 }
 
-export function listDocuments(page = 1, limit = 20) {
-  return apiFetch<Paginated<DocumentDTO>>(`/documents?page=${page}&limit=${limit}`)
+interface RagSource {
+  doc_id: string
+  chunk_index: number
+  content: string
+  score: number              // 0.0 to 1.0 (cosine similarity)
 }
 
-export function getDocument(id: string) {
-  return apiFetch<DocumentDTO>(`/documents/${id}`)
-}
-
-export async function uploadDocument(
-  file: File,
-  noticeId?: string,
-): Promise<DocumentDTO> {
-  const form = new FormData()
-  form.append("file", file)
-  if (noticeId) form.append("noticeId", noticeId)
-
-  const token = tokenStore.get()
-  const res = await fetch(`${API_URL}/documents`, {
-    method: "POST",
-    // Do NOT set Content-Type; the browser adds the multipart boundary.
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  })
-  if (!res.ok) throw new Error((await res.text()) || "Upload failed")
-  return res.json()
-}
-
-export function deleteDocument(id: string) {
-  return apiFetch<{ id: string; deleted: boolean }>(`/documents/${id}`, {
-    method: "DELETE",
-  })
-}
-
-export function documentDownloadUrl(id: string) {
-  return `${API_URL}/documents/${id}/download`
-}
-```
-
-### 11.2 Upload component (shadcn-styled)
-
-`apps/web/components/documents/document-upload.tsx`:
-
-```tsx
-"use client"
-
-import { useRef, useState } from "react"
-import { Upload, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { uploadDocument } from "@/lib/documents"
-
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,.txt,.docx"
-
-export function DocumentUpload({ onUploaded }: { onUploaded: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return
-    setBusy(true)
-    setError(null)
-    try {
-      // Upload sequentially to keep server memory predictable.
-      for (const file of Array.from(files)) {
-        await uploadDocument(file)
-      }
-      onUploaded()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-      if (inputRef.current) inputRef.current.value = ""
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={ACCEPT}
-        className="hidden"
-        onChange={(e) => handleFiles(e.target.files)}
-      />
-      <Button onClick={() => inputRef.current?.click()} disabled={busy}>
-        {busy ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <Upload className="size-4" />
-        )}
-        {busy ? "Uploading…" : "Upload documents"}
-      </Button>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
-  )
-}
-```
-
-### 11.3 Document list + status
-
-`apps/web/components/documents/document-list.tsx`:
-
-```tsx
-"use client"
-
-import { useCallback, useEffect, useState } from "react"
-import { FileText, Trash2, Download, ScanLine } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import {
-  DocumentDTO,
-  deleteDocument,
-  documentDownloadUrl,
-  listDocuments,
-} from "@/lib/documents"
-
-const STATUS_VARIANT: Record<DocumentDTO["status"], string> = {
-  indexed: "bg-emerald-500/15 text-emerald-500",
-  processing: "bg-amber-500/15 text-amber-500",
-  pending: "bg-zinc-500/15 text-zinc-400",
-  failed: "bg-red-500/15 text-red-500",
-}
-
-function formatBytes(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 ** 2).toFixed(1)} MB`
-}
-
-export function DocumentList({ refreshKey }: { refreshKey: number }) {
-  const [docs, setDocs] = useState<DocumentDTO[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await listDocuments()
-      setDocs(res.data)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load, refreshKey])
-
-  // Poll while anything is still processing so the badge updates live.
-  useEffect(() => {
-    const pending = docs.some(
-      (d) => d.status === "processing" || d.status === "pending",
-    )
-    if (!pending) return
-    const t = setInterval(load, 2500)
-    return () => clearInterval(t)
-  }, [docs, load])
-
-  async function onDelete(id: string) {
-    await deleteDocument(id)
-    setDocs((d) => d.filter((x) => x.id !== id))
-  }
-
-  if (loading && docs.length === 0) {
-    return <p className="text-sm text-muted-foreground">Loading documents…</p>
-  }
-  if (docs.length === 0) {
-    return <p className="text-sm text-muted-foreground">No documents yet.</p>
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {docs.map((d) => (
-        <Card key={d.id} className="flex items-center gap-3 p-3">
-          <FileText className="size-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{d.filename}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatBytes(d.sizeBytes)}
-              {d.chunkCount ? ` · ${d.chunkCount} chunks` : ""}
-            </p>
-            {d.status === "failed" && d.errorMessage && (
-              <p className="truncate text-xs text-destructive">{d.errorMessage}</p>
-            )}
-          </div>
-          {d.isOcr && (
-            <Badge className="gap-1">
-              <ScanLine className="size-3" /> OCR
-            </Badge>
-          )}
-          <span
-            className={`rounded px-2 py-0.5 text-xs ${STATUS_VARIANT[d.status]}`}
-          >
-            {d.status}
-          </span>
-          <a href={documentDownloadUrl(d.id)} target="_blank" rel="noreferrer">
-            <Button variant="ghost" size="icon">
-              <Download className="size-4" />
-            </Button>
-          </a>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(d.id)}>
-            <Trash2 className="size-4 text-destructive" />
-          </Button>
-        </Card>
-      ))}
-    </div>
-  )
-}
-```
-
-### 11.4 Admin page
-
-`apps/web/app/admin/documents/page.tsx`:
-
-```tsx
-"use client"
-
-import { useState } from "react"
-import { AdminLayout } from "@/components/admin/admin-layout"
-import { DocumentUpload } from "@/components/documents/document-upload"
-import { DocumentList } from "@/components/documents/document-list"
-
-export default function AdminDocumentsPage() {
-  const [refreshKey, setRefreshKey] = useState(0)
-
-  return (
-    <AdminLayout>
-      <div className="flex flex-col gap-6">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Documents</h1>
-            <p className="text-sm text-muted-foreground">
-              Upload notices and source files. Text is extracted (with OCR for
-              scans) and indexed for RAG search.
-            </p>
-          </div>
-          <DocumentUpload onUploaded={() => setRefreshKey((k) => k + 1)} />
-        </header>
-        <DocumentList refreshKey={refreshKey} />
-      </div>
-    </AdminLayout>
-  )
-}
-```
-
-Add a "Documents" link to the admin nav in
-`components/admin/admin-layout.tsx` (follow the existing nav item pattern there).
-
-> The repo's `CLAUDE.md` mandates presenting 2–3 design options before
-> significant *visual* redesigns. The components above are functional scaffolds
-> using existing primitives; when you want to *style* this section richly,
-> present options first per that rule.
-
----
-
-## 12. Phase 8 — Connect documents to the RAG chat
-
-The RAG chat UI already exists (`apps/web/app/rag/page.tsx`,
-`components/floating-chat.tsx`). Point it at the real backend:
-
-```ts
-// apps/web/lib/rag.ts
-import { apiFetch } from "./api"
-
-export interface RagResponse {
-  question: string
+interface RagQueryResponse {
   answer: string
-  sources: { id: string; title: string; score: number }[]
+  sources: RagSource[]
+  model_used: string | null  // "llama-3.1-8b-instant", "extractive", or null
 }
 
-export function askRag(question: string, topK = 4) {
-  return apiFetch<RagResponse>("/rag/query", {
-    method: "POST",
-    body: JSON.stringify({ question, topK }),
-  })
+interface ChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  timestamp: string
+  sources?: RagSource[]      // Attached to assistant messages
 }
 ```
 
-Replace the client-side stub (`lib/local-rag.ts`) usages in the chat components
-with `askRag`. Render `sources` as chips linking to
-`documentDownloadUrl(source.id)`.
+---
 
-Now the loop is closed: **upload a document → it gets indexed → ask a question
-in chat → the answer cites that document.**
+### 5.3 Page Behavior
+
+**File:** `app/rag/page.tsx`
+
+**State management:**
+- `docs: RagDocument[]` — full document list, loaded on mount
+- `messages: ChatMessage[]` — conversation history (client-side only)
+- `selectedDocId` — optional filter for document-specific queries
+- `docsLoading` / `typing` — loading states
+
+**Polling:**
+- On mount: fetches all documents once
+- If any document has `status: PENDING | PROCESSING`: polls every 5 seconds to detect status changes
+- Polling stops automatically when no documents are in-progress
+
+**Upload flow:**
+1. User clicks "Upload" → modal opens with drag-and-drop zone
+2. User selects file (drag-drop or click) + enters title (auto-filled from filename)
+3. Submit → `uploadDocument(file, title)` → API returns Document with `status: PENDING`
+4. Modal closes, doc list refreshes
+5. Polling picks up status change to INDEXED within ~5 seconds
+
+**Query flow:**
+1. User types question or clicks suggestion
+2. User message added to chat immediately
+3. `ragQuery(question, selectedDocId)` called
+4. On success: assistant message added with answer + sources array
+5. On error: assistant message shows friendly error text
+6. Sources displayed as badges below the answer (source index + match score %)
+
+**Document-specific queries:**
+- Clicking "Ask AI" on a DocCard sets `selectedDocId`
+- All subsequent queries include this `documentId` parameter
+- The AI service filters Qdrant search to only that document's chunks
+- A "Filtered" badge appears in the chat header with an X to clear
 
 ---
 
-## 13. Phase 9 — Testing
+## 6. Complete Request Flows
 
-### API (Jest — NestJS default; add `apps/api/test` specs)
+### Flow A: Document Upload (success path)
 
-```ts
-// apps/api/test/documents.service.spec.ts (sketch)
-describe("DocumentsService.upload", () => {
-  it("rejects files over the size limit", async () => {
-    await expect(
-      service.upload({ size: 99_000_000, buffer: Buffer.from("x") } as any, "uid"),
-    ).rejects.toThrow("maximum allowed size");
-  });
-
-  it("rejects disallowed mime types", async () => {
-    // a buffer whose magic bytes resolve to an exe/zip not in ALLOWED_MIME
-  });
-
-  it("persists metadata and triggers indexing on a valid PDF", async () => {
-    // mock StorageDriver + AiClient, assert prisma.document.create called
-  });
-});
+```
+1. Browser → POST /documents (multipart: file=budget.pdf, title="Budget FY 2082/83")
+2. NestJS:
+   - multer saves file as /uploads/a1b2c3d4.pdf
+   - Prisma creates Document { id: "a1b2c3d4-...", status: PENDING }
+   - Returns 201 { id, title, status: "PENDING", ... }
+   - Fires async: processDocument(document)
+3. NestJS (async):
+   - Updates status → PROCESSING
+   - POSTs file to Python AI service /documents
+4. Python AI:
+   - Receives multipart, extracts doc_id from form field
+   - pypdf extracts text (4200 chars) → not OCR
+   - Chunks into 9 chunks (512 char, 50 overlap)
+   - Embeds 9 chunks (384-dim each) via MiniLM
+   - Upserts 9 PointStructs into Qdrant collection
+   - Returns 201 { doc_id, text_length: 4200, chunk_count: 9, is_ocr: false }
+5. NestJS (async):
+   - Updates Document: status=INDEXED, chunkCount=9, textLength=4200,
+     isOcr=false, indexedAt=now()
+6. Browser (polling):
+   - GET /documents → sees status changed to INDEXED
+   - Shows green "9 chunks" badge on the document card
 ```
 
-Run: `cd apps/api && pnpm jest` (add a `test` script if missing).
+### Flow B: RAG Query (with LLM)
 
-### AI service (pytest)
-
-```python
-# apps/ai/tests/test_extract.py
-from app.chunking import chunk_text
-
-
-def test_chunk_overlap():
-    text = "word " * 500
-    chunks = chunk_text(text, size=800, overlap=150)
-    assert len(chunks) >= 1
-    assert all(len(c) <= 800 for c in chunks)
-
-
-def test_txt_extraction():
-    from app.extract import extract_text
-    text, ocr = extract_text(b"hello nepal", "text/plain", "a.txt")
-    assert "hello" in text and ocr is False
+```
+1. Browser → POST /rag/query { question: "What is the education budget?", topK: 5 }
+2. NestJS:
+   - Validates DTO
+   - Forwards to AI: POST /query { question, top_k: 5 }
+3. Python AI:
+   - Embeds question → 384-dim vector
+   - Qdrant search (top-5, cosine) → 5 ranked chunks
+   - Formats context with source labels
+   - Calls Groq API (llama-3.1-8b-instant, temp=0.3, max_tokens=1024)
+   - Groq returns synthesized answer
+   - Returns { answer, sources: [...], model_used: "llama-3.1-8b-instant" }
+4. NestJS → Browser:
+   - Returns same response
+5. Browser:
+   - Renders answer in chat bubble
+   - Shows source badges: "Source 3 · 92%", "Source 1 · 87%", "Source 5 · 81%"
 ```
 
-Run: `cd apps/ai && .venv/bin/python -m pytest`.
+### Flow C: RAG Query (extractive fallback — no Groq key)
 
-### Manual end-to-end
+```
+Same as Flow B except:
+3. Python AI:
+   - GROQ_API_KEY is empty (or API returns error)
+   - Falls back to extractive answer:
+     "[Source 1]: The Ministry of Education has allocated...\n\n
+      [Source 2]: Budget allocation for..."
+   - model_used = "extractive"
+```
 
-1. `pnpm dev` (web + api) and run the AI service.
-2. Log in as an admin (email in `ADMIN_EMAILS`).
-3. Upload a **digital** PDF → status should reach `indexed`, `isOcr=false`.
-4. Upload a **scanned** PDF/image → `isOcr=true`, non-zero `chunkCount`.
-5. Ask a question in `/rag` referencing the uploaded content → answer + source.
-6. Delete the document → it disappears and is removed from the vector store.
+### Flow D: Document Deletion
 
----
-
-## 14. Phase 10 — Deployment notes (AWS)
-
-Matches the report's AWS direction:
-
-- **Files:** set `STORAGE_DRIVER=s3`, create a private S3 bucket, give the API's
-  EC2/ECS task an IAM role with `s3:PutObject/GetObject/DeleteObject` on that
-  bucket only. No access keys in env on AWS.
-- **Database:** point `DATABASE_URL` at RDS Postgres (or Neon). Run
-  `pnpm prisma:deploy` (`prisma migrate deploy`) on release.
-- **Vector store (Qdrant):** use **Qdrant Cloud** (free 1 GB tier) and set
-  `QDRANT_URL` + `QDRANT_API_KEY` — no stateful service to operate yourself.
-  Alternatively self-host the `qdrant/qdrant` container on ECS/EC2 with an
-  attached EBS volume mounted at `/qdrant/storage`. Keep `qdrant-client`
-  pointed at the right URL per environment; nothing else changes.
-- **OCR:** the AI container image must install `tesseract-ocr`,
-  `tesseract-ocr-nep`, and `poppler-utils`. Add them to the AI service's
-  Dockerfile `apt-get install` line.
-- **Large uploads:** if behind CloudFront/ALB, confirm body size limits; for
-  files >10 MB prefer **S3 pre-signed upload URLs** (browser → S3 directly),
-  then notify the API of the new object key. This avoids streaming big files
-  through the API at all.
-- **CORS:** `WEB_ORIGIN` already drives API CORS; set it to the deployed web
-  origin.
-- **Security reminder:** uploads are admin-only and MIME is verified by magic
-  bytes; keep it that way. Never serve the raw storage key; downloads go
-  through the authenticated `/documents/:id/download` route (or short-lived
-  pre-signed URLs on S3).
+```
+1. Browser → DELETE /documents/a1b2c3d4-...
+2. NestJS:
+   - Calls AI: DELETE /documents/a1b2c3d4-...
+     (removes all matching points from Qdrant)
+   - Deletes file: /uploads/a1b2c3d4.pdf
+   - Deletes Prisma record
+   - Returns { message: "Document deleted successfully" }
+3. Browser:
+   - Removes document from local state array
+```
 
 ---
 
-## 15. Build order checklist
+## 7. Error Handling & Resilience
 
-Work top to bottom; each step is independently verifiable.
-
-- [ ] **Types** — extend `Document` in `packages/types`.
-- [ ] **DB** — add `Document` model + `DocumentStatus`, run `prisma:migrate`.
-- [ ] **Storage** — add `StorageModule` (Local driver), register globally.
-- [ ] **API module** — DTOs, `AiClient`, `DocumentsService`, controller, module; register in `app.module.ts`.
-- [ ] **Smoke test API** — `POST /documents` with a JWT (AI service can be down; status becomes `failed`, that's fine).
-- [ ] **AI service** — add deps + system packages; implement `extract`, `chunking`, `store`, rewrite `main.py` (or move to FastAPI).
-- [ ] **End-to-end index** — upload reaches `indexed` with real `chunkCount`.
-- [ ] **Frontend** — `lib/documents.ts`, upload + list components, `/admin/documents` page + nav link.
-- [ ] **RAG wiring** — proxy `/rag/query`, swap chat to `askRag`, show sources.
-- [ ] **Tests** — API Jest + AI pytest + manual E2E.
-- [ ] **AWS** — flip `STORAGE_DRIVER=s3`, RDS `DATABASE_URL`, OCR packages in Dockerfile.
+| Scenario | Handling |
+|----------|----------|
+| AI service is down during upload | Document stays in DB. NestJS marks as `FAILED`. Frontend shows "Failed" badge. |
+| AI service is down during query | NestJS catches `ECONNREFUSED`, returns `{ answer: "AI service unavailable...", sources: [], model_used: "none" }` |
+| Groq API is down or key missing | Python AI falls back to extractive answer. No error shown to user — just raw chunk text. |
+| Qdrant is down during upload | Python AI returns `503`. NestJS marks document as `FAILED`. |
+| Qdrant is down during query | Python AI returns `500`. NestJS propagates → Frontend shows error in chat. |
+| File extraction fails (corrupt PDF) | Python AI returns `422`. NestJS marks document as `FAILED`. |
+| No text extracted (blank pages) | Python AI returns `422` with message. NestJS marks as `FAILED`. |
+| Upload timeout (>2 minutes) | NestJS HttpService times out. Document marked `FAILED`. |
+| Query timeout (>60 seconds) | NestJS HttpService times out. Error propagated to frontend. |
+| AI service delete fails during removal | NestJS logs warning, continues with disk + DB deletion (orphan in Qdrant is acceptable). |
+| Invalid file type | Multer rejects with `400` before any processing. |
+| File too large (>50MB) | Multer rejects with `413` before any processing. |
 
 ---
 
-### Notes on fidelity to the existing codebase
+## 8. Environment Configuration
 
-- Auth/role patterns (`JwtAuthGuard`, `RolesGuard`, `@Roles('admin')`,
-  `@CurrentUser()`) are reused exactly as in `auth.controller.ts`.
-- Prisma conventions (`@db.Uuid`, snake_case `@map`, `@@map`) match the existing
-  `User` model and `init` migration.
-- `multer`, `file-type`, `uuid`, `sharp` are already in the dependency tree —
-  no new API deps needed unless/until you add `@aws-sdk/client-s3`.
-- The AI service additions (`pypdf`, `pytesseract`, `pdf2image`,
-  `sentence-transformers`, `qdrant-client`) line up with the report's stated
-  stack (Tesseract OCR, Hugging Face models, LangChain). **Qdrant** replaces the
-  report's ChromaDB choice as the vector store — a more production-ready,
-  free/open-source option (see `docs/TechStackByModule.md`).
+### apps/ai/.env
+```bash
+PORT=8000
+ENVIRONMENT=development
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=documents
+CHUNK_SIZE=512
+CHUNK_OVERLAP=50
+GROQ_API_KEY=gsk_xxxxxxxxxxxx          # Get free from console.groq.com
+TESSERACT_LANG=nep+eng
+UPLOAD_DIR=./data/uploads
+CORS_ORIGINS=http://localhost:3000,http://localhost:5005
+```
+
+### apps/api/.env
+```bash
+PORT=5005
+DATABASE_URL=postgresql://postgres:password@localhost:5432/govnotice
+GOOGLE_CLIENT_ID=your-google-client-id
+JWT_SECRET=your-jwt-secret
+ADMIN_EMAILS=admin@example.com
+WEB_ORIGIN=http://localhost:3000
+AI_SERVICE_URL=http://localhost:8000
+```
+
+### apps/web/.env.local
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:5005
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
+```
+
+---
+
+## 9. Running the System
+
+### Prerequisites
+- Node.js 18+, pnpm 10+
+- Python 3.10+
+- PostgreSQL 14+
+- Qdrant (Docker recommended)
+- Tesseract OCR with Nepali language pack
+
+### Step-by-step
+
+```bash
+# 1. Start Qdrant (Docker)
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 qdrant/qdrant
+
+# 2. Ensure PostgreSQL is running with the govnotice database
+
+# 3. Install all dependencies
+pnpm install
+
+# 4. Setup Python AI service
+cd apps/ai
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd ../..
+
+# 5. Run database migration
+cd apps/api
+npx prisma migrate dev
+cd ../..
+
+# 6. Start all services (via Turborepo)
+pnpm dev
+```
+
+This starts:
+- Next.js frontend on `:3000`
+- NestJS API on `:5005`
+- Python AI service on `:8000`
+
+### Installing Tesseract
+
+**macOS:**
+```bash
+brew install tesseract
+brew install tesseract-lang    # Includes Nepali
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install tesseract-ocr tesseract-ocr-nep
+```
+
+### Getting a Groq API Key (free)
+1. Go to https://console.groq.com
+2. Sign up (free, no credit card)
+3. Generate an API key
+4. Set `GROQ_API_KEY` in `apps/ai/.env`
+
+Without Groq key the system still works — answers are extractive (raw chunk text) instead of LLM-synthesized.
+
+---
+
+## 10. Dependencies
+
+### Python AI Service
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| uvicorn | >=0.30.0 | ASGI server |
+| httpx | >=0.27.0 | Async HTTP client (Groq API calls) |
+| python-multipart | >=0.0.9 | Multipart form parsing |
+| pypdf | >=4.0.0 | PDF text extraction |
+| python-docx | >=1.1.0 | DOCX text extraction |
+| pytesseract | >=0.3.10 | OCR (Tesseract Python wrapper) |
+| pdf2image | >=1.17.0 | PDF page → image for OCR |
+| Pillow | >=10.0.0 | Image processing |
+| sentence-transformers | >=3.0.0 | Embedding model (MiniLM) |
+| qdrant-client | >=1.9.0 | Qdrant vector DB client |
+| numpy | >=1.26.0 | Numerical operations |
+
+### NestJS API (Document-specific)
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| @nestjs/axios | ^4.0.1 | HTTP client for AI service |
+| axios | ^1.18.1 | Underlying HTTP library |
+| multer | ^2.2.0 | Multipart file upload |
+| form-data | ^4.0.6 | FormData for forwarding files |
+| uuid | ^14.0.1 | UUID generation for filenames |
+| @prisma/client | ^6.2.0 | Database ORM |
+
+### Frontend
+
+No additional packages beyond the existing Next.js setup — uses native `fetch` API and React state.
+
+---
+
+## Appendix: File Map
+
+```
+apps/
+├── ai/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── config.py        ← Environment configuration
+│   │   ├── extractor.py     ← PDF/DOCX/Image/TXT text extraction + OCR
+│   │   ├── chunker.py       ← Paragraph-aware text chunking with overlap
+│   │   ├── embeddings.py    ← Sentence-transformers model (MiniLM, 384-dim)
+│   │   ├── store.py         ← Qdrant vector store interface
+│   │   ├── llm.py           ← Groq API client (llama-3.1-8b-instant)
+│   │   ├── rag.py           ← RAG orchestration pipeline
+│   │   └── main.py          ← ASGI app, routing, multipart parsing, CORS
+│   ├── data/uploads/         ← Runtime: uploaded files stored here
+│   ├── requirements.txt
+│   └── .env.example
+│
+├── api/
+│   ├── prisma/
+│   │   └── schema.prisma    ← Document model + DocumentStatus enum
+│   ├── src/
+│   │   ├── controllers/
+│   │   │   ├── documents.controller.ts  ← CRUD + upload + download
+│   │   │   └── rag.controller.ts        ← POST /rag/query
+│   │   ├── services/
+│   │   │   ├── documents.service.ts     ← Business logic + async AI processing
+│   │   │   └── rag.service.ts           ← AI service proxy
+│   │   ├── modules/
+│   │   │   ├── documents.module.ts
+│   │   │   └── rag.module.ts
+│   │   └── dto/
+│   │       ├── upload-document.dto.ts
+│   │       ├── list-documents.dto.ts
+│   │       └── rag-query.dto.ts
+│   └── uploads/              ← Runtime: uploaded files stored here
+│
+└── web/
+    ├── app/rag/page.tsx      ← Document Intelligence UI (library + chat)
+    └── lib/
+        ├── api.ts            ← uploadDocument, fetchDocuments, ragQuery, etc.
+        └── types.ts          ← RagDocument, RagSource, ChatMessage, etc.
+```

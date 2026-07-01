@@ -1,19 +1,15 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { RagService } from '../services/rag.service';
+import { RagQueryDto } from '../dto/rag-query.dto';
 
 @Controller('rag')
+@UseGuards(JwtAuthGuard)
 export class RagController {
+  constructor(private readonly ragService: RagService) {}
+
   @Post('query')
-  query(@Body() body: { question: string }) {
-    return { message: 'RAG query proxy', question: body.question, answer: '' };
-  }
-
-  @Get('documents')
-  listDocuments() {
-    return { message: 'List documents', data: [] };
-  }
-
-  @Post('documents')
-  uploadDocument(@Body() body: any) {
-    return { message: 'Upload document', data: body };
+  async query(@Body() dto: RagQueryDto) {
+    return this.ragService.query(dto.question, dto.documentId, dto.topK);
   }
 }

@@ -33,5 +33,34 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
+  documents   Document[]
+
   @@map("users")
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  FAILED
+}
+
+model Document {
+  id          String         @id @default(uuid()) @db.Uuid
+  title       String
+  filename    String
+  mimeType    String         @map("mime_type")
+  fileSize    Int            @map("file_size")
+  filePath    String         @map("file_path")
+  status      DocumentStatus @default(PENDING)
+  isOcr       Boolean        @default(false) @map("is_ocr")
+  textLength  Int?           @map("text_length")
+  chunkCount  Int?           @map("chunk_count")
+  uploadedBy  String         @map("uploaded_by") @db.Uuid
+  user        User           @relation(fields: [uploadedBy], references: [id])
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  indexedAt   DateTime?      @map("indexed_at")
+
+  @@map("documents")
 }

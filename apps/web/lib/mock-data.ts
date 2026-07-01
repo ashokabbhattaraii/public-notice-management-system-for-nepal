@@ -1,4 +1,9 @@
-import { Notice, User, RagDocument, ScrapingSource, AlertRule, Activity } from "./types"
+import { Notice, User, ScrapingSource, AlertRule, Activity } from "./types"
+
+interface MockRagDocument {
+  id: string; title: string; category: string; uploadedAt: string
+  fileSize: string; viewCount: number; summary: string; format: string
+}
 
 export const mockUsers: User[] = [
   {
@@ -322,7 +327,7 @@ export const mockNotices: Notice[] = [
   },
 ]
 
-export const mockDocuments: RagDocument[] = [
+export const mockDocuments: MockRagDocument[] = [
   {
     id: "d1",
     title: "Nepal Constitution 2072 (Full Text)",
