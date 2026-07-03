@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -17,6 +18,7 @@ import FormData = require('form-data');
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
   private readonly aiServiceUrl: string;
+  private readonly aiIndexTimeoutMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -25,6 +27,10 @@ export class DocumentsService {
   ) {
     this.aiServiceUrl =
       this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
+    // Large documents (OCR + embedding) can take a while; default 10 minutes.
+    this.aiIndexTimeoutMs = Number(
+      this.config.get<string>('AI_INDEX_TIMEOUT_MS') ?? 600000,
+    );
   }
 
   async create(data: {
@@ -122,6 +128,98 @@ export class DocumentsService {
     await this.prisma.document.delete({ where: { id } });
   }
 
+  /** Re-embed a document's file into the vector store. */
+  async embed(id: string): Promise<Document> {
+    const document = await this.findOne(id);
+
+    if (document.status === DocumentStatus.PROCESSING) {
+      throw new ConflictException('Document is already being processed');
+    }
+    if (document.status === DocumentStatus.INDEXED) {
+      throw new ConflictException('Document is already embedded');
+    }
+
+    // Kick off asynchronously; the client polls status/progress.
+    this.processDocument(document).catch((err) => {
+      this.logger.error(`Failed to embed document ${id}: ${err.message}`);
+    });
+
+    return this.prisma.document.update({
+      where: { id },
+      data: { status: DocumentStatus.PROCESSING },
+    });
+  }
+
+  /** Remove a document's vectors from the store but keep the file and record. */
+  async unembed(id: string): Promise<Document> {
+    const document = await this.findOne(id);
+
+    if (document.status === DocumentStatus.PROCESSING) {
+      throw new ConflictException(
+        'Document is being processed; wait for it to finish',
+      );
+    }
+
+    try {
+      await firstValueFrom(
+        this.httpService.delete(`${this.aiServiceUrl}/documents/${id}`),
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to remove vectors for document ${id}: ${err.message}`,
+      );
+      throw new ConflictException(
+        'Could not remove document from the vector store. Is the AI service running?',
+      );
+    }
+
+    return this.prisma.document.update({
+      where: { id },
+      data: {
+        status: DocumentStatus.UNEMBEDDED,
+        chunkCount: null,
+        indexedAt: null,
+      },
+    });
+  }
+
+  /** Live ingestion progress for many documents in a single AI-service call. */
+  async getProgressBatch(
+    ids: string[],
+  ): Promise<Record<string, Record<string, any> | null>> {
+    if (ids.length === 0) return {};
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.aiServiceUrl}/progress`, {
+          params: { ids: ids.join(',') },
+          timeout: 5000,
+        }),
+      );
+      return response.data.progress ?? {};
+    } catch {
+      // AI service unavailable — report nothing rather than failing the poll.
+      return {};
+    }
+  }
+
+  /** Proxy live ingestion progress from the AI service. */
+  async getProgress(id: string): Promise<Record<string, any>> {
+    const document = await this.findOne(id);
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.aiServiceUrl}/documents/${id}/progress`, {
+          timeout: 5000,
+        }),
+      );
+      return { ...response.data, status: document.status };
+    } catch {
+      // No live progress available (AI restarted, or processing not started).
+      return { doc_id: id, stage: null, percent: null, status: document.status };
+    }
+  }
+
   getFilePath(document: Document): string {
     const fullPath = path.resolve(document.filePath);
     if (!fs.existsSync(fullPath)) {
@@ -154,7 +252,9 @@ export class DocumentsService {
           headers: {
             ...form.getHeaders(),
           },
-          timeout: 120000, // 2 minutes timeout for large documents
+          timeout: this.aiIndexTimeoutMs,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
         }),
       );
 

@@ -10,6 +10,7 @@ export interface RagQueryResult {
     chunk_index: number;
     content: string;
     score: number;
+    title?: string;
   }>;
   model_used: string | null;
 }

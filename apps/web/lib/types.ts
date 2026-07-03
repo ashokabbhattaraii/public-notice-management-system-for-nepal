@@ -53,7 +53,19 @@ export interface AlertRule {
   matchCount: number
 }
 
-export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "FAILED"
+export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "UNEMBEDDED" | "FAILED"
+
+/** Live ingestion progress reported by the AI service while a document embeds. */
+export interface DocumentProgress {
+  doc_id: string
+  stage: "extracting" | "chunking" | "embedding" | "indexing" | "done" | "failed" | null
+  percent: number | null
+  total_chunks?: number
+  processed_chunks?: number
+  message?: string
+  error?: string | null
+  status?: DocumentStatus
+}
 
 export interface RagDocument {
   id: string
@@ -82,6 +94,7 @@ export interface RagSource {
   chunk_index: number
   content: string
   score: number
+  title?: string
 }
 
 export interface RagQueryResponse {
@@ -96,6 +109,7 @@ export interface ChatMessage {
   content: string
   timestamp: string
   sources?: RagSource[]
+  modelUsed?: string | null
 }
 
 export interface ScrapingSource {

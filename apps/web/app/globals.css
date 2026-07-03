@@ -373,6 +373,15 @@
   transform: translateY(110%);
 }
 
+/* StaggerGrid / PopIcon: children start hidden until GSAP reveals them */
+.vz-stagger-grid > * {
+  opacity: 0;
+}
+
+.vz-pop {
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vz-reveal {
     opacity: 1;
@@ -382,6 +391,11 @@
 
   .vz-word-line .vz-word {
     transform: none;
+  }
+
+  .vz-stagger-grid > *,
+  .vz-pop {
+    opacity: 1;
   }
 }
 

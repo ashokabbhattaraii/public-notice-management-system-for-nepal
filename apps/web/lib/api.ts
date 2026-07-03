@@ -1,4 +1,4 @@
-import { User, RagDocument, RagDocumentListResponse, RagQueryResponse, DocumentStatus } from "./types"
+import { User, RagDocument, RagDocumentListResponse, RagQueryResponse, DocumentStatus, DocumentProgress } from "./types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
@@ -109,6 +109,30 @@ export async function fetchDocument(id: string): Promise<RagDocument> {
 
 export async function deleteDocument(id: string): Promise<void> {
   await apiFetch<{ message: string }>(`/documents/${id}`, { method: "DELETE" })
+}
+
+/** Start embedding a document's file into the vector store. */
+export async function embedDocument(id: string): Promise<RagDocument> {
+  return apiFetch<RagDocument>(`/documents/${id}/embed`, { method: "POST" })
+}
+
+/** Remove a document's vectors from the store (keeps the file and record). */
+export async function unembedDocument(id: string): Promise<RagDocument> {
+  return apiFetch<RagDocument>(`/documents/${id}/unembed`, { method: "POST" })
+}
+
+/** Live ingestion progress while a document is PENDING/PROCESSING. */
+export async function fetchDocumentProgress(id: string): Promise<DocumentProgress> {
+  return apiFetch<DocumentProgress>(`/documents/${id}/progress`)
+}
+
+/** Batched progress for several documents — one request per poll tick. */
+export async function fetchDocumentsProgress(
+  ids: string[],
+): Promise<Record<string, DocumentProgress | null>> {
+  if (ids.length === 0) return {}
+  const params = new URLSearchParams({ ids: ids.join(",") })
+  return apiFetch<Record<string, DocumentProgress | null>>(`/documents/progress/batch?${params}`)
 }
 
 // ─── RAG Query API ───────────────────────────────────────────────────────────

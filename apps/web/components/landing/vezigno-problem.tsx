@@ -3,6 +3,7 @@
 import React from "react"
 import { Reveal } from "./reveal"
 import { CountUp } from "./count-up"
+import { StaggerGrid, TiltCard } from "./motion"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow } from "./vezigno-ui"
 
@@ -46,11 +47,11 @@ export function VezignoProblem() {
         />
 
         {/* Asymmetric bento — wide/narrow alternating */}
-        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:mt-16 lg:grid-cols-3">
+        <StaggerGrid amount={0.45} className="mt-12 grid gap-5 md:grid-cols-2 lg:mt-16 lg:grid-cols-3">
           {problems.map((p, i) => (
-            <Reveal
+            <TiltCard
               key={p.title}
-              delay={i * 100}
+              max={4}
               className={p.wide ? "lg:col-span-2" : ""}
             >
               <div className="vz-sweep vz-glass group flex h-full flex-col justify-between rounded-[20px] p-8 md:p-10">
@@ -71,9 +72,9 @@ export function VezignoProblem() {
                   </p>
                 </div>
               </div>
-            </Reveal>
+            </TiltCard>
           ))}
-        </div>
+        </StaggerGrid>
       </div>
     </section>
   )

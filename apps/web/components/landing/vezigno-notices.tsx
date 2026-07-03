@@ -7,6 +7,7 @@ import { Reveal } from "./reveal"
 import { CountUp } from "./count-up"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow, ArrowCta } from "./vezigno-ui"
+import { Magnetic, StaggerGrid, TiltCard } from "./motion"
 
 const stats = [
   { value: "50+", label: "Government sources" },
@@ -42,7 +43,7 @@ export function VezignoNotices() {
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
         {/* Stats strip */}
         <Reveal>
-          <div className="grid grid-cols-2 gap-y-10 border-b border-vez-line pb-16 md:pb-20 lg:grid-cols-4">
+          <StaggerGrid amount={0.4} className="grid grid-cols-2 gap-y-10 border-b border-vez-line pb-16 md:pb-20 lg:grid-cols-4">
             {stats.map((stat, i) => (
               <div
                 key={stat.label}
@@ -54,7 +55,7 @@ export function VezignoNotices() {
                 <p className="mt-2 text-base text-vez-mute">{stat.label}</p>
               </div>
             ))}
-          </div>
+          </StaggerGrid>
         </Reveal>
 
         {/* Featured notices */}
@@ -70,13 +71,15 @@ export function VezignoNotices() {
               />
             </div>
             <Reveal delay={250}>
-              <ArrowCta href="/notices">View all notices</ArrowCta>
+              <Magnetic>
+                <ArrowCta href="/notices">View all notices</ArrowCta>
+              </Magnetic>
             </Reveal>
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3 lg:mt-12">
-            {featured.map((notice, i) => (
-              <Reveal key={notice.id} delay={i * 100}>
+          <StaggerGrid className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3 lg:mt-12">
+            {featured.map((notice) => (
+              <TiltCard key={notice.id}>
                 <Link
                   href="/notices"
                   className="vz-sweep vz-glass group flex h-full flex-col rounded-[20px] p-8"
@@ -104,9 +107,9 @@ export function VezignoNotices() {
                     <span className="shrink-0">{formatDate(notice.publishedAt)}</span>
                   </div>
                 </Link>
-              </Reveal>
+              </TiltCard>
             ))}
-          </div>
+          </StaggerGrid>
         </div>
       </div>
     </section>

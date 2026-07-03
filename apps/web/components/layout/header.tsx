@@ -12,13 +12,14 @@ const sectionLinks = [
   { id: "#problem", label: "Problem" },
   { id: "#solution", label: "Solution" },
   { id: "#features", label: "Features" },
-  { id: "#about", label: "About" },
-  { id: "#contact", label: "Contact" },
+  { id: "#pricing", label: "Pricing" },
 ]
 
 const utilityLinks = [
   { href: "/notices", label: "Notices" },
   { href: "/rag", label: "Documents" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
 ]
 
 export function Header() {

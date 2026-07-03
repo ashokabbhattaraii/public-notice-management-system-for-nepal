@@ -8,12 +8,50 @@ import {
   ThumbsUp, ThumbsDown, RefreshCw, CheckCircle,
   Clock, AlertCircle, Loader2, X, File,
 } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { Header } from "@/components/layout/header"
-import { ChatMessage, RagDocument, RagSource } from "@/lib/types"
+import { ChatMessage, RagDocument, RagSource, DocumentProgress } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
-import { fetchDocuments, uploadDocument, deleteDocument, ragQuery } from "@/lib/api"
+import {
+  fetchDocuments, uploadDocument, deleteDocument, ragQuery,
+  embedDocument, unembedDocument, fetchDocumentsProgress,
+} from "@/lib/api"
+
+// Titles often arrive as raw filenames ("_Hamro_Life_Bank_SRS.pdf");
+// humanize them for display in the source chips.
+function prettySourceTitle(s: RagSource): string {
+  const raw = s.title || `Chunk ${s.chunk_index + 1}`
+  return raw
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+// One chip per document with its citation numbers combined ("[1][2]"),
+// instead of a chip per chunk repeating the same name.
+function groupSources(sources: RagSource[]) {
+  const groups = new Map<string, { title: string; refs: number[]; score: number; preview: string }>()
+  sources.forEach((s, i) => {
+    const existing = groups.get(s.doc_id)
+    if (existing) {
+      existing.refs.push(i + 1)
+      existing.score = Math.max(existing.score, s.score)
+    } else {
+      groups.set(s.doc_id, {
+        title: prettySourceTitle(s),
+        refs: [i + 1],
+        score: s.score,
+        preview: s.content.slice(0, 300),
+      })
+    }
+  })
+  return [...groups.values()]
+}
 
 type ViewMode = "split" | "chat" | "library"
+type MobileTab = "library" | "chat"
 
 const suggestions = [
   "What does the constitution say about fundamental rights?",
@@ -21,6 +59,13 @@ const suggestions = [
   "What are the e-procurement rules?",
   "What are civil service promotion requirements?",
 ]
+
+const stageLabels: Record<string, string> = {
+  extracting: "Extracting text",
+  chunking: "Chunking",
+  embedding: "Embedding",
+  indexing: "Indexing",
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -37,47 +82,114 @@ function formatMimeType(mime: string): string {
   return mime.split("/").pop()?.toUpperCase() ?? "FILE"
 }
 
+// ─── Markdown ─────────────────────────────────────────────────────────────────
+
+function Markdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold text-vez-ink">{children}</strong>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-vez-navy underline underline-offset-2">{children}</a>
+        ),
+        h1: ({ children }) => <p className="mb-2 text-base font-semibold text-vez-ink">{children}</p>,
+        h2: ({ children }) => <p className="mb-2 text-base font-semibold text-vez-ink">{children}</p>,
+        h3: ({ children }) => <p className="mb-1.5 font-semibold text-vez-ink">{children}</p>,
+        code: ({ children }) => (
+          <code className="rounded bg-vez-sky/20 px-1.5 py-0.5 font-mono text-[13px] text-vez-navy">{children}</code>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="mb-2 border-l-2 border-vez-sky pl-3 text-vez-mute last:mb-0">{children}</blockquote>
+        ),
+        table: ({ children }) => (
+          <div className="mb-2 overflow-x-auto last:mb-0">
+            <table className="w-full border-collapse text-sm">{children}</table>
+          </div>
+        ),
+        th: ({ children }) => <th className="border border-vez-line/60 bg-vez-sky/10 px-3 py-1.5 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border border-vez-line/60 px-3 py-1.5 align-top">{children}</td>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+
+// ─── Embed toggle ─────────────────────────────────────────────────────────────
+
+function EmbedToggle({ on, busy, onChange }: { on: boolean; busy: boolean; onChange: () => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={on ? "Remove from knowledge base" : "Embed into knowledge base"}
+      disabled={busy}
+      onClick={onChange}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+        on ? "bg-emerald-500" : "bg-vez-line"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 flex size-5 items-center justify-center rounded-full bg-white shadow transition-all duration-200 ${
+          on ? "left-[22px]" : "left-0.5"
+        }`}
+      >
+        {busy && <Loader2 className="size-3 animate-spin text-vez-mute" />}
+      </span>
+    </button>
+  )
+}
+
 // ─── DocCard ──────────────────────────────────────────────────────────────────
 
-function DocCard({ doc, onDelete, onAsk }: {
-  doc: RagDocument; onDelete: () => void; onAsk: () => void
+function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: {
+  doc: RagDocument
+  progress?: DocumentProgress
+  toggleBusy: boolean
+  onToggleEmbed: () => void
+  onDelete: () => void
+  onAsk: () => void
 }) {
   const isIndexed = doc.status === "INDEXED"
-  const isPending = doc.status === "PENDING" || doc.status === "PROCESSING"
+  const isProcessing = doc.status === "PENDING" || doc.status === "PROCESSING"
   const isFailed = doc.status === "FAILED"
+  const isUnembedded = doc.status === "UNEMBEDDED"
+
+  const percent = isProcessing ? (progress?.percent ?? 0) : 0
+  const stageLabel = progress?.stage ? stageLabels[progress.stage] ?? "Processing" : "Queued"
 
   return (
-    <div className="rounded-2xl border border-vez-line/50 bg-white p-5 shadow-sm transition-all hover:border-vez-sky/50 hover:shadow-md">
-      <div className="mb-4 flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-vez-sky/20">
+    <div className="rounded-2xl border border-vez-line/50 bg-white p-4 shadow-sm transition-all hover:border-vez-sky/50 hover:shadow-md sm:p-5">
+      <div className="mb-3 flex items-start gap-3 sm:gap-4">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-vez-sky/20 sm:size-11">
           <FileText className="size-5 text-vez-navy" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-[15px] font-medium leading-snug text-vez-ink">{doc.title}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-vez-surface px-2.5 py-1 text-xs font-medium text-vez-mute">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-md bg-vez-surface px-2 py-0.5 text-xs font-medium text-vez-mute">
               {formatMimeType(doc.mimeType)}
             </span>
-            <span className="rounded-md bg-vez-surface px-2.5 py-1 text-xs text-vez-mute">
+            <span className="rounded-md bg-vez-surface px-2 py-0.5 text-xs text-vez-mute">
               {formatFileSize(doc.fileSize)}
             </span>
             {isIndexed && (
-              <span className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+              <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                 <Database className="size-3" /> {doc.chunkCount} chunks
               </span>
             )}
-            {isPending && (
-              <span className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                <Loader2 className="size-3 animate-spin" /> Processing...
-              </span>
-            )}
             {isFailed && (
-              <span className="flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+              <span className="flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
                 <AlertCircle className="size-3" /> Failed
               </span>
             )}
             {doc.isOcr && (
-              <span className="rounded-md bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+              <span className="rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
                 OCR
               </span>
             )}
@@ -85,9 +197,47 @@ function DocCard({ doc, onDelete, onAsk }: {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-vez-line/40 pt-4">
+      {/* Embed state row */}
+      {isProcessing ? (
+        <div className="mb-3 rounded-xl bg-vez-surface/70 px-3.5 py-3">
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 font-medium text-vez-navy">
+              <Loader2 className="size-3 animate-spin" /> {stageLabel}
+            </span>
+            <span className="tabular-nums text-vez-mute">
+              {progress?.total_chunks
+                ? `${progress.processed_chunks}/${progress.total_chunks} chunks · ${percent}%`
+                : `${percent}%`}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-vez-line/50">
+            <div
+              className="h-full rounded-full bg-vez-navy transition-all duration-500"
+              style={{ width: `${Math.max(percent, 3)}%` }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-vez-surface/70 px-3.5 py-2.5">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-vez-ink">
+              {isIndexed ? "Embedded" : isFailed ? "Embedding failed" : "Not embedded"}
+            </p>
+            <p className="truncate text-xs text-vez-mute">
+              {isIndexed
+                ? "Searchable in AI answers"
+                : isFailed
+                  ? "Toggle to retry"
+                  : "Toggle to add to the knowledge base"}
+            </p>
+          </div>
+          <EmbedToggle on={isIndexed} busy={toggleBusy} onChange={onToggleEmbed} />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 border-t border-vez-line/40 pt-3">
         <button
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-vez-navy transition-colors hover:bg-vez-sky/15 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-vez-navy transition-colors hover:bg-vez-sky/15 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={onAsk}
           disabled={!isIndexed}
         >
@@ -95,7 +245,7 @@ function DocCard({ doc, onDelete, onAsk }: {
         </button>
 
         <button
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
           onClick={onDelete}
         >
           <Trash2 className="size-4" /> Delete
@@ -148,11 +298,11 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8" onClick={e => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-vez-ink">Upload Document</h2>
-            <p className="mt-1 text-sm text-vez-mute">Add a document to the AI knowledge base</p>
+            <p className="mt-1 text-sm text-vez-mute">Uploads start embedding automatically</p>
           </div>
           <button onClick={onClose} className="rounded-full p-2 text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-ink">
             <X className="size-5" />
@@ -176,7 +326,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className={`flex w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 transition-all ${
+              className={`flex w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-8 transition-all sm:py-10 ${
                 dragOver
                   ? "border-vez-navy bg-vez-sky/10"
                   : file
@@ -233,7 +383,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             className="flex h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-vez-navy text-base font-medium text-white transition-all hover:bg-vez-navy/90 disabled:opacity-40"
           >
             {uploading ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
-            {uploading ? "Uploading & Indexing..." : "Upload & Index Document"}
+            {uploading ? "Uploading..." : "Upload & Embed"}
           </button>
         </div>
       </div>
@@ -247,6 +397,7 @@ export default function RagPage() {
   const { user } = useAuth()
 
   const [view, setView] = useState<ViewMode>("split")
+  const [mobileTab, setMobileTab] = useState<MobileTab>("chat")
   const [docSearch, setDocSearch] = useState("")
   const [chatInput, setChatInput] = useState("")
   const [typing, setTyping] = useState(false)
@@ -254,6 +405,8 @@ export default function RagPage() {
   const [docsLoading, setDocsLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>()
+  const [progressMap, setProgressMap] = useState<Record<string, DocumentProgress>>({})
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: "sys-1", role: "assistant",
     content: "Hello! I'm Suchana AI — your document intelligence assistant. Ask me anything about the indexed government documents.",
@@ -270,26 +423,60 @@ export default function RagPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, typing])
 
-  const loadDocs = useCallback(async () => {
+  const loadDocs = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
-      setDocsLoading(true)
+      if (!opts.silent) setDocsLoading(true)
       const response = await fetchDocuments(1, 100)
       setDocs(response.data)
     } catch {
       // Silently fail - will show empty state
     } finally {
-      setDocsLoading(false)
+      if (!opts.silent) setDocsLoading(false)
     }
   }, [])
 
   useEffect(() => { loadDocs() }, [loadDocs])
 
+  // Live progress polling while documents are embedding.
+  const processingKey = docs
+    .filter(d => d.status === "PENDING" || d.status === "PROCESSING")
+    .map(d => d.id)
+    .join(",")
+
   useEffect(() => {
-    const hasProcessing = docs.some(d => d.status === "PENDING" || d.status === "PROCESSING")
-    if (!hasProcessing) return
-    const timer = setInterval(loadDocs, 5000)
-    return () => clearInterval(timer)
-  }, [docs, loadDocs])
+    if (!processingKey) return
+    const ids = processingKey.split(",")
+    let cancelled = false
+    let ticks = 0
+
+    const tick = async () => {
+      ticks += 1
+      let result: Record<string, DocumentProgress | null> = {}
+      try {
+        result = await fetchDocumentsProgress(ids)
+      } catch {
+        return
+      }
+      if (cancelled) return
+
+      const next: Record<string, DocumentProgress> = {}
+      let anyFinished = false
+      for (const id of ids) {
+        const entry = result[id]
+        if (!entry) continue
+        next[id] = entry
+        if (entry.stage === "done" || entry.stage === "failed") anyFinished = true
+      }
+      setProgressMap(prev => ({ ...prev, ...next }))
+      // Refresh the list when something finished — or periodically as a
+      // safety net in case the AI service has no progress entry for a doc.
+      if (anyFinished || ticks % 8 === 0) loadDocs({ silent: true })
+    }
+
+    tick()
+    const timer = setInterval(tick, 2500)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [processingKey, loadDocs])
 
   const filteredDocs = useMemo(() =>
     docs.filter(d =>
@@ -306,6 +493,24 @@ export default function RagPage() {
       setDocs(prev => prev.filter(d => d.id !== id))
     } catch (e: any) {
       alert(`Delete failed: ${e.message}`)
+    }
+  }
+
+  const handleToggleEmbed = async (doc: RagDocument) => {
+    setTogglingIds(prev => new Set(prev).add(doc.id))
+    try {
+      const updated = doc.status === "INDEXED"
+        ? await unembedDocument(doc.id)
+        : await embedDocument(doc.id)
+      setDocs(prev => prev.map(d => (d.id === doc.id ? { ...d, ...updated } : d)))
+    } catch (e: any) {
+      alert(`Could not update embedding: ${e.message}`)
+    } finally {
+      setTogglingIds(prev => {
+        const next = new Set(prev)
+        next.delete(doc.id)
+        return next
+      })
     }
   }
 
@@ -331,6 +536,7 @@ export default function RagPage() {
         content: result.answer,
         timestamp: new Date().toISOString(),
         sources: result.sources.length > 0 ? result.sources : undefined,
+        modelUsed: result.model_used,
       }
       setMessages(prev => [...prev, assistantMsg])
     } catch (e: any) {
@@ -355,25 +561,32 @@ export default function RagPage() {
     setSelectedDocId(undefined)
   }
 
+  const askAboutDoc = (doc: RagDocument) => {
+    setSelectedDocId(doc.id)
+    sendMessage(`What are the key provisions of "${doc.title}"?`)
+    if (view === "library") setView("split")
+    setMobileTab("chat")
+  }
+
   // ─── Library panel ──────────────────────────────────────────────────────────
 
   const Library = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-vez-line/50 bg-vez-surface/50">
       {/* Header */}
-      <div className="shrink-0 border-b border-vez-line bg-white px-6 py-5">
+      <div className="shrink-0 border-b border-vez-line bg-white px-4 py-4 sm:px-6 sm:py-5">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-semibold text-vez-ink">Document Library</h2>
           <button
             onClick={() => setShowUpload(true)}
-            className="flex items-center gap-2 rounded-lg border border-vez-line bg-white px-4 py-2 text-sm font-medium text-vez-ink shadow-sm transition-all hover:border-vez-sky hover:bg-vez-sky/10 hover:shadow"
+            className="flex items-center gap-2 rounded-lg border border-vez-line bg-white px-3.5 py-2 text-sm font-medium text-vez-ink shadow-sm transition-all hover:border-vez-sky hover:bg-vez-sky/10 hover:shadow"
           >
             <Upload className="size-4" /> Upload
           </button>
         </div>
-        <div className="flex items-center gap-3 text-sm text-vez-mute">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-vez-mute">
           <span className="flex items-center gap-1.5 font-medium text-vez-navy">
             <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-            {embeddedCount} indexed
+            {embeddedCount} embedded
           </span>
           <span className="text-vez-line">|</span>
           <span>{totalChunks} chunks</span>
@@ -383,7 +596,7 @@ export default function RagPage() {
       </div>
 
       {/* Search */}
-      <div className="shrink-0 border-b border-vez-line/60 bg-white px-5 py-4">
+      <div className="shrink-0 border-b border-vez-line/60 bg-white px-4 py-3 sm:px-5 sm:py-4">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
           <input
@@ -396,7 +609,7 @@ export default function RagPage() {
       </div>
 
       {/* Doc list */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-5">
+      <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
         {docsLoading ? (
           <div className="flex flex-col items-center justify-center py-16 text-vez-mute">
             <Loader2 className="mb-3 size-7 animate-spin" />
@@ -427,12 +640,11 @@ export default function RagPage() {
             <DocCard
               key={doc.id}
               doc={doc}
+              progress={progressMap[doc.id]}
+              toggleBusy={togglingIds.has(doc.id)}
+              onToggleEmbed={() => handleToggleEmbed(doc)}
               onDelete={() => handleDelete(doc.id)}
-              onAsk={() => {
-                setSelectedDocId(doc.id)
-                sendMessage(`What are the key provisions of "${doc.title}"?`)
-                if (view === "library") setView("split")
-              }}
+              onAsk={() => askAboutDoc(doc)}
             />
           ))
         )}
@@ -445,20 +657,20 @@ export default function RagPage() {
   const Chat = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-vez-line/50 bg-white shadow-sm">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-6 py-5">
-        <div className="flex items-center gap-4">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-vez-navy">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-vez-line px-4 py-3.5 sm:px-6 sm:py-5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-vez-navy sm:size-11">
             <Cpu className="size-5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-base font-semibold text-vez-ink">Document AI</p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-vez-mute">
-              <span className="size-2 rounded-full bg-emerald-500" />
-              {embeddedCount} docs · Qdrant + MiniLM + Groq
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-vez-mute sm:text-sm">
+              <span className="size-2 shrink-0 rounded-full bg-emerald-500" />
+              {embeddedCount} docs · Hybrid RAG (Qdrant · E5 · BM25 · Groq)
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {selectedDocId && (
             <button
               className="flex items-center gap-1.5 rounded-lg bg-vez-sky/20 px-3 py-1.5 text-xs font-medium text-vez-navy transition-colors hover:bg-vez-sky/30"
@@ -472,34 +684,53 @@ export default function RagPage() {
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
             onClick={clearChat}
           >
-            <Trash2 className="size-4" /> Clear
+            <Trash2 className="size-4" /> <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         {messages.map(msg => (
-          <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div key={msg.id} className={`flex gap-2.5 sm:gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
-              <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-xl bg-vez-sky/30">
-                <Bot className="size-4.5 text-vez-navy" />
+              <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-vez-sky/30 sm:size-9">
+                <Bot className="size-4 text-vez-navy sm:size-4.5" />
               </div>
             )}
-            <div className="max-w-[80%] space-y-2">
-              <div className={`rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
+            <div className="max-w-[85%] space-y-2 sm:max-w-[80%]">
+              <div className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed sm:px-5 ${
                 msg.role === "user"
                   ? "rounded-br-md bg-vez-navy text-white"
                   : "rounded-bl-md bg-vez-surface text-vez-ink"
               }`}>
-                {msg.content}
+                {msg.role === "assistant" ? <Markdown content={msg.content} /> : msg.content}
               </div>
+              {msg.modelUsed === "extractive" && (
+                <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    Fallback mode — showing extracted document text. Set <code className="font-mono">GROQ_API_KEY</code> in <code className="font-mono">apps/ai/.env</code> for full AI answers.
+                  </span>
+                </div>
+              )}
               {msg.sources && msg.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {msg.sources.slice(0, 3).map((s, i) => (
-                    <span key={i} className="inline-flex items-center gap-1.5 rounded-lg bg-vez-sky/15 px-3 py-1.5 text-xs font-medium text-vez-navy">
-                      <BookOpen className="size-3" />
-                      Source {s.chunk_index + 1} · {Math.round(s.score * 100)}%
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-vez-mute/70">Sources</span>
+                  {groupSources(msg.sources).map((g, i) => (
+                    <span
+                      key={i}
+                      title={g.preview}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-vez-sky/30 bg-vez-sky/10 px-2.5 py-1 text-xs font-medium text-vez-navy"
+                    >
+                      <BookOpen className="size-3 shrink-0" />
+                      <span className="shrink-0 font-mono text-[11px] text-vez-navy/70">
+                        {g.refs.map(n => `[${n}]`).join("")}
+                      </span>
+                      <span className="max-w-40 truncate">{g.title}</span>
+                      <span className="shrink-0 rounded bg-vez-sky/25 px-1.5 py-0.5 text-[10px] font-semibold text-vez-navy/80">
+                        {Math.round(g.score * 100)}%
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -519,8 +750,8 @@ export default function RagPage() {
               )}
             </div>
             {msg.role === "user" && (
-              <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-xl bg-vez-surface">
-                <User className="size-4.5 text-vez-mute" />
+              <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-vez-surface sm:size-9">
+                <User className="size-4 text-vez-mute sm:size-4.5" />
               </div>
             )}
           </div>
@@ -542,7 +773,7 @@ export default function RagPage() {
             <p className="px-1 text-sm font-medium text-vez-mute">Try asking:</p>
             {suggestions.map(q => (
               <button key={q} onClick={() => sendMessage(q)}
-                className="group flex w-full items-center justify-between rounded-xl border border-vez-line/50 bg-vez-surface/50 px-5 py-4 text-left transition-all hover:border-vez-sky/50 hover:bg-vez-sky/10 hover:shadow-sm">
+                className="group flex w-full items-center justify-between rounded-xl border border-vez-line/50 bg-vez-surface/50 px-4 py-3.5 text-left transition-all hover:border-vez-sky/50 hover:bg-vez-sky/10 hover:shadow-sm sm:px-5 sm:py-4">
                 <span className="text-[15px] text-vez-mute group-hover:text-vez-ink">{q}</span>
                 <ChevronRight className="size-4 shrink-0 text-vez-mute/40 transition-transform group-hover:translate-x-0.5 group-hover:text-vez-navy" />
               </button>
@@ -553,14 +784,14 @@ export default function RagPage() {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-vez-line px-5 py-4">
-        <div className="flex gap-3">
+      <div className="shrink-0 border-t border-vez-line px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex gap-2 sm:gap-3">
           <input
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && sendMessage()}
-            placeholder={embeddedCount === 0 ? "Upload and index documents first..." : "Ask about government policies..."}
-            className="h-12 flex-1 rounded-xl border border-vez-line bg-vez-surface/50 px-5 text-[15px] text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30 disabled:opacity-50"
+            placeholder={embeddedCount === 0 ? "Embed documents first..." : "Ask about government policies..."}
+            className="h-12 min-w-0 flex-1 rounded-xl border border-vez-line bg-vez-surface/50 px-4 text-[15px] text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30 disabled:opacity-50 sm:px-5"
             disabled={embeddedCount === 0 || typing}
           />
           <button
@@ -579,34 +810,34 @@ export default function RagPage() {
   // ─── render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
+    <div className="flex h-dvh flex-col overflow-hidden bg-white font-poppins">
       <Header />
 
-      <div className="mx-auto flex w-full max-w-[1480px] flex-1 flex-col gap-5 px-6 py-6 md:px-8 lg:px-12 min-h-0">
+      <div className="mx-auto flex w-full max-w-[1480px] min-h-0 flex-1 flex-col gap-3 px-3 py-3 sm:gap-5 sm:px-6 sm:py-6 md:px-8 lg:px-12">
 
         {/* Top bar */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex size-12 items-center justify-center rounded-xl bg-vez-navy shadow-md">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-vez-navy shadow-md sm:size-12">
               <Cpu className="size-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold tracking-tight text-vez-ink">Document Intelligence</h1>
-                <span className="rounded-lg bg-vez-sky/30 px-3 py-1 text-xs font-semibold text-vez-navy">RAG</span>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <h1 className="text-lg font-semibold tracking-tight text-vez-ink sm:text-xl">Document Intelligence</h1>
+                <span className="rounded-lg bg-vez-sky/30 px-2.5 py-1 text-xs font-semibold text-vez-navy">RAG</span>
               </div>
-              <p className="mt-1 text-sm text-vez-mute">
-                {embeddedCount} docs indexed · {totalChunks} chunks · Qdrant + MiniLM + Groq
+              <p className="mt-0.5 hidden text-sm text-vez-mute sm:block">
+                {embeddedCount} docs embedded · {totalChunks} chunks · Hybrid RAG (Qdrant · E5 · BM25 · Groq)
               </p>
             </div>
           </div>
 
           {/* Stats pills */}
-          <div className="hidden items-center gap-2.5 md:flex">
+          <div className="hidden items-center gap-2.5 xl:flex">
             {[
               { icon: <CheckCircle className="size-4 text-emerald-500" />, label: "Pipeline active" },
               { icon: <Clock className="size-4 text-vez-mute" />, label: `${docs.length} docs` },
-              { icon: <RefreshCw className="size-4 text-vez-mute" />, label: "Refresh", action: loadDocs },
+              { icon: <RefreshCw className="size-4 text-vez-mute" />, label: "Refresh", action: () => loadDocs() },
             ].map(s => (
               <button
                 key={s.label}
@@ -618,8 +849,8 @@ export default function RagPage() {
             ))}
           </div>
 
-          {/* View switcher */}
-          <div className="flex items-center gap-1 rounded-xl bg-vez-surface p-1.5">
+          {/* View switcher (desktop) */}
+          <div className="hidden items-center gap-1 rounded-xl bg-vez-surface p-1.5 lg:flex">
             {([
               { id: "library", icon: BookOpen,        label: "Library" },
               { id: "split",   icon: LayoutPanelLeft, label: "Split" },
@@ -634,7 +865,7 @@ export default function RagPage() {
                       : "text-vez-mute hover:text-vez-navy"
                   }`}>
                   <Icon className="size-4" />
-                  <span className="hidden sm:inline">{m.label}</span>
+                  {m.label}
                 </button>
               )
             })}
@@ -643,18 +874,50 @@ export default function RagPage() {
 
         {/* Panels */}
         <div className="min-h-0 flex-1">
-          {view === "split" && (
-            <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
-              {Library}
-              {Chat}
+          {/* Desktop */}
+          <div className="hidden h-full lg:block">
+            {view === "split" && (
+              <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
+                {Library}
+                {Chat}
+              </div>
+            )}
+            {view === "library" && <div className="h-full max-w-3xl">{Library}</div>}
+            {view === "chat" && <div className="mx-auto h-full max-w-3xl">{Chat}</div>}
+          </div>
+
+          {/* Mobile: one panel + bottom tabs */}
+          <div className="flex h-full flex-col gap-3 lg:hidden">
+            <div className="min-h-0 flex-1">
+              {mobileTab === "library" ? Library : Chat}
             </div>
-          )}
-          {view === "library" && <div className="h-full max-w-3xl">{Library}</div>}
-          {view === "chat" && <div className="mx-auto h-full max-w-3xl">{Chat}</div>}
+            <div className="grid shrink-0 grid-cols-2 gap-1 rounded-2xl bg-vez-surface p-1.5">
+              {([
+                { id: "library", icon: BookOpen,      label: "Library" },
+                { id: "chat",    icon: MessageSquare, label: "Chat" },
+              ] as const).map(m => {
+                const Icon = m.icon
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setMobileTab(m.id)}
+                    className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+                      mobileTab === m.id
+                        ? "bg-vez-navy text-white shadow-sm"
+                        : "text-vez-mute"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploaded={loadDocs} />}
+      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploaded={() => loadDocs()} />}
     </div>
   )
 }

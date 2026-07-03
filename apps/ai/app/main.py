@@ -1,15 +1,22 @@
+import asyncio
 import json
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote
 
 from app import config
 from app import chunker
 from app import embeddings
 from app import extractor
+from app import progress
 from app import rag
 from app import store
+from app.logger import get_logger, setup_logging
+
+logger = get_logger(__name__)
 
 
 async def app(scope, receive, send):
@@ -27,12 +34,16 @@ async def app(scope, receive, send):
         await _cors_preflight(send, scope)
         return
 
+    start = time.perf_counter()
     try:
         response = await _route(method, path, scope, receive)
     except Exception as e:
+        logger.exception("Unhandled error on %s %s", method, path)
         response = (500, {"error": "Internal server error", "detail": str(e)})
 
     status, body = response
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info("%s %s -> %d (%.0fms)", method, path, status, elapsed_ms)
     await _send_json(send, body, status, scope)
 
 
@@ -40,13 +51,24 @@ async def _handle_lifespan(scope, receive, send):
     while True:
         message = await receive()
         if message["type"] == "lifespan.startup":
+            setup_logging()
+            logger.info(
+                "Starting pnm-ai (env=%s, qdrant=%s, collection=%s)",
+                config.ENVIRONMENT,
+                config.QDRANT_URL,
+                config.QDRANT_COLLECTION,
+            )
             config.ensure_upload_dir()
             try:
                 store.ensure_collection()
             except Exception:
-                pass
+                logger.exception(
+                    "Could not ensure Qdrant collection at startup; "
+                    "will retry on first request"
+                )
             await send({"type": "lifespan.startup.complete"})
         elif message["type"] == "lifespan.shutdown":
+            logger.info("Shutting down pnm-ai")
             await send({"type": "lifespan.shutdown.complete"})
             return
 
@@ -66,6 +88,14 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
         doc_id = doc_status_match.group(1)
         return await _document_status(doc_id)
 
+    doc_progress_match = re.match(r"^/documents/([^/]+)/progress$", path)
+    if method == "GET" and doc_progress_match:
+        doc_id = doc_progress_match.group(1)
+        return _document_progress(doc_id)
+
+    if method == "GET" and path == "/progress":
+        return _progress_batch(scope)
+
     doc_delete_match = re.match(r"^/documents/([^/]+)$", path)
     if method == "DELETE" and doc_delete_match:
         doc_id = doc_delete_match.group(1)
@@ -82,7 +112,7 @@ async def _health() -> tuple[int, dict]:
     try:
         qdrant_ok = store.is_connected()
     except Exception:
-        pass
+        logger.exception("Health check: Qdrant probe raised")
 
     return 200, {
         "status": "ok",
@@ -133,21 +163,73 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
     save_path = upload_dir / f"{doc_id}{ext}"
     save_path.write_bytes(file_data)
 
+    logger.info(
+        "Upload received: doc_id=%s, filename=%s, size=%d bytes",
+        doc_id,
+        filename,
+        len(file_data),
+    )
+
+    progress.start(doc_id, filename)
+
+    # The pipeline (OCR, embedding) is CPU-bound and synchronous. Run it in a
+    # worker thread so the event loop stays free to serve progress polls and
+    # queries while a large document is being processed.
+    try:
+        return await asyncio.to_thread(
+            _ingest_document, doc_id, save_path, filename, mime_type, metadata
+        )
+    except Exception as e:
+        progress.fail(doc_id, str(e))
+        raise
+
+
+def _ingest_document(
+    doc_id: str,
+    save_path: Path,
+    filename: str,
+    mime_type: str,
+    metadata: dict,
+) -> tuple[int, dict]:
     try:
         result = extractor.extract_text(str(save_path), mime_type)
     except Exception as e:
         save_path.unlink(missing_ok=True)
+        progress.fail(doc_id, f"Text extraction failed: {e}")
+        logger.exception("Text extraction failed for doc_id=%s", doc_id)
         return 422, {"error": f"Text extraction failed: {str(e)}"}
 
     text = result["text"]
     if not text.strip():
         save_path.unlink(missing_ok=True)
+        progress.fail(doc_id, "No text could be extracted")
+        logger.warning("No text extracted for doc_id=%s (%s)", doc_id, filename)
         return 422, {"error": "No text could be extracted from the document"}
 
+    progress.update(doc_id, "chunking", f"Chunking {len(text):,} characters...")
     chunks = chunker.chunk_text(text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
+    if not chunks:
+        save_path.unlink(missing_ok=True)
+        progress.fail(doc_id, "Document produced no indexable chunks")
+        logger.warning("Chunking produced no chunks for doc_id=%s", doc_id)
+        return 422, {"error": "Document produced no indexable chunks"}
 
     chunk_texts = [c["content"] for c in chunks]
-    chunk_embeddings = embeddings.get_embeddings(chunk_texts)
+    total = len(chunk_texts)
+    progress.update(doc_id, "embedding", f"Embedding {total} chunks...", 0, total)
+
+    try:
+        chunk_embeddings = embeddings.get_embeddings(
+            chunk_texts,
+            on_progress=lambda done, n: progress.update(
+                doc_id, "embedding", f"Embedding chunk {done}/{n}", done, n
+            ),
+        )
+    except Exception as e:
+        save_path.unlink(missing_ok=True)
+        progress.fail(doc_id, f"Embedding failed: {e}")
+        logger.exception("Embedding failed for doc_id=%s", doc_id)
+        return 500, {"error": f"Failed to embed document: {str(e)}"}
 
     doc_metadata = {
         "original_filename": filename,
@@ -155,11 +237,24 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
         **metadata,
     }
 
+    progress.update(doc_id, "indexing", "Writing vectors to Qdrant...", 0, total)
     try:
-        chunk_count = store.index_document(doc_id, chunks, chunk_embeddings, doc_metadata)
+        chunk_count = store.index_document(
+            doc_id,
+            chunks,
+            chunk_embeddings,
+            doc_metadata,
+            on_progress=lambda done, n: progress.update(
+                doc_id, "indexing", f"Indexing chunk {done}/{n}", done, n
+            ),
+        )
     except Exception as e:
         save_path.unlink(missing_ok=True)
+        progress.fail(doc_id, f"Indexing failed: {e}")
+        logger.exception("Qdrant indexing failed for doc_id=%s", doc_id)
         return 503, {"error": f"Failed to index document: {str(e)}"}
+
+    progress.finish(doc_id, chunk_count)
 
     return 201, {
         "doc_id": doc_id,
@@ -171,6 +266,26 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
     }
 
 
+def _progress_batch(scope: dict) -> tuple[int, dict]:
+    """GET /progress?ids=a,b,c — progress for many documents in one call."""
+    query_string = scope.get("query_string", b"").decode("utf-8", errors="replace")
+    ids: list[str] = []
+    for pair in query_string.split("&"):
+        if pair.startswith("ids="):
+            ids = [i for i in unquote(pair[4:]).split(",") if i]
+            break
+    if not ids:
+        return 400, {"error": "Query parameter 'ids' is required"}
+    return 200, {"progress": progress.get_many(ids[:50])}
+
+
+def _document_progress(doc_id: str) -> tuple[int, dict]:
+    entry = progress.get(doc_id)
+    if entry is None:
+        return 404, {"error": "No progress information for this document"}
+    return 200, entry
+
+
 async def _document_status(doc_id: str) -> tuple[int, dict]:
     try:
         chunk_count = store.get_document_chunks(doc_id)
@@ -180,6 +295,7 @@ async def _document_status(doc_id: str) -> tuple[int, dict]:
             "indexed": chunk_count > 0,
         }
     except Exception as e:
+        logger.exception("Status check failed for doc_id=%s", doc_id)
         return 503, {"error": f"Could not check document status: {str(e)}"}
 
 
@@ -188,6 +304,7 @@ async def _delete_document(doc_id: str) -> tuple[int, dict]:
         store.delete_document(doc_id)
         return 200, {"doc_id": doc_id, "deleted": True}
     except Exception as e:
+        logger.exception("Delete failed for doc_id=%s", doc_id)
         return 503, {"error": f"Failed to delete document: {str(e)}"}
 
 
@@ -215,6 +332,7 @@ async def _query(receive) -> tuple[int, dict]:
         )
         return 200, result
     except Exception as e:
+        logger.exception("RAG query failed")
         return 500, {"error": f"Query failed: {str(e)}"}
 
 

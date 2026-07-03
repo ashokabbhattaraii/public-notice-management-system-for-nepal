@@ -9,7 +9,9 @@ const footerLinks = {
     { label: "Browse Notices", href: "/notices" },
     { label: "Document Search (RAG)", href: "/rag" },
     { label: "Set Up Alerts", href: "/login" },
+    { label: "Pricing", href: "/#pricing" },
     { label: "About the Project", href: "/about" },
+    { label: "Contact Us", href: "/contact" },
   ],
   Resources: [
     { label: "API Documentation", href: "#" },

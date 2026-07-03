@@ -42,6 +42,7 @@ enum DocumentStatus {
   PENDING
   PROCESSING
   INDEXED
+  UNEMBEDDED
   FAILED
 }
 

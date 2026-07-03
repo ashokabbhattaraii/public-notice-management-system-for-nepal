@@ -2,9 +2,12 @@
 
 import React, { useRef, useEffect } from "react"
 import gsap from "gsap"
+import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow } from "./vezigno-ui"
+
+gsap.registerPlugin(ScrollTrigger)
 
 interface Testimonial {
   quote: string
@@ -121,7 +124,26 @@ function MarqueeRow({ items, duration = 40 }: { items: Testimonial[]; duration?:
       repeat: -1,
     })
 
+    // Marquee reacts to scroll: speeds up with scroll velocity, then eases
+    // back to normal speed once scrolling settles.
+    let settle: gsap.core.Tween | null = null
+    const st = ScrollTrigger.create({
+      trigger: track,
+      start: "top bottom",
+      end: "bottom top",
+      onUpdate: (self) => {
+        const tween = tweenRef.current
+        if (!tween || tween.paused()) return
+        const boost = gsap.utils.clamp(1, 3.5, 1 + Math.abs(self.getVelocity()) / 900)
+        tween.timeScale(boost)
+        settle?.kill()
+        settle = gsap.to(tween, { timeScale: 1, duration: 1.2, ease: "power2.out" })
+      },
+    })
+
     return () => {
+      settle?.kill()
+      st.kill()
       tweenRef.current?.kill()
     }
   }, [duration])

@@ -8,6 +8,7 @@ import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { DemoPlayer } from "./demo/demo-player"
 import { Reveal } from "./reveal"
+import { Magnetic } from "./motion"
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -20,6 +21,7 @@ export function VezignoHero() {
   const sectionRef = useRef<HTMLElement>(null)
   const headlineRef = useRef<HTMLHeadingElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+  const introRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -34,6 +36,35 @@ export function VezignoHero() {
           { yPercent: 110 },
           { yPercent: 0, duration: 0.9, stagger: 0.09, ease: "power4.out", delay: 0.15 }
         )
+      }
+
+      // Depth orbs drift at different rates than the page (scrub-linked)
+      gsap.to(".vz-orb-a", {
+        yPercent: 45,
+        xPercent: -10,
+        ease: "none",
+        scrollTrigger: { trigger: sectionRef.current, start: "top top", end: "bottom top", scrub: 1 },
+      })
+      gsap.to(".vz-orb-b", {
+        yPercent: -35,
+        xPercent: 12,
+        ease: "none",
+        scrollTrigger: { trigger: sectionRef.current, start: "top top", end: "bottom top", scrub: 1.4 },
+      })
+
+      // Intro content recedes as you scroll toward the preview card
+      if (introRef.current && previewRef.current) {
+        gsap.to(introRef.current, {
+          yPercent: -8,
+          opacity: 0.25,
+          ease: "none",
+          scrollTrigger: {
+            trigger: previewRef.current,
+            start: "top 75%",
+            end: "top 20%",
+            scrub: 0.8,
+          },
+        })
       }
 
       // Gentle parallax: mockup drifts with scale and subtle rotation
@@ -68,9 +99,10 @@ export function VezignoHero() {
   return (
     <section ref={sectionRef} className="bg-vez-sky vz-noise">
       <div className="relative mx-auto max-w-[1480px] px-6 pt-[184px] md:px-8 md:pt-[210px] lg:px-12 lg:pt-[240px]">
-        {/* Floating depth orbs */}
-        <div className="pointer-events-none absolute right-[10%] top-[20%] size-72 rounded-full bg-white/15 blur-3xl vz-float-slow" />
-        <div className="pointer-events-none absolute left-[5%] top-[40%] size-48 rounded-full bg-vez-navy/5 blur-2xl vz-float" />
+        {/* Floating depth orbs — CSS float + scroll parallax at differing rates */}
+        <div className="vz-orb-a pointer-events-none absolute right-[10%] top-[20%] size-72 rounded-full bg-white/15 blur-3xl vz-float-slow" />
+        <div className="vz-orb-b pointer-events-none absolute left-[5%] top-[40%] size-48 rounded-full bg-vez-navy/5 blur-2xl vz-float" />
+        <div ref={introRef}>
         {/* Display statement */}
         <h1
           ref={headlineRef}
@@ -91,19 +123,23 @@ export function VezignoHero() {
             </p>
 
             <div className="flex flex-wrap items-center gap-4">
-              <Link
-                href="/notices"
-                className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-all duration-300 hover:-translate-y-0.5 hover:opacity-90"
-              >
-                Browse notices
-                <ArrowUpRight className="size-4" />
-              </Link>
-              <Link
-                href="/rag"
-                className="flex items-center gap-1.5 rounded-full bg-white/30 px-6 py-3 text-base text-vez-ink backdrop-blur-md border border-white/50 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/60 hover:shadow-md"
-              >
-                Explore documents
-              </Link>
+              <Magnetic>
+                <Link
+                  href="/notices"
+                  className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity duration-300 hover:opacity-90"
+                >
+                  Browse notices
+                  <ArrowUpRight className="size-4" />
+                </Link>
+              </Magnetic>
+              <Magnetic>
+                <Link
+                  href="/rag"
+                  className="flex items-center gap-1.5 rounded-full bg-white/30 px-6 py-3 text-base text-vez-ink backdrop-blur-md border border-white/50 transition-all duration-300 hover:bg-white/60 hover:shadow-md"
+                >
+                  Explore documents
+                </Link>
+              </Magnetic>
             </div>
           </div>
         </Reveal>
@@ -141,6 +177,8 @@ export function VezignoHero() {
             </div>
           </form>
         </Reveal>
+
+        </div>
 
         {/* Preview card — rounded top corners, emerges below the fold */}
         <Reveal delay={280} className="mt-16 lg:mt-24">

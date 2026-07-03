@@ -1,5 +1,9 @@
 import re
 
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def chunk_text(
     text: str, chunk_size: int = 512, overlap: int = 50
@@ -30,13 +34,31 @@ def chunk_text(
             chunks.append(_make_chunk(current, len(chunks), char_offset))
             char_offset += len(current) - overlap
             if overlap > 0 and len(current) > overlap:
-                current = current[-overlap:] + "\n" + segment
+                # Snap the overlap to a word boundary so no chunk starts
+                # mid-word (which pollutes both retrieval and displayed text).
+                tail = current[-overlap:]
+                boundary = tail.find(" ")
+                if boundary != -1:
+                    tail = tail[boundary + 1 :]
+                current = (tail + "\n" + segment) if tail else segment
             else:
                 current = segment
 
     if current.strip():
         chunks.append(_make_chunk(current, len(chunks), char_offset))
 
+    sizes = [len(c["content"]) for c in chunks]
+    logger.info(
+        "Chunked %d chars into %d chunks (chunk_size=%d, overlap=%d, "
+        "min=%d, avg=%d, max=%d chars/chunk)",
+        len(text),
+        len(chunks),
+        chunk_size,
+        overlap,
+        min(sizes) if sizes else 0,
+        sum(sizes) // len(sizes) if sizes else 0,
+        max(sizes) if sizes else 0,
+    )
     return chunks
 
 
@@ -84,6 +106,14 @@ def _split_by_words(text: str, chunk_size: int) -> list[str]:
 
 
 def _make_chunk(content: str, index: int, char_start: int) -> dict:
+    logger.info(
+        "chunk #%d: chars %d-%d (%d chars) | %.60s...",
+        index,
+        char_start,
+        char_start + len(content),
+        len(content),
+        content.replace("\n", " "),
+    )
     return {
         "content": content,
         "index": index,

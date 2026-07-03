@@ -7,8 +7,8 @@ development on this system.
 ## Why Qdrant here
 
 `apps/ai/app/store.py` uses Qdrant to store chunk embeddings produced by the
-`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` model
-(384-dimension vectors, cosine distance) and to run similarity search for the
+`intfloat/multilingual-e5-base` model
+(768-dimension vectors, cosine distance) and to run similarity search for the
 `/query` endpoint. The collection is created automatically by the app
 (`ensure_collection()`) on first use — you only need Qdrant itself running and
 reachable.
@@ -18,7 +18,16 @@ Relevant config (`apps/ai/app/config.py` / `apps/ai/.env`):
 | Variable | Default | Purpose |
 |---|---|---|
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant REST/gRPC endpoint |
+| `QDRANT_API_KEY` | _(empty)_ | API key, if the Qdrant instance requires one. Leave empty for an unsecured instance. |
 | `QDRANT_COLLECTION` | `documents` | Collection name used for chunks |
+| `EMBEDDING_DIM` | `768` | Vector size; must match the embedding model and the collection |
+
+> **Auth note:** If your Qdrant container was started with
+> `QDRANT__SERVICE__API_KEY=<key>` (visible via `docker inspect <container>`),
+> you **must** set `QDRANT_API_KEY` to the *same raw value* in `apps/ai/.env`.
+> Plain API keys and JWT tokens are different: a JWT is only accepted when the
+> container also runs with `QDRANT__SERVICE__JWT_RBAC=true`. If unset, use the
+> raw key.
 
 ## Option 1: Docker (recommended)
 
@@ -128,7 +137,7 @@ Docker is preferred since it matches how the project already runs it.
 or query if it doesn't already exist:
 
 - Name: value of `QDRANT_COLLECTION` (default `documents`)
-- Vector size: `384` (must match the embedding model's output dimension)
+- Vector size: `768` (must match the embedding model's output dimension)
 - Distance metric: `Cosine`
 
 If you ever change `EMBEDDING_MODEL` to one with a different output

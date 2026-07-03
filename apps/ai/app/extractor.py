@@ -1,22 +1,35 @@
 from pathlib import Path
 
 from app import config
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_text(file_path: str, mime_type: str) -> dict:
     path = Path(file_path)
+    logger.info("Extracting text from %s (mime=%s)", path.name, mime_type)
 
     if mime_type == "application/pdf":
-        return _extract_pdf(path)
+        result = _extract_pdf(path)
     elif mime_type in (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword",
     ):
-        return _extract_docx(path)
+        result = _extract_docx(path)
     elif mime_type.startswith("image/"):
-        return _extract_image(path)
+        result = _extract_image(path)
     else:
-        return _extract_text(path)
+        result = _extract_text(path)
+
+    logger.info(
+        "Extracted %d chars from %s (ocr=%s, pages=%d)",
+        len(result["text"]),
+        path.name,
+        result["is_ocr"],
+        result["page_count"],
+    )
+    return result
 
 
 def _extract_pdf(path: Path) -> dict:
@@ -33,6 +46,9 @@ def _extract_pdf(path: Path) -> dict:
     full_text = "\n\n".join(texts)
 
     if page_count > 0 and len(full_text.strip()) < 100 * page_count:
+        logger.info(
+            "PDF %s has little embedded text; falling back to OCR", path.name
+        )
         return _ocr_pdf(path, page_count)
 
     return {"text": full_text, "is_ocr": False, "page_count": page_count}

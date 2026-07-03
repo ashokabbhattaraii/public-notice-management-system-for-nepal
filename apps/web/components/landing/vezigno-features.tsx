@@ -5,6 +5,7 @@ import { Search, Shield, Zap, BookOpen } from "lucide-react"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow, SwapArrow } from "./vezigno-ui"
+import { PopIcon, StaggerGrid, TiltCard } from "./motion"
 
 const features = [
   {
@@ -51,16 +52,16 @@ export function VezignoFeatures() {
           </Reveal>
         </div>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:mt-16 lg:grid-cols-4">
+        <StaggerGrid amount={0.55} className="mt-12 grid gap-5 md:grid-cols-2 lg:mt-16 lg:grid-cols-4">
           {features.map((f, i) => {
             const Icon = f.icon
             return (
-              <Reveal key={f.title} delay={i * 100}>
+              <TiltCard key={f.title}>
                 <div className="vz-sweep vz-glass group flex h-full flex-col rounded-[20px] p-8">
                   <div className="flex items-center justify-between">
-                    <div className="flex size-12 items-center justify-center rounded-full bg-vez-sky/40 transition-colors duration-300 group-hover:bg-white">
+                    <PopIcon delay={i * 120 + 250} className="flex size-12 items-center justify-center rounded-full bg-vez-sky/40 transition-colors duration-300 group-hover:bg-white">
                       <Icon className="size-5 text-vez-navy" />
-                    </div>
+                    </PopIcon>
                     <span className="text-sm text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/60">
                       0{i + 1}
                     </span>
@@ -78,10 +79,10 @@ export function VezignoFeatures() {
                     <SwapArrow className="text-vez-mute transition-colors duration-300 group-hover:text-vez-navy" />
                   </div>
                 </div>
-              </Reveal>
+              </TiltCard>
             )
           })}
-        </div>
+        </StaggerGrid>
       </div>
     </section>
   )

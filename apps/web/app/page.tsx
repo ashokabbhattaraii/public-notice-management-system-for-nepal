@@ -6,9 +6,8 @@ import { VezignoProblem } from "@/components/landing/vezigno-problem"
 import { VezignoSolution } from "@/components/landing/vezigno-solution"
 import { VezignoFeatures } from "@/components/landing/vezigno-features"
 import { VezignoDemo } from "@/components/landing/vezigno-demo"
-import { VezignoAbout } from "@/components/landing/vezigno-about"
+import { VezignoPricing } from "@/components/landing/vezigno-pricing"
 import { VezignoFeedback } from "@/components/landing/vezigno-feedback"
-import { VezignoContact } from "@/components/landing/vezigno-contact"
 import { VezignoCta } from "@/components/landing/vezigno-cta"
 import { VezignoFooter } from "@/components/landing/vezigno-footer"
 
@@ -23,9 +22,8 @@ export default function HomePage() {
       <VezignoSolution />
       <VezignoFeatures />
       <VezignoDemo />
-      <VezignoAbout />
+      <VezignoPricing />
       <VezignoFeedback />
-      <VezignoContact />
       <VezignoCta />
       <VezignoFooter />
     </div>

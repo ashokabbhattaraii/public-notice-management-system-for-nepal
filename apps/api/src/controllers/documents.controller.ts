@@ -94,9 +94,31 @@ export class DocumentsController {
     return this.documentsService.findAll(dto);
   }
 
+  // Must be declared before ':id' routes so 'progress' isn't parsed as a UUID.
+  @Get('progress/batch')
+  async progressBatch(@Query('ids') ids?: string) {
+    const docIds = (ids ?? '').split(',').filter(Boolean).slice(0, 50);
+    return this.documentsService.getProgressBatch(docIds);
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.findOne(id);
+  }
+
+  @Post(':id/embed')
+  async embed(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.embed(id);
+  }
+
+  @Post(':id/unembed')
+  async unembed(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.unembed(id);
+  }
+
+  @Get(':id/progress')
+  async progress(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.getProgress(id);
   }
 
   @Delete(':id')
