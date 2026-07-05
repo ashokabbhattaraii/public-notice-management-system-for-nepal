@@ -99,7 +99,7 @@ export function VezignoHero() {
   return (
     <section ref={sectionRef} className="bg-vez-sky vz-noise">
       <div className="relative mx-auto max-w-[1480px] px-6 pt-[184px] md:px-8 md:pt-[210px] lg:px-12 lg:pt-[240px]">
-        {/* Floating depth orbs — CSS float + scroll parallax at differing rates */}
+        {/* Floating depth orbs - CSS float + scroll parallax at differing rates */}
         <div className="vz-orb-a pointer-events-none absolute right-[10%] top-[20%] size-72 rounded-full bg-white/15 blur-3xl vz-float-slow" />
         <div className="vz-orb-b pointer-events-none absolute left-[5%] top-[40%] size-48 rounded-full bg-vez-navy/5 blur-2xl vz-float" />
         <div ref={introRef}>
@@ -119,7 +119,7 @@ export function VezignoHero() {
           <div className="mt-8 flex flex-col gap-10 lg:mt-12 lg:flex-row lg:items-end lg:justify-between">
             <p className="max-w-xl text-base leading-6 text-vez-ink md:text-lg md:leading-7">
               Suchana AI aggregates government notices from 50+ official portals across
-              Nepal — classified, summarized, and made instantly searchable for every citizen.
+              Nepal - classified, summarized, and made instantly searchable for every citizen.
             </p>
 
             <div className="flex flex-wrap items-center gap-4">
@@ -180,7 +180,7 @@ export function VezignoHero() {
 
         </div>
 
-        {/* Preview card — rounded top corners, emerges below the fold */}
+        {/* Preview card - rounded top corners, emerges below the fold */}
         <Reveal delay={280} className="mt-16 lg:mt-24">
           <div className="overflow-hidden rounded-t-[24px] bg-white shadow-2xl shadow-vez-navy/5" style={{ perspective: "1200px" }}>
             {/* Inner wrapper parallaxes within the clipped card */}

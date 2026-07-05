@@ -43,7 +43,7 @@ export function Footer() {
             </Link>
             <p className="mt-5 max-w-xs text-base leading-6 text-white/60">
               An AI-powered, cloud-based platform aggregating Nepal&apos;s public
-              government notices into a single searchable, accessible repository —
+              government notices into a single searchable, accessible repository -
               classified and summarized by machine learning.
             </p>
             <div className="mt-6 flex items-center gap-3">
@@ -83,10 +83,10 @@ export function Footer() {
 
         <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-8 md:flex-row">
           <p className="text-sm text-white/50">
-            &copy; 2025 Suchana AI — AI-Powered Public Notice Management System for Nepal.
+            &copy; 2025 Suchana AI - AI-Powered Public Notice Management System for Nepal.
           </p>
           <p className="text-sm text-white/50">
-            B.Sc. (Hons) IT Cloud Engineering — Asia Pacific University
+            B.Sc. (Hons) IT Cloud Engineering - Asia Pacific University
           </p>
         </div>
       </div>

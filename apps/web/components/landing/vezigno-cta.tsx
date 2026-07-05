@@ -14,7 +14,7 @@ export function VezignoCta() {
       <div className="mx-auto max-w-[1480px] px-6 pb-16 md:px-8 md:pb-20 lg:px-12 lg:pb-24">
         <Reveal>
           <div className="group/cta relative overflow-hidden rounded-[24px] bg-vez-sky vz-noise p-10 md:p-14 lg:p-20">
-            {/* Oversized arrow accent — parallax drift on scroll, nudges on hover */}
+            {/* Oversized arrow accent - parallax drift on scroll, nudges on hover */}
             <Parallax speed={26} className="pointer-events-none absolute -right-8 -top-8">
               <ArrowUpRight
                 className="size-48 text-white/25 transition-transform duration-700 ease-out group-hover/cta:translate-x-3 group-hover/cta:-translate-y-3 md:size-64"

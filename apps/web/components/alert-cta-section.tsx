@@ -159,7 +159,7 @@ export function AlertCTASection() {
   return (
     <section ref={sectionRef} className="relative py-12 md:py-20 lg:py-24 px-6 md:px-8 lg:px-12 overflow-hidden bg-background">
 
-      {/* SVG decorative circuit lines — drawn on scroll, full-width */}
+      {/* SVG decorative circuit lines - drawn on scroll, full-width */}
       <svg
         ref={svgRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
@@ -275,7 +275,7 @@ export function AlertCTASection() {
         </div>
 
         <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto mb-10 leading-relaxed font-normal">
-          Get instant alerts for job vacancies, exam dates, tenders, and government updates — directly to your phone or email.
+          Get instant alerts for job vacancies, exam dates, tenders, and government updates - directly to your phone or email.
         </p>
 
         {/* Tactical category badges */}

@@ -210,7 +210,7 @@ export function AnimatedHeroSections() {
         </section>
       ))}
 
-      {/* Slide indicators — right side */}
+      {/* Slide indicators - right side */}
       <div className="absolute right-8 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-3">
         {slides.map((_, i) => (
           <div

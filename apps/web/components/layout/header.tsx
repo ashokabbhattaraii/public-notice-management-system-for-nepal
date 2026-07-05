@@ -418,7 +418,7 @@ export function Header() {
         </div>
       </header>
 
-      {/* Spacer — only off the home page; the hero supplies its own top padding under the transparent header */}
+      {/* Spacer - only off the home page; the hero supplies its own top padding under the transparent header */}
       {!isHome && <div className="h-20" aria-hidden="true" />}
     </>
   )

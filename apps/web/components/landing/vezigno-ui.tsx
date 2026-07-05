@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-/** Section eyebrow — sky dot + tracked uppercase label, consistent across sections. */
+/** Section eyebrow - sky dot + tracked uppercase label, consistent across sections. */
 export function Eyebrow({ children, dark = false }: { children: React.ReactNode; dark?: boolean }) {
   return (
     <p

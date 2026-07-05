@@ -27,7 +27,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen w-full bg-white font-poppins antialiased">
-      {/* Left panel — sign-in */}
+      {/* Left panel - sign-in */}
       <div className="flex min-h-screen w-full flex-col justify-center px-8 py-12 sm:px-12 lg:w-1/2 lg:px-16">
         <div className="mx-auto flex w-full max-w-md flex-col gap-10">
           {/* Back */}
@@ -74,7 +74,7 @@ export default function LoginPage() {
             )}
 
             <p className="text-center text-sm leading-6 text-vez-mute">
-              New here? Sign in with Google — your account is created automatically.
+              New here? Sign in with Google - your account is created automatically.
             </p>
 
             <p className="text-center text-xs text-vez-mute">
@@ -88,7 +88,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right panel — sky-blue brand statement */}
+      {/* Right panel - sky-blue brand statement */}
       <div className="hidden min-h-screen w-1/2 flex-col justify-between bg-vez-sky p-14 lg:flex">
         <p className="max-w-[14ch] text-[clamp(40px,3.8vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink">
           Every public notice. One place.
@@ -101,7 +101,7 @@ export default function LoginPage() {
                 “Transparent governance starts with accessible public notices.”
               </p>
               <footer className="mt-6 text-base text-vez-mute">
-                Suchana AI — Nepal&apos;s AI-powered notice platform
+                Suchana AI - Nepal&apos;s AI-powered notice platform
               </footer>
             </blockquote>
           </div>

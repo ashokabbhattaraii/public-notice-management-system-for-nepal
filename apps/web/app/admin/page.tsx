@@ -203,7 +203,7 @@ export default function AdminDashboard() {
 
           {/* Main content row */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-            {/* Live log — 3 cols */}
+            {/* Live log - 3 cols */}
             <div className="cmd-card rounded-[20px] bg-white p-6 lg:col-span-3">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-base text-vez-ink">
@@ -243,7 +243,7 @@ export default function AdminDashboard() {
               </Link>
             </div>
 
-            {/* Right — 2 cols */}
+            {/* Right - 2 cols */}
             <div className="space-y-6 lg:col-span-2">
               {/* Source status */}
               <div className="cmd-card rounded-[20px] bg-white p-6">

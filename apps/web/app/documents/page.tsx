@@ -351,7 +351,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                   </div>
                   <div className="text-center">
                     <p className="text-base font-medium text-vez-ink">Drop file here or click to browse</p>
-                    <p className="mt-1 text-sm text-vez-mute">PDF, DOCX, TXT, PNG, JPEG — up to 50 MB</p>
+                    <p className="mt-1 text-sm text-vez-mute">PDF, DOCX, TXT, PNG, JPEG - up to 50 MB</p>
                   </div>
                 </>
               )}
@@ -409,7 +409,7 @@ export default function RagPage() {
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: "sys-1", role: "assistant",
-    content: "Hello! I'm Suchana AI — your document intelligence assistant. Ask me anything about the indexed government documents.",
+    content: "Hello! I'm Suchana AI - your document intelligence assistant. Ask me anything about the indexed government documents.",
     timestamp: new Date().toISOString(),
   }])
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({})
@@ -468,7 +468,7 @@ export default function RagPage() {
         if (entry.stage === "done" || entry.stage === "failed") anyFinished = true
       }
       setProgressMap(prev => ({ ...prev, ...next }))
-      // Refresh the list when something finished — or periodically as a
+      // Refresh the list when something finished - or periodically as a
       // safety net in case the AI service has no progress entry for a doc.
       if (anyFinished || ticks % 8 === 0) loadDocs({ silent: true })
     }
@@ -710,7 +710,7 @@ export default function RagPage() {
                 <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                   <span>
-                    Fallback mode — showing extracted document text. Set <code className="font-mono">GROQ_API_KEY</code> in <code className="font-mono">apps/ai/.env</code> for full AI answers.
+                    Fallback mode - showing extracted document text. Set <code className="font-mono">GROQ_API_KEY</code> in <code className="font-mono">apps/ai/.env</code> for full AI answers.
                   </span>
                 </div>
               )}

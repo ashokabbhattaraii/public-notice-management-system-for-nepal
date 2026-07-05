@@ -194,7 +194,7 @@ export default function DashboardPage() {
 
           {/* Main grid */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Left — 2 cols */}
+            {/* Left - 2 cols */}
             <div className="space-y-6 lg:col-span-2">
               {/* Alert setup wizard */}
               {!hasAlerts ? (
@@ -369,7 +369,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Right — 1 col */}
+            {/* Right - 1 col */}
             <div className="space-y-6">
               {/* Activity feed */}
               <div className="dash-card rounded-[20px] bg-white p-6">

@@ -54,7 +54,7 @@ export default function AboutPage() {
               </p>
               <p>
                 Our platform aggregates, verifies, and organizes public notices from across all levels of
-                government — making it possible for citizens to search, filter, and receive alerts for
+                government - making it possible for citizens to search, filter, and receive alerts for
                 notices that matter to them.
               </p>
               <p>

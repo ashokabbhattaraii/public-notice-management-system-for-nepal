@@ -53,7 +53,7 @@ export function VezignoAbout() {
               instantly searchable in plain language.
             </p>
             <p className="mt-4 text-base leading-6 text-vez-mute md:text-lg md:leading-7">
-              From job vacancies and exam schedules to tenders and policy updates — we
+              From job vacancies and exam schedules to tenders and policy updates - we
               ensure no citizen misses critical information that impacts their life,
               education, or livelihood.
             </p>

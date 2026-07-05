@@ -8,9 +8,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-poppins" })
 
 export const metadata: Metadata = {
-  title: "Suchana AI — Nepal's AI-Powered Public Notice Platform",
+  title: "Suchana AI - Nepal's AI-Powered Public Notice Platform",
   description:
-    "Suchana AI aggregates public notices across Nepal's government portals into one searchable platform. AI-powered OCR, NLP classification, and RAG document intelligence — built for every Nepali citizen.",
+    "Suchana AI aggregates public notices across Nepal's government portals into one searchable platform. AI-powered OCR, NLP classification, and RAG document intelligence - built for every Nepali citizen.",
   keywords: [
     "Nepal government notices",
     "public notice management",
@@ -22,9 +22,9 @@ export const metadata: Metadata = {
     "e-governance Nepal",
   ],
   openGraph: {
-    title: "Suchana AI — Nepal's AI-Powered Public Notice Platform",
+    title: "Suchana AI - Nepal's AI-Powered Public Notice Platform",
     description:
-      "One centralized repository for every government notice across Nepal — searched, classified, and summarized by AI.",
+      "One centralized repository for every government notice across Nepal - searched, classified, and summarized by AI.",
     type: "website",
     images: [{ url: "/og/og-image.png", width: 1200, height: 630 }],
   },

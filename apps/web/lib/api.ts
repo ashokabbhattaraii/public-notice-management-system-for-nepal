@@ -37,7 +37,7 @@ function mapUser(u: ApiUser): User {
   }
 }
 
-/** Authenticated fetch — attaches the bearer token when present. */
+/** Authenticated fetch - attaches the bearer token when present. */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenStore.get()
   const res = await fetch(`${API_URL}${path}`, {
@@ -126,7 +126,7 @@ export async function fetchDocumentProgress(id: string): Promise<DocumentProgres
   return apiFetch<DocumentProgress>(`/documents/${id}/progress`)
 }
 
-/** Batched progress for several documents — one request per poll tick. */
+/** Batched progress for several documents - one request per poll tick. */
 export async function fetchDocumentsProgress(
   ids: string[],
 ): Promise<Record<string, DocumentProgress | null>> {

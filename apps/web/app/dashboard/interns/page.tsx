@@ -271,7 +271,7 @@ function SaturdayRosterSection({ roster, onTogglePresence, rosterDate, onDateCha
             <div key={entry.id} className="flex items-center justify-between rounded-[14px] border border-vez-line bg-vez-surface px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-vez-ink">{entry.intern.name}</p>
-                <p className="text-xs text-vez-mute">{entry.intern.department || "—"}</p>
+                <p className="text-xs text-vez-mute">{entry.intern.department || "-"}</p>
               </div>
               <button
                 onClick={() => onTogglePresence(entry.internId, rosterDate, !entry.present)}

@@ -65,7 +65,7 @@ export default function AdminSystemPage() {
           <p className="mt-2 text-sm text-vez-mute">Monitor, configure, and manage the system</p>
         </div>
 
-        {/* Tabs — pill style */}
+        {/* Tabs - pill style */}
         <div className="mb-6 flex w-fit items-center gap-1 rounded-full bg-white p-1.5">
           {[
             { id: "overview" as const, label: "Overview", icon: Activity },

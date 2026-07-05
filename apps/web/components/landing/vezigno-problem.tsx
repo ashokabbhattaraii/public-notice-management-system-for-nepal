@@ -11,7 +11,7 @@ const problems = [
   {
     stat: "50+",
     title: "Scattered portals",
-    body: "Nepal's notices are spread across independent ministry and commission websites — each with its own format, schedule, and URL. Citizens must visit all of them manually.",
+    body: "Nepal's notices are spread across independent ministry and commission websites - each with its own format, schedule, and URL. Citizens must visit all of them manually.",
     wide: true,
   },
   {
@@ -46,7 +46,7 @@ export function VezignoProblem() {
           className="mt-4 max-w-[20ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink"
         />
 
-        {/* Asymmetric bento — wide/narrow alternating */}
+        {/* Asymmetric bento - wide/narrow alternating */}
         <StaggerGrid amount={0.45} className="mt-12 grid gap-5 md:grid-cols-2 lg:mt-16 lg:grid-cols-3">
           {problems.map((p, i) => (
             <TiltCard

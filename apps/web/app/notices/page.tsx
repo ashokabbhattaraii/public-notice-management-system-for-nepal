@@ -49,7 +49,7 @@ function NoticeCard({
       className="vz-sweep group flex cursor-pointer rounded-[20px] bg-white"
     >
       <div className="min-w-0 flex-1 p-5 md:p-6">
-        {/* Top row — badges */}
+        {/* Top row - badges */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs capitalize text-vez-navy">
             {notice.category}
@@ -111,7 +111,7 @@ function NoticeCard({
             {days < 0 ? `Closed ${formatDate(notice.deadline!)}` :
              days === 0 ? "Closes today" :
              days === 1 ? "Closes tomorrow" :
-             `${days} days remaining — ${formatDate(notice.deadline!)}`}
+             `${days} days remaining - ${formatDate(notice.deadline!)}`}
           </div>
         )}
       </div>
@@ -193,7 +193,7 @@ export default function NoticesPage() {
     <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
       <Header />
 
-      {/* Fixed-height workspace — mirrors the Documents page */}
+      {/* Fixed-height workspace - mirrors the Documents page */}
       <div className="mx-auto flex w-full max-w-[1480px] min-h-0 flex-1 flex-col gap-4 px-6 py-5 md:px-8 lg:px-12">
 
         {/* Top bar */}
@@ -268,7 +268,7 @@ export default function NoticesPage() {
           </button>
         </div>
 
-        {/* Panels — fill remaining height, page itself never scrolls */}
+        {/* Panels - fill remaining height, page itself never scrolls */}
         <div className="flex min-h-0 flex-1 gap-4 pb-5">
           {/* ── Filter sidebar (scrolls internally) ── */}
           <aside className="hidden w-64 shrink-0 overflow-y-auto rounded-[20px] bg-vez-surface p-5 lg:block">
@@ -382,7 +382,7 @@ export default function NoticesPage() {
           </div>
         </div>
 
-        {/* Notice detail — now uses slug-based route /notices/[slug] */}
+        {/* Notice detail - now uses slug-based route /notices/[slug] */}
       </div>
     </div>
   )

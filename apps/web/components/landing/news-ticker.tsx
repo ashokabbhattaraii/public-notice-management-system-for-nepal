@@ -4,11 +4,11 @@ import React, { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 
 const headlines = [
-  { text: "PSC Section Officer Exam 2082 — Application deadline: Shrawan 15, 2082", id: "n1", title: "Nepal Public Service Commission - Section Officer Exam 2082" },
+  { text: "PSC Section Officer Exam 2082 - Application deadline: Shrawan 15, 2082", id: "n1", title: "Nepal Public Service Commission - Section Officer Exam 2082" },
   { text: "Ministry of Education: 2,500 permanent teacher positions announced across all 7 provinces", id: "n2", title: "Ministry of Education - Teacher Recruitment Drive 2082" },
-  { text: "Road Division Office — Highway Construction Tender for Province 5 (45km section)", id: "n3", title: "Road Division Office - Highway Construction Tender" },
-  { text: "Nepal Rastra Bank: New monetary policy circular published — effective immediately", id: "n5", title: "Nepal Rastra Bank - Monetary Policy Circular" },
-  { text: "Judicial Service Commission — Section Officer written exam results published", id: "n6", title: "Judicial Service Commission - Section Officer Results" },
+  { text: "Road Division Office - Highway Construction Tender for Province 5 (45km section)", id: "n3", title: "Road Division Office - Highway Construction Tender" },
+  { text: "Nepal Rastra Bank: New monetary policy circular published - effective immediately", id: "n5", title: "Nepal Rastra Bank - Monetary Policy Circular" },
+  { text: "Judicial Service Commission - Section Officer written exam results published", id: "n6", title: "Judicial Service Commission - Section Officer Results" },
   { text: "Ministry of Finance: Budget allocation notice for FY 2082/83 released", id: "n7", title: "Ministry of Finance - Budget Allocation Notice" },
 ]
 

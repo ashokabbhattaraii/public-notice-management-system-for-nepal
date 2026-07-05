@@ -62,7 +62,7 @@ export default function NoticeDetailPage() {
   const mockAnswer = (q: string): string => {
     const ql = q.toLowerCase()
     if (ql.includes("deadline") || ql.includes("when"))
-      return notice.deadline ? `The deadline is **${formatDate(notice.deadline)}** — ${days! > 0 ? `${days} days from now` : "already passed"}.` : "No specific deadline mentioned."
+      return notice.deadline ? `The deadline is **${formatDate(notice.deadline)}** - ${days! > 0 ? `${days} days from now` : "already passed"}.` : "No specific deadline mentioned."
     if (ql.includes("eligib") || ql.includes("requirement"))
       return notice.keyFacts?.find(f => f.toLowerCase().includes("qualif")) ?? `Refer to the full content for eligibility details.`
     return `This notice from ${notice.organization}: ${notice.aiSummary ?? notice.description}`
@@ -190,7 +190,7 @@ export default function NoticeDetailPage() {
         </div>
       </section>
 
-      {/* Main content area — two columns */}
+      {/* Main content area - two columns */}
       <div className="mx-auto max-w-[1480px] px-6 py-6 md:px-8 md:py-8 lg:px-12 lg:py-10">
         <div className="grid gap-10 lg:grid-cols-[1fr_380px] lg:gap-16">
 

@@ -13,7 +13,7 @@ interface AnimatedHeadingProps {
 }
 
 /**
- * Section heading whose words rise out of clipped lines on scroll —
+ * Section heading whose words rise out of clipped lines on scroll -
  * same motion language as the hero headline. Initial state lives in
  * CSS (.vz-word-line / .vz-word) to avoid a pre-hydration flash.
  */

@@ -12,7 +12,7 @@ const solutions = [
     icon: Layers,
     problem: "Scattered portals",
     title: "One Feed. Every Source.",
-    body: "Suchana AI automatically aggregates notices from all major government portals — Public Service Commission, Ministry of Finance, Judicial Service Commission, and more — into a single, unified, always-updated feed.",
+    body: "Suchana AI automatically aggregates notices from all major government portals - Public Service Commission, Ministry of Finance, Judicial Service Commission, and more - into a single, unified, always-updated feed.",
     tag: "Centralized Aggregation",
   },
   {
@@ -28,7 +28,7 @@ const solutions = [
     icon: Bell,
     problem: "No alert system",
     title: "Get Notified Before Others.",
-    body: "Set keyword, category, or organization alerts. The moment a relevant notice is published — a new exam date, a tender, a job vacancy — you receive an instant notification. No more manual checking.",
+    body: "Set keyword, category, or organization alerts. The moment a relevant notice is published - a new exam date, a tender, a job vacancy - you receive an instant notification. No more manual checking.",
     tag: "Smart Subscriptions",
   },
   {

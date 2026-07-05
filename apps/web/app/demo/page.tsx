@@ -114,10 +114,10 @@ export default function DemoPage() {
         <Header />
       </div>
 
-      {/* Animated Hero Sections — full screen, GSAP Observer */}
+      {/* Animated Hero Sections - full screen, GSAP Observer */}
       <AnimatedHeroSections />
 
-      {/* Rest of page content — scrolls normally after hero */}
+      {/* Rest of page content - scrolls normally after hero */}
       <div className="relative z-10">
         {/* Metrics */}
         <section className="py-20 px-4">

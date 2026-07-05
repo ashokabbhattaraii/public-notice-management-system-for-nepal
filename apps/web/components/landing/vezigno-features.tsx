@@ -11,7 +11,7 @@ const features = [
   {
     icon: Search,
     title: "Unified search",
-    body: "Query every government notice — vacancies, tenders, exam dates, policy updates — from a single interface with natural language support.",
+    body: "Query every government notice - vacancies, tenders, exam dates, policy updates - from a single interface with natural language support.",
   },
   {
     icon: Shield,
@@ -46,7 +46,7 @@ export function VezignoFeatures() {
           </div>
           <Reveal delay={200}>
             <p className="max-w-sm text-base leading-6 text-vez-mute">
-              Four capabilities, one pipeline — from scraping the source portal to
+              Four capabilities, one pipeline - from scraping the source portal to
               answering your question in plain language.
             </p>
           </Reveal>

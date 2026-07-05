@@ -224,7 +224,7 @@ export function VezignoPricing() {
 
         <Reveal delay={200}>
           <p className="mt-10 text-center text-sm text-vez-mute">
-            Prices in Nepalese Rupees. Cancel anytime — no hidden fees, no lock-in.
+            Prices in Nepalese Rupees. Cancel anytime - no hidden fees, no lock-in.
           </p>
         </Reveal>
       </div>

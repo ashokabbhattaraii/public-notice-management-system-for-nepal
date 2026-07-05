@@ -39,7 +39,7 @@ export function VezignoContact() {
           <Eyebrow>Contact</Eyebrow>
         </Reveal>
         <AnimatedHeading
-          text="Questions, feedback, or partnerships — write to us."
+          text="Questions, feedback, or partnerships - write to us."
           className="mt-4 max-w-[18ch] text-[clamp(36px,4.5vw,64px)] font-normal leading-[1.12] tracking-[-0.04em] text-vez-ink"
         />
 

@@ -72,7 +72,7 @@ export function AlertCtaBanner() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold pr-4">Never miss a notice</p>
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-              Get alerts for jobs, exams & tenders — straight to your phone or email.
+              Get alerts for jobs, exams & tenders - straight to your phone or email.
             </p>
             <Link href={user ? "/dashboard/alerts" : "/login"}>
               <Button size="sm" className="mt-3 gap-1.5 h-8 text-xs">

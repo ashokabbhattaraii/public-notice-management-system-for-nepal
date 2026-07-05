@@ -89,7 +89,7 @@ export default function AdminScrapingPage() {
           })}
         </div>
 
-        {/* Tabs — pill style */}
+        {/* Tabs - pill style */}
         <div className="mb-6 flex w-fit items-center gap-1 rounded-full bg-white p-1.5">
           {[
             { id: "sources" as const, label: "Sources", icon: Globe },

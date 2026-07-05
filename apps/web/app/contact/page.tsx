@@ -17,7 +17,7 @@ export default function ContactPage() {
             We&apos;d love to hear from you.
           </h1>
           <p className="mt-6 max-w-[52ch] text-base leading-6 text-vez-ink/80 md:text-lg">
-            Questions, feedback, partnership ideas, or an Organization plan enquiry —
+            Questions, feedback, partnership ideas, or an Organization plan enquiry -
             send us a message and we&apos;ll get back within one business day.
           </p>
         </div>

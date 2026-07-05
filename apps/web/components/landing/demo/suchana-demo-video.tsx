@@ -77,7 +77,7 @@ function SceneAggregate() {
 
   return (
     <AbsoluteFill style={{ opacity }}>
-      <SceneTitle eyebrow="Step 1 — Aggregation" title="50+ portals become one feed." />
+      <SceneTitle eyebrow="Step 1 - Aggregation" title="50+ portals become one feed." />
 
       {/* Central feed card */}
       <div
@@ -160,7 +160,7 @@ function SceneOcr() {
 
   return (
     <AbsoluteFill style={{ opacity }}>
-      <SceneTitle eyebrow="Step 2 — AI processing" title="Scanned PDFs become readable." />
+      <SceneTitle eyebrow="Step 2 - AI processing" title="Scanned PDFs become readable." />
 
       {/* Scanned document */}
       <div
@@ -286,7 +286,7 @@ function SceneAlerts() {
 
   return (
     <AbsoluteFill style={{ opacity }}>
-      <SceneTitle eyebrow="Step 3 — Smart alerts" title="You hear about it first." />
+      <SceneTitle eyebrow="Step 3 - Smart alerts" title="You hear about it first." />
 
       {/* Bell with ripple rings */}
       <div style={{ position: "absolute", left: 280, top: 400 }}>
@@ -334,7 +334,7 @@ function SceneAlerts() {
 
       {/* Notification cards sliding in */}
       {[
-        { title: "PSC — Section Officer Exam 2082", tag: "Exams", delay: 26 },
+        { title: "PSC - Section Officer Exam 2082", tag: "Exams", delay: 26 },
         { title: "Highway Construction Tender", tag: "Tenders", delay: 44 },
       ].map((n, i) => {
         const slide = spring({ frame: frame - n.delay, fps, config: { damping: 15 } })
@@ -400,7 +400,7 @@ function SceneSearch() {
 
   return (
     <AbsoluteFill style={{ opacity }}>
-      <SceneTitle eyebrow="Step 4 — Ask anything" title="Answers from real documents." />
+      <SceneTitle eyebrow="Step 4 - Ask anything" title="Answers from real documents." />
 
       {/* Search pill */}
       <div
@@ -447,7 +447,7 @@ function SceneSearch() {
         The written exam is scheduled for <b>Shrawan 15, 2082</b>. Applications close two
         weeks earlier.
         <div style={{ marginTop: 16, fontSize: 16, color: MUTE }}>
-          Source: psc.gov.np — Section Officer Notice 2082
+          Source: psc.gov.np - Section Officer Notice 2082
         </div>
       </div>
 

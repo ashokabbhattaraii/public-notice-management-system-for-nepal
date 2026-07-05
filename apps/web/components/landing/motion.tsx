@@ -12,7 +12,7 @@ function reducedMotion() {
 }
 
 /**
- * Magnetic — children gently follow the cursor while hovered and spring back
+ * Magnetic - children gently follow the cursor while hovered and spring back
  * elastically on leave. Wrap CTAs; keeps layout intact (transform only).
  */
 export function Magnetic({
@@ -61,7 +61,7 @@ export function Magnetic({
 }
 
 /**
- * TiltCard — card tilts in 3D toward the pointer and lifts slightly,
+ * TiltCard - card tilts in 3D toward the pointer and lifts slightly,
  * settling back on leave. Transform-only; perspective lives on the wrapper.
  */
 export function TiltCard({
@@ -117,7 +117,7 @@ export function TiltCard({
 }
 
 /**
- * Parallax — element drifts vertically at a different rate than the page,
+ * Parallax - element drifts vertically at a different rate than the page,
  * linked to scroll position (scrub). speed is the total yPercent traveled.
  */
 export function Parallax({
@@ -163,7 +163,7 @@ export function Parallax({
 }
 
 /**
- * StaggerGrid — reveals its direct children from the center outward with a
+ * StaggerGrid - reveals its direct children from the center outward with a
  * rise, slight rotation, and back.out spring when the grid enters the view.
  * Replaces per-card <Reveal> wrappers inside card grids.
  */
@@ -223,7 +223,7 @@ export function StaggerGrid({
 }
 
 /**
- * PopIcon — icon badge springs in (scale from 0, back.out) when scrolled
+ * PopIcon - icon badge springs in (scale from 0, back.out) when scrolled
  * into view. Wrap the icon container, not the whole card.
  */
 export function PopIcon({
