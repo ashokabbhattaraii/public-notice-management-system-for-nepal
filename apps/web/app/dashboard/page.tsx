@@ -410,7 +410,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { href: "/notices", label: "Browse", icon: Search },
-                    { href: "/rag", label: "Doc search", icon: FileText },
+                    { href: "/documents", label: "Doc search", icon: FileText },
                     { href: "/dashboard/alerts", label: "My alerts", icon: Bell },
                     { href: "/dashboard/saved", label: "Saved", icon: Bookmark },
                   ].map((action) => {

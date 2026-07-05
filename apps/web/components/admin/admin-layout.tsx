@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
@@ -50,8 +51,8 @@ function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkCli
     <div className="flex h-full flex-col bg-white">
       {/* Brand + back */}
       <div className="border-b border-vez-line px-4 pb-3 pt-4">
-        <Link href="/" className="text-base text-vez-ink">
-          Suchana<span className="text-vez-navy font-medium">&nbsp;AI</span>
+        <Link href="/" className="inline-block">
+          <Image src="/images/logo.png" alt="Suchana AI" width={160} height={160} className="h-12 w-auto" />
         </Link>
         <div className="mt-2 flex items-center gap-1.5">
           <Shield className="size-3.5 text-vez-navy" />

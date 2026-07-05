@@ -514,7 +514,7 @@ export default function RagPage() {
     }
   }
 
-  const sendMessage = async (text?: string) => {
+  const sendMessage = async (text?: string, docIdOverride?: string) => {
     const q = (text ?? chatInput).trim()
     if (!q || typing) return
 
@@ -529,7 +529,7 @@ export default function RagPage() {
     setTyping(true)
 
     try {
-      const result = await ragQuery(q, selectedDocId)
+      const result = await ragQuery(q, docIdOverride ?? selectedDocId)
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -563,7 +563,7 @@ export default function RagPage() {
 
   const askAboutDoc = (doc: RagDocument) => {
     setSelectedDocId(doc.id)
-    sendMessage(`What are the key provisions of "${doc.title}"?`)
+    sendMessage(`What are the key provisions of "${doc.title}"?`, doc.id)
     if (view === "library") setView("split")
     setMobileTab("chat")
   }
@@ -666,7 +666,7 @@ export default function RagPage() {
             <p className="text-base font-semibold text-vez-ink">Document AI</p>
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-vez-mute sm:text-sm">
               <span className="size-2 shrink-0 rounded-full bg-emerald-500" />
-              {embeddedCount} docs · Hybrid RAG (Qdrant · E5 · BM25 · Groq)
+              {embeddedCount} {embeddedCount === 1 ? "document" : "documents"} ready · Ask anything
             </p>
           </div>
         </div>
@@ -824,10 +824,9 @@ export default function RagPage() {
             <div>
               <div className="flex items-center gap-2 sm:gap-3">
                 <h1 className="text-lg font-semibold tracking-tight text-vez-ink sm:text-xl">Document Intelligence</h1>
-                <span className="rounded-lg bg-vez-sky/30 px-2.5 py-1 text-xs font-semibold text-vez-navy">RAG</span>
               </div>
               <p className="mt-0.5 hidden text-sm text-vez-mute sm:block">
-                {embeddedCount} docs embedded · {totalChunks} chunks · Hybrid RAG (Qdrant · E5 · BM25 · Groq)
+                {embeddedCount} {embeddedCount === 1 ? "document" : "documents"} indexed · {totalChunks.toLocaleString()} searchable passages
               </p>
             </div>
           </div>

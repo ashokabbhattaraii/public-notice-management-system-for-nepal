@@ -134,7 +134,7 @@ export function VezignoHero() {
               </Magnetic>
               <Magnetic>
                 <Link
-                  href="/rag"
+                  href="/documents"
                   className="flex items-center gap-1.5 rounded-full bg-white/30 px-6 py-3 text-base text-vez-ink backdrop-blur-md border border-white/50 transition-all duration-300 hover:bg-white/60 hover:shadow-md"
                 >
                   Explore documents

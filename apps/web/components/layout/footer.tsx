@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { Github } from "lucide-react"
 
 const footerLinks = {
   Platform: [
     { label: "Browse Notices", href: "/notices" },
-    { label: "Document Search (RAG)", href: "/rag" },
+    { label: "Document Search", href: "/documents" },
     { label: "Set Up Alerts", href: "/login" },
     { label: "About the Project", href: "/about" },
   ],
@@ -31,8 +32,14 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="sm:col-span-2">
-            <Link href="/" className="text-2xl font-normal text-white">
-              Suchana<span className="text-vez-sky">&nbsp;AI</span>
+            <Link href="/" className="inline-block">
+              <Image
+                src="/images/logo.png"
+                alt="Suchana AI"
+                width={200}
+                height={200}
+                className="h-16 w-auto brightness-0 invert"
+              />
             </Link>
             <p className="mt-5 max-w-xs text-base leading-6 text-white/60">
               An AI-powered, cloud-based platform aggregating Nepal&apos;s public

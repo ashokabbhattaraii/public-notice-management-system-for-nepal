@@ -1,26 +1,65 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowUpRight } from "lucide-react"
+import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowUpRight, ChevronDown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { cn } from "@/lib/utils"
 
-const sectionLinks = [
+const productLinks = [
   { id: "#problem", label: "Problem" },
   { id: "#solution", label: "Solution" },
   { id: "#features", label: "Features" },
-  { id: "#pricing", label: "Pricing" },
 ]
 
-const utilityLinks = [
+const resourceLinks = [
   { href: "/notices", label: "Notices" },
-  { href: "/rag", label: "Documents" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
+  { href: "/documents", label: "Documents" },
 ]
+
+const standaloneLinks = [
+  { id: "#pricing", label: "Pricing", anchor: true },
+  { href: "/about", label: "About", anchor: false },
+]
+
+function Dropdown({ label, children, solid }: { label: string; children: React.ReactNode; solid: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+          "text-vez-ink hover:bg-white/60"
+        )}
+      >
+        {label}
+        <ChevronDown className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className={cn(
+          "absolute top-full left-0 mt-2 min-w-[160px] rounded-xl border p-1.5 shadow-lg backdrop-blur-xl",
+          solid ? "bg-white/90 border-white/60" : "bg-white/80 border-white/40"
+        )}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function Header() {
   const { user, logout } = useAuth()
@@ -35,20 +74,12 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
 
   const isHome = pathname === "/"
-  // Transparent over the sky hero at the top of the home page; frosted white everywhere else
   const solid = !isHome || scrolled || mobileOpen
-
-  // Same menu on every page: section anchors resolve to /#section off the home page
-  const navLinks = [
-    ...sectionLinks.map((s) => ({ href: isHome ? s.id : `/${s.id}`, label: s.label, anchor: true })),
-    ...utilityLinks.map((u) => ({ ...u, anchor: false })),
-  ]
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, anchor: boolean) => {
     if (anchor && isHome && href.startsWith("#")) {
@@ -62,8 +93,9 @@ export function Header() {
     setMobileOpen(false)
   }
 
-  const isActive = (link: { href: string; anchor: boolean }) =>
-    !link.anchor && pathname === link.href
+
+  const isActive = (href: string, anchor: boolean) =>
+    !anchor && pathname === href
 
   return (
     <>
@@ -76,9 +108,16 @@ export function Header() {
         )}
       >
         <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between px-6 md:px-8 lg:px-12">
-          {/* Brand — text mark per spec */}
-          <Link href="/" className="shrink-0 text-base text-vez-ink">
-            Suchana<span className="text-vez-navy font-medium">&nbsp;AI</span>
+          {/* Brand */}
+          <Link href="/" className="shrink-0">
+            <Image
+              src="/images/logo.png"
+              alt="Suchana AI"
+              width={220}
+              height={220}
+              className="h-16 w-auto sm:h-[72px]"
+              priority
+            />
           </Link>
 
           {/* Frosted pill nav */}
@@ -88,14 +127,26 @@ export function Header() {
               solid ? "bg-white/40 border-white/50" : "bg-white/10 border-white/20"
             )}
           >
-            {navLinks.map((link) => (
+            <Dropdown label="Product" solid={solid}>
+              {productLinks.map((link) => (
+                <Link
+                  key={link.label}
+                  href={isHome ? link.id : `/${link.id}`}
+                  onClick={(e) => handleNavClick(e, isHome ? link.id : `/${link.id}`, true)}
+                  className="block rounded-lg px-3 py-2 text-base text-vez-ink transition-colors hover:bg-vez-sky/40"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </Dropdown>
+
+            {resourceLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
-                onClick={(e) => handleNavClick(e, link.href, link.anchor)}
                 className={cn(
                   "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
-                  isActive(link)
+                  isActive(link.href, false)
                     ? "bg-vez-navy text-white"
                     : "text-vez-ink hover:bg-white/60"
                 )}
@@ -103,18 +154,41 @@ export function Header() {
                 {link.label}
               </Link>
             ))}
+
+            {standaloneLinks.map((link) => {
+              const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
+              return (
+                <Link
+                  key={link.label}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, link.anchor)}
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+                    isActive(href, link.anchor)
+                      ? "bg-vez-navy text-white"
+                      : "text-vez-ink hover:bg-white/60"
+                  )}
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
           </nav>
 
           {/* Right actions */}
           <div className="hidden lg:flex items-center gap-2">
-            <button
-              onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
-              className="flex items-center gap-1.5 rounded-full bg-vez-navy/10 px-4 py-2 text-base text-vez-navy backdrop-blur-sm border border-vez-navy/10 transition-all hover:bg-vez-navy hover:text-white hover:border-vez-navy"
-              aria-label="Notify"
+            <Link
+              href="/contact"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-5 py-2 text-base font-medium transition-all",
+                pathname === "/contact"
+                  ? "bg-vez-navy text-white"
+                  : "bg-vez-navy/10 text-vez-navy border border-vez-navy/10 hover:bg-vez-navy hover:text-white hover:border-vez-navy"
+              )}
             >
-              <Bell className="size-4" />
-              Notify
-            </button>
+              Contact
+              <ArrowUpRight className="size-3.5" />
+            </Link>
 
             <button
               onClick={() => setLanguage(language === "en" ? "ne" : "en")}
@@ -219,19 +293,66 @@ export function Header() {
           )}
         >
           <nav className="flex max-h-[75vh] flex-col gap-1 overflow-y-auto border-t border-vez-line bg-white px-6 py-4">
-            {navLinks.map((link) => (
+            <p className="px-4 py-1 text-xs font-medium uppercase tracking-wider text-vez-mute">Product</p>
+            {productLinks.map((link) => {
+              const href = isHome ? link.id : `/${link.id}`
+              return (
+                <Link
+                  key={link.label}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, true)}
+                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink transition-colors hover:bg-vez-surface"
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
+
+            <div className="my-2 h-px bg-vez-line" />
+
+            {resourceLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
-                onClick={(e) => handleNavClick(e, link.href, link.anchor)}
+                onClick={() => setMobileOpen(false)}
                 className={cn(
                   "rounded-[12px] px-4 py-3 text-base transition-colors",
-                  isActive(link) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
+                  isActive(link.href, false) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                 )}
               >
                 {link.label}
               </Link>
             ))}
+
+            <div className="my-2 h-px bg-vez-line" />
+
+            {standaloneLinks.map((link) => {
+              const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
+              return (
+                <Link
+                  key={link.label}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, link.anchor)}
+                  className={cn(
+                    "rounded-[12px] px-4 py-3 text-base transition-colors",
+                    isActive(href, link.anchor) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
+                  )}
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
+
+            <Link
+              href="/contact"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "rounded-[12px] px-4 py-3 text-base transition-colors",
+                pathname === "/contact" ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
+              )}
+            >
+              Contact
+            </Link>
 
             <div className="my-2 h-px bg-vez-line" />
 

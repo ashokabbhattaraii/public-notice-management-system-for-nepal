@@ -6,6 +6,7 @@ import { DocumentsModule } from './modules/documents.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RagModule } from './modules/rag.module';
+import { InternsModule } from './modules/interns.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { RagModule } from './modules/rag.module';
     DocumentsModule,
     WebhooksModule,
     RagModule,
+    InternsModule,
   ],
 })
 export class AppModule {}

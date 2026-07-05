@@ -22,7 +22,7 @@ const recentNotices = mockNotices.slice(0, 6)
 const sidebarItems = [
   { icon: Home, label: "Home", href: "/" },
   { icon: Newspaper, label: "Notices", href: "/notices", active: true },
-  { icon: Search, label: "Search", href: "/rag" },
+  { icon: Search, label: "Search", href: "/documents" },
   { icon: Bell, label: "Alerts", href: "/login" },
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
 ]
@@ -107,13 +107,8 @@ export function NoticesDashboardMockup() {
         {/* ── Sidebar ── */}
         <div className="hidden w-48 shrink-0 flex-col border-r border-vez-line bg-vez-surface/60 sm:flex">
           {/* Brand */}
-          <div className="flex items-center gap-2 border-b border-vez-line px-4 py-4">
-            <div className="flex size-6 items-center justify-center rounded-full bg-vez-navy">
-              <FileText className="size-3.5 text-white" />
-            </div>
-            <span className="text-sm text-vez-ink">
-              Suchana<span className="font-medium">&nbsp;AI</span>
-            </span>
+          <div className="flex items-center gap-2 border-b border-vez-line px-4 py-3">
+            <img src="/images/logo.png" alt="Suchana AI" className="h-8 w-auto" />
           </div>
 
           {/* Nav */}

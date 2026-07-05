@@ -65,3 +65,74 @@ model Document {
 
   @@map("documents")
 }
+
+enum InternStatus {
+  active
+  inactive
+  completed
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  leave
+  compensation_leave
+}
+
+model Intern {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String
+  email           String       @unique
+  phone           String?
+  department      String?
+  startDate       DateTime     @map("start_date")
+  endDate         DateTime?    @map("end_date")
+  status          InternStatus @default(active)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  attendances     Attendance[]
+  saturdayRosters SaturdayRoster[]
+  compensationLeaves CompensationLeave[]
+
+  @@map("interns")
+}
+
+model Attendance {
+  id        String           @id @default(uuid()) @db.Uuid
+  internId  String           @map("intern_id") @db.Uuid
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(present)
+  remarks   String?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  intern    Intern           @relation(fields: [internId], references: [id], onDelete: Cascade)
+
+  @@unique([internId, date])
+  @@map("attendances")
+}
+
+model SaturdayRoster {
+  id        String   @id @default(uuid()) @db.Uuid
+  internId  String   @map("intern_id") @db.Uuid
+  date      DateTime @db.Date
+  present   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  intern    Intern   @relation(fields: [internId], references: [id], onDelete: Cascade)
+
+  @@unique([internId, date])
+  @@map("saturday_rosters")
+}
+
+model CompensationLeave {
+  id          String    @id @default(uuid()) @db.Uuid
+  internId    String    @map("intern_id") @db.Uuid
+  earnedDate  DateTime  @map("earned_date") @db.Date
+  usedDate    DateTime? @map("used_date") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  intern      Intern    @relation(fields: [internId], references: [id], onDelete: Cascade)
+
+  @@map("compensation_leaves")
+}

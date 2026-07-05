@@ -39,7 +39,7 @@ export function AlertCtaBanner() {
   }, [dismissed])
 
   // Don't show on admin pages, dashboard, login/signup, or if user already has alerts
-  const hideOnPaths = ["/admin", "/dashboard", "/login", "/login", "/rag"]
+  const hideOnPaths = ["/admin", "/dashboard", "/login", "/login", "/documents"]
   const shouldHide = hideOnPaths.some(p => pathname.startsWith(p))
   if (shouldHide) return null
   if (dismissed) return null

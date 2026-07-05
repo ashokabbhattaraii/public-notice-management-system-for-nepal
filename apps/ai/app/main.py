@@ -191,6 +191,7 @@ def _ingest_document(
     mime_type: str,
     metadata: dict,
 ) -> tuple[int, dict]:
+    progress.update(doc_id, "extracting", f"Extracting text from {filename}...")
     try:
         result = extractor.extract_text(str(save_path), mime_type)
     except Exception as e:

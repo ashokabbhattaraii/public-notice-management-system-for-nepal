@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
+import { usePathname } from "next/navigation"
 import { MessageCircle, X, Send, Bot, User, Sparkles, Minimize2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -37,6 +38,7 @@ function getResponse(query: string): string {
 }
 
 export function FloatingChat() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -83,6 +85,8 @@ export function FloatingChat() {
       setTyping(false)
     }, 800 + Math.random() * 700)
   }
+
+  if (pathname?.startsWith("/documents")) return null
 
   return (
     <>
