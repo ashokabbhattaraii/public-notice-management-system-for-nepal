@@ -75,9 +75,10 @@ export interface RagDocument {
   fileSize: number
   status: DocumentStatus
   isOcr: boolean
+  isSystem: boolean
   textLength: number | null
   chunkCount: number | null
-  uploadedBy: string
+  uploadedBy: string | null
   createdAt: string
   updatedAt: string
   indexedAt: string | null
@@ -121,6 +122,79 @@ export interface ScrapingSource {
   status: "active" | "inactive" | "error"
   lastRun?: string
   itemsScraped: number
+}
+
+// ─── Live scraping (crawl4ai pipeline, dynamic multi-source) ─────────────────
+
+export type ScrapedItemCategory = "NOTICE" | "NEWS"
+
+export interface ScrapedItem {
+  id: string
+  sourceId: string | null
+  sourceLabel: string
+  category: ScrapedItemCategory
+  title: string
+  sourceUrl: string
+  summary: string | null
+  attachmentUrl: string | null
+  publishedAt: string | null
+  scrapedAt: string
+  updatedAt: string
+  views?: number
+}
+
+/** Full detail (includes body content), returned by GET /notices/:id. */
+export interface PublicNoticeDetail extends ScrapedItem {
+  contentText: string | null
+  contentHtml: string | null
+  views: number
+}
+
+export interface PublicNoticeSource {
+  id: string
+  name: string
+}
+
+export type ScrapeRunStatus = "RUNNING" | "SUCCESS" | "FAILED"
+
+export interface ScrapeRun {
+  id: string
+  sourceId: string | null
+  sourceLabel: string
+  status: ScrapeRunStatus
+  itemsFound: number
+  itemsNew: number
+  itemsUpdated: number
+  error: string | null
+  startedAt: string
+  finishedAt: string | null
+}
+
+export type ScrapePaginationType = "QUERY_PARAM" | "PATH_TEMPLATE" | "NONE"
+
+export interface ScrapeSource {
+  id: string
+  name: string
+  baseUrl: string
+  noticeListUrl: string | null
+  newsListUrl: string | null
+  paginationType: ScrapePaginationType
+  paginationParam: string
+  startPage: number
+  maxPages: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  lastRunAt: string | null
+  lastStatus: ScrapeRunStatus | null
+  itemCount: number
+}
+
+export interface ScrapeRunProgress {
+  run_id: string
+  stage: "running" | "done" | "failed" | null
+  messages: { at: number; text: string }[]
+  error: string | null
 }
 
 export interface Activity {

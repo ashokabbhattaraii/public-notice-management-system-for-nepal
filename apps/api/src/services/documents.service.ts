@@ -53,14 +53,21 @@ export class DocumentsService {
     return document;
   }
 
-  async findAll(dto: ListDocumentsDto) {
+  async findAll(dto: ListDocumentsDto, userId?: string) {
     const { page = 1, limit = 20, status } = dto;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.DocumentWhereInput = {};
-    if (status) {
-      where.status = status;
-    }
+    // Show system docs to everyone; user docs only to their owner
+    const where: Prisma.DocumentWhereInput = {
+      AND: [
+        // Scope: system docs OR docs owned by this user
+        userId
+          ? { OR: [{ isSystem: true }, { uploadedBy: userId }] }
+          : { isSystem: true },
+        // Optional status filter
+        ...(status ? [{ status }] : []),
+      ],
+    };
 
     const [documents, total] = await Promise.all([
       this.prisma.document.findMany({

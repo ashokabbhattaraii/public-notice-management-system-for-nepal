@@ -12,6 +12,7 @@ import {
   Res,
   ParseUUIDPipe,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -20,6 +21,7 @@ import { User } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { DocumentsService } from '../services/documents.service';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
@@ -45,11 +47,11 @@ const storage = diskStorage({
 });
 
 @Controller('documents')
-@UseGuards(JwtAuthGuard)
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileInterceptor('file', {
       storage,
@@ -89,45 +91,85 @@ export class DocumentsController {
     return document;
   }
 
+  // Returns system docs + user's own docs (scoped)
   @Get()
-  async findAll(@Query() dto: ListDocumentsDto) {
-    return this.documentsService.findAll(dto);
+  @UseGuards(OptionalJwtAuthGuard)
+  async findAll(
+    @Query() dto: ListDocumentsDto,
+    @CurrentUser() user: User | null,
+  ) {
+    return this.documentsService.findAll(dto, user?.id);
   }
 
-  // Must be declared before ':id' routes so 'progress' isn't parsed as a UUID.
   @Get('progress/batch')
-  async progressBatch(@Query('ids') ids?: string) {
+  @UseGuards(OptionalJwtAuthGuard)
+  async progressBatch(
+    @Query('ids') ids?: string,
+  ) {
     const docIds = (ids ?? '').split(',').filter(Boolean).slice(0, 50);
     return this.documentsService.getProgressBatch(docIds);
   }
 
   @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.findOne(id);
   }
 
   @Post(':id/embed')
-  async embed(@Param('id', ParseUUIDPipe) id: string) {
+  @UseGuards(JwtAuthGuard)
+  async embed(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    const doc = await this.documentsService.findOne(id);
+    if (!doc.isSystem && doc.uploadedBy !== user.id) {
+      throw new ForbiddenException('You can only embed your own documents');
+    }
     return this.documentsService.embed(id);
   }
 
   @Post(':id/unembed')
-  async unembed(@Param('id', ParseUUIDPipe) id: string) {
+  @UseGuards(JwtAuthGuard)
+  async unembed(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    const doc = await this.documentsService.findOne(id);
+    if (doc.isSystem) {
+      throw new ForbiddenException('System documents cannot be unembedded');
+    }
+    if (doc.uploadedBy !== user.id) {
+      throw new ForbiddenException('You can only unembed your own documents');
+    }
     return this.documentsService.unembed(id);
   }
 
   @Get(':id/progress')
+  @UseGuards(OptionalJwtAuthGuard)
   async progress(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getProgress(id);
   }
 
   @Delete(':id')
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
+  @UseGuards(JwtAuthGuard)
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    const doc = await this.documentsService.findOne(id);
+    if (doc.isSystem) {
+      throw new ForbiddenException('System documents cannot be deleted');
+    }
+    if (doc.uploadedBy !== user.id) {
+      throw new ForbiddenException('You can only delete your own documents');
+    }
     await this.documentsService.remove(id);
     return { message: 'Document deleted successfully' };
   }
 
   @Get(':id/download')
+  @UseGuards(OptionalJwtAuthGuard)
   async download(
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,

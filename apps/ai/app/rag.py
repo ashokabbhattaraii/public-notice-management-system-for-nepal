@@ -161,12 +161,14 @@ def _select_context(results: list[dict], top_k: int) -> list[dict]:
 async def query(
     question: str,
     doc_id: Optional[str] = None,
+    doc_ids: Optional[list[str]] = None,
     top_k: int = 5,
     language: str = "en",
 ) -> dict:
     logger.info(
-        "RAG query (doc_id=%s, top_k=%d, lang=%s): %.80s",
+        "RAG query (doc_id=%s, doc_ids=%s, top_k=%d, lang=%s): %.80s",
         doc_id,
+        f"[{len(doc_ids)} ids]" if doc_ids else None,
         top_k,
         language,
         question,
@@ -195,6 +197,7 @@ async def query(
         query_text=question,
         top_k=min(top_k * _CANDIDATE_MULTIPLIER, _MAX_CANDIDATES),
         filter_doc_id=doc_id,
+        filter_doc_ids=doc_ids,
     )
 
     results = _select_context(candidates, top_k)

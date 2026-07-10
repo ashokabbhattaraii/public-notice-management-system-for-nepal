@@ -13,6 +13,8 @@ from app import embeddings
 from app import extractor
 from app import progress
 from app import rag
+from app import scraper
+from app import scrape_progress
 from app import store
 from app.logger import get_logger, setup_logging
 
@@ -103,6 +105,13 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
 
     if method == "POST" and path == "/query":
         return await _query(receive)
+
+    if method == "POST" and path == "/scrape/source":
+        return await _scrape_source(receive)
+
+    scrape_progress_match = re.match(r"^/scrape/progress/([^/]+)$", path)
+    if method == "GET" and scrape_progress_match:
+        return _scrape_progress(scrape_progress_match.group(1))
 
     return 404, {"error": "Not found"}
 
@@ -321,6 +330,7 @@ async def _query(receive) -> tuple[int, dict]:
         return 400, {"error": "Field 'question' is required"}
 
     doc_id = data.get("doc_id")
+    doc_ids = data.get("doc_ids")  # list of allowed doc_ids for scoped queries
     top_k = data.get("top_k", 5)
     language = data.get("language", "en")
 
@@ -328,6 +338,7 @@ async def _query(receive) -> tuple[int, dict]:
         result = await rag.query(
             question=question,
             doc_id=doc_id,
+            doc_ids=doc_ids,
             top_k=top_k,
             language=language,
         )
@@ -335,6 +346,88 @@ async def _query(receive) -> tuple[int, dict]:
     except Exception as e:
         logger.exception("RAG query failed")
         return 500, {"error": f"Query failed: {str(e)}"}
+
+
+async def _scrape_source(receive) -> tuple[int, dict]:
+    """POST /scrape/source — generic notice/news scrape for an admin-added
+    website. Body: {base_url, category_urls: {"NOTICE"?: url, "NEWS"?: url},
+    cached_schemas?: {"NOTICE"?: schema, "NEWS"?: schema}, known_urls?: [...],
+    max_pages?: int, run_id?: str, pagination?: {type, param, start_page}}.
+    Returns {items: [...], schemas: {category: schema}} — `schemas` is
+    whichever schema (cached or freshly detected) was actually used, for the
+    caller to persist for the next run. When `run_id` is given, live status
+    messages are recorded and pollable via GET /scrape/progress/{run_id}."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    base_url = data.get("base_url", "").strip()
+    if not base_url:
+        return 400, {"error": "Field 'base_url' is required"}
+
+    category_urls = data.get("category_urls") or {}
+    if not category_urls:
+        return 400, {"error": "Field 'category_urls' must map at least one category to a URL"}
+
+    cached_schemas = data.get("cached_schemas") or {}
+    known_urls = set(data.get("known_urls") or [])
+    max_pages = int(data.get("max_pages", scraper.DEFAULT_MAX_PAGES))
+    run_id = data.get("run_id")
+
+    pagination_data = data.get("pagination") or {}
+    pagination = scraper.PaginationConfig(
+        pagination_type=pagination_data.get("type", "QUERY_PARAM"),
+        param=pagination_data.get("param", "page"),
+        start_page=int(pagination_data.get("start_page", 1)),
+    )
+
+    on_progress = None
+    if run_id:
+        scrape_progress.start(run_id)
+        on_progress = lambda msg: scrape_progress.log(run_id, msg)  # noqa: E731
+
+    try:
+        items, schemas_used = await scraper.scrape_source(
+            base_url=base_url,
+            category_urls=category_urls,
+            cached_schemas=cached_schemas,
+            known_urls=known_urls,
+            max_pages=max_pages,
+            pagination=pagination,
+            on_progress=on_progress,
+        )
+        if run_id:
+            scrape_progress.finish(run_id, f"Done — {len(items)} item(s) found")
+        return 200, {
+            "items": [
+                {
+                    "category": item.category,
+                    "title": item.title,
+                    "source_url": item.source_url,
+                    "published_at": item.published_at,
+                    "summary": item.summary,
+                    "content_text": item.content_text,
+                    "content_html": item.content_html,
+                    "attachment_url": item.attachment_url,
+                }
+                for item in items
+            ],
+            "schemas": schemas_used,
+        }
+    except Exception as e:
+        logger.exception("Scrape failed for base_url=%s", base_url)
+        if run_id:
+            scrape_progress.fail(run_id, str(e))
+        return 502, {"error": f"Scrape failed: {str(e)}"}
+
+
+def _scrape_progress(run_id: str) -> tuple[int, dict]:
+    entry = scrape_progress.get(run_id)
+    if entry is None:
+        return 404, {"error": "No progress information for this run"}
+    return 200, entry
 
 
 # --- HTTP helpers ---

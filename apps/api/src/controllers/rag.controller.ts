@@ -1,15 +1,20 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { User } from '@prisma/client';
+import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
+import { CurrentUser } from '../decorators/current-user.decorator';
 import { RagService } from '../services/rag.service';
 import { RagQueryDto } from '../dto/rag-query.dto';
 
 @Controller('rag')
-@UseGuards(JwtAuthGuard)
 export class RagController {
   constructor(private readonly ragService: RagService) {}
 
   @Post('query')
-  async query(@Body() dto: RagQueryDto) {
-    return this.ragService.query(dto.question, dto.documentId, dto.topK);
+  @UseGuards(OptionalJwtAuthGuard)
+  async query(
+    @Body() dto: RagQueryDto,
+    @CurrentUser() user: User | null,
+  ) {
+    return this.ragService.query(dto.question, dto.documentId, dto.topK, user?.id);
   }
 }

@@ -9,6 +9,7 @@ from qdrant_client.models import (
     Filter,
     Fusion,
     FusionQuery,
+    MatchAny,
     MatchValue,
     Modifier,
     PayloadSchemaType,
@@ -185,6 +186,7 @@ def search(
     query_text: str = "",
     top_k: int = 5,
     filter_doc_id: Optional[str] = None,
+    filter_doc_ids: Optional[list[str]] = None,
 ) -> list[dict]:
     """Hybrid (dense + BM25, RRF-fused) search, falling back to dense-only.
 
@@ -197,6 +199,10 @@ def search(
     if filter_doc_id:
         query_filter = Filter(
             must=[FieldCondition(key="doc_id", match=MatchValue(value=filter_doc_id))]
+        )
+    elif filter_doc_ids:
+        query_filter = Filter(
+            must=[FieldCondition(key="doc_id", match=MatchAny(any=filter_doc_ids))]
         )
 
     sparse_query = None

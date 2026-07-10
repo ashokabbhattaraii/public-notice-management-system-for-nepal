@@ -13,7 +13,7 @@ const contactInfo = [
 ]
 
 const inputClass =
-  "w-full rounded-[12px] border border-white/50 bg-white/50 backdrop-blur-sm px-4 py-3 text-base text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-sky focus:bg-white/70 focus:shadow-sm"
+  "w-full rounded-[12px] border border-vez-line bg-vez-surface/60 px-4 py-3 text-base text-vez-ink outline-none transition-all placeholder:text-vez-mute/60 focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30"
 
 export function VezignoContact() {
   const [formState, setFormState] = useState({ name: "", email: "", subject: "", message: "" })

@@ -147,10 +147,11 @@ function EmbedToggle({ on, busy, onChange }: { on: boolean; busy: boolean; onCha
 
 // ─── DocCard ──────────────────────────────────────────────────────────────────
 
-function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: {
+function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete, onAsk }: {
   doc: RagDocument
   progress?: DocumentProgress
   toggleBusy: boolean
+  canManage: boolean
   onToggleEmbed: () => void
   onDelete: () => void
   onAsk: () => void
@@ -159,6 +160,7 @@ function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: 
   const isProcessing = doc.status === "PENDING" || doc.status === "PROCESSING"
   const isFailed = doc.status === "FAILED"
   const isUnembedded = doc.status === "UNEMBEDDED"
+  const showControls = canManage && !doc.isSystem
 
   const percent = isProcessing ? (progress?.percent ?? 0) : 0
   const stageLabel = progress?.stage ? stageLabels[progress.stage] ?? "Processing" : "Queued"
@@ -170,7 +172,14 @@ function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: 
           <FileText className="size-5 text-vez-navy" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-[15px] font-medium leading-snug text-vez-ink">{doc.title}</p>
+          <div className="flex items-center gap-2">
+            <p className="line-clamp-2 text-[15px] font-medium leading-snug text-vez-ink">{doc.title}</p>
+            {doc.isSystem && (
+              <span className="shrink-0 rounded-md bg-vez-navy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-vez-navy">
+                System
+              </span>
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="rounded-md bg-vez-surface px-2 py-0.5 text-xs font-medium text-vez-mute">
               {formatMimeType(doc.mimeType)}
@@ -227,11 +236,13 @@ function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: 
               {isIndexed
                 ? "Searchable in AI answers"
                 : isFailed
-                  ? "Toggle to retry"
-                  : "Toggle to add to the knowledge base"}
+                  ? showControls ? "Toggle to retry" : "Contact admin"
+                  : showControls ? "Toggle to add to the knowledge base" : "Not yet available"}
             </p>
           </div>
-          <EmbedToggle on={isIndexed} busy={toggleBusy} onChange={onToggleEmbed} />
+          {showControls && (
+            <EmbedToggle on={isIndexed} busy={toggleBusy} onChange={onToggleEmbed} />
+          )}
         </div>
       )}
 
@@ -244,12 +255,14 @@ function DocCard({ doc, progress, toggleBusy, onToggleEmbed, onDelete, onAsk }: 
           <MessageSquare className="size-4" /> Ask AI
         </button>
 
-        <button
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-4" /> Delete
-        </button>
+        {showControls && (
+          <button
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" /> Delete
+          </button>
+        )}
       </div>
     </div>
   )
@@ -398,6 +411,9 @@ export default function RagPage() {
 
   const [view, setView] = useState<ViewMode>("split")
   const [mobileTab, setMobileTab] = useState<MobileTab>("chat")
+  const [libWidth, setLibWidth] = useState(380)
+  const resizing = useRef(false)
+  const splitRef = useRef<HTMLDivElement>(null)
   const [docSearch, setDocSearch] = useState("")
   const [chatInput, setChatInput] = useState("")
   const [typing, setTyping] = useState(false)
@@ -413,6 +429,7 @@ export default function RagPage() {
     timestamp: new Date().toISOString(),
   }])
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({})
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const indexedDocs = docs.filter(d => d.status === "INDEXED")
@@ -561,6 +578,35 @@ export default function RagPage() {
     setSelectedDocId(undefined)
   }
 
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizing.current = true
+    const startX = e.clientX
+    const startWidth = libWidth
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return
+      const container = splitRef.current
+      if (!container) return
+      const maxW = container.offsetWidth * 0.6
+      const newW = Math.min(Math.max(startWidth + ev.clientX - startX, 240), maxW)
+      setLibWidth(newW)
+    }
+
+    const onUp = () => {
+      resizing.current = false
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }, [libWidth])
+
   const askAboutDoc = (doc: RagDocument) => {
     setSelectedDocId(doc.id)
     sendMessage(`What are the key provisions of "${doc.title}"?`, doc.id)
@@ -576,12 +622,14 @@ export default function RagPage() {
       <div className="shrink-0 border-b border-vez-line bg-white px-4 py-4 sm:px-6 sm:py-5">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-semibold text-vez-ink">Document Library</h2>
-          <button
-            onClick={() => setShowUpload(true)}
-            className="flex items-center gap-2 rounded-lg border border-vez-line bg-white px-3.5 py-2 text-sm font-medium text-vez-ink shadow-sm transition-all hover:border-vez-sky hover:bg-vez-sky/10 hover:shadow"
-          >
-            <Upload className="size-4" /> Upload
-          </button>
+          {user && (
+            <button
+              onClick={() => setShowUpload(true)}
+              className="flex items-center gap-2 rounded-lg border border-vez-line bg-white px-3.5 py-2 text-sm font-medium text-vez-ink shadow-sm transition-all hover:border-vez-sky hover:bg-vez-sky/10 hover:shadow"
+            >
+              <Upload className="size-4" /> Upload
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-vez-mute">
           <span className="flex items-center gap-1.5 font-medium text-vez-navy">
@@ -626,7 +674,7 @@ export default function RagPage() {
             <p className="mt-1 text-sm text-vez-mute">
               {docSearch ? "Try a different search term" : "Upload your first document to get started"}
             </p>
-            {!docSearch && (
+            {!docSearch && user && (
               <button
                 onClick={() => setShowUpload(true)}
                 className="mt-5 flex items-center gap-2 rounded-xl bg-vez-navy px-5 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:bg-vez-navy/90"
@@ -642,6 +690,7 @@ export default function RagPage() {
               doc={doc}
               progress={progressMap[doc.id]}
               toggleBusy={togglingIds.has(doc.id)}
+              canManage={!!user}
               onToggleEmbed={() => handleToggleEmbed(doc)}
               onDelete={() => handleDelete(doc.id)}
               onAsk={() => askAboutDoc(doc)}
@@ -737,15 +786,28 @@ export default function RagPage() {
               )}
               {msg.role === "assistant" && !msg.id.startsWith("sys") && (
                 <div className="flex gap-1">
-                  {[
-                    { icon: <Copy className="size-3.5" />, action: () => navigator.clipboard?.writeText(msg.content), active: "" },
-                    { icon: <ThumbsUp className="size-3.5" />, action: () => setRatings(r => ({ ...r, [msg.id]: "up" })), active: ratings[msg.id] === "up" ? "text-vez-navy bg-vez-sky/20" : "" },
-                    { icon: <ThumbsDown className="size-3.5" />, action: () => setRatings(r => ({ ...r, [msg.id]: "down" })), active: ratings[msg.id] === "down" ? "text-red-500 bg-red-50" : "" },
-                  ].map((btn, i) => (
-                    <button key={i} onClick={btn.action} className={`rounded-lg p-2 text-vez-mute/60 transition-colors hover:bg-vez-surface hover:text-vez-mute ${btn.active}`}>
-                      {btn.icon}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(msg.content)
+                      setCopiedId(msg.id)
+                      setTimeout(() => setCopiedId(prev => prev === msg.id ? null : prev), 2000)
+                    }}
+                    className={`rounded-lg p-2 transition-colors ${copiedId === msg.id ? "text-emerald-600 bg-emerald-50" : "text-vez-mute/60 hover:bg-vez-surface hover:text-vez-mute"}`}
+                  >
+                    {copiedId === msg.id ? <CheckCircle className="size-3.5" /> : <Copy className="size-3.5" />}
+                  </button>
+                  <button
+                    onClick={() => setRatings(r => ({ ...r, [msg.id]: "up" }))}
+                    className={`rounded-lg p-2 transition-colors hover:bg-vez-surface hover:text-vez-mute ${ratings[msg.id] === "up" ? "text-vez-navy bg-vez-sky/20" : "text-vez-mute/60"}`}
+                  >
+                    <ThumbsUp className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setRatings(r => ({ ...r, [msg.id]: "down" }))}
+                    className={`rounded-lg p-2 transition-colors hover:bg-vez-surface hover:text-vez-mute ${ratings[msg.id] === "down" ? "text-red-500 bg-red-50" : "text-vez-mute/60"}`}
+                  >
+                    <ThumbsDown className="size-3.5" />
+                  </button>
                 </div>
               )}
             </div>
@@ -876,9 +938,19 @@ export default function RagPage() {
           {/* Desktop */}
           <div className="hidden h-full lg:block">
             {view === "split" && (
-              <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
-                {Library}
-                {Chat}
+              <div ref={splitRef} className="flex h-full gap-0">
+                <div className="h-full shrink-0" style={{ width: libWidth }}>
+                  {Library}
+                </div>
+                <div
+                  onMouseDown={handleResizeStart}
+                  className="group flex h-full w-5 shrink-0 cursor-col-resize items-center justify-center"
+                >
+                  <div className="h-8 w-1 rounded-full bg-vez-line transition-colors group-hover:bg-vez-navy/40 group-active:bg-vez-navy" />
+                </div>
+                <div className="h-full min-w-0 flex-1">
+                  {Chat}
+                </div>
               </div>
             )}
             {view === "library" && <div className="h-full max-w-3xl">{Library}</div>}

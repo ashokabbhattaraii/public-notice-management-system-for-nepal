@@ -19,6 +19,9 @@
     "db:setup": "bash scripts/setup-db.sh",
     "db:migrate": "pnpm --filter @pnm/api prisma:migrate",
     "db:studio": "pnpm --filter @pnm/api prisma:studio",
+    "db:push": "pnpm --filter @pnm/api prisma:push",
+    "db:seed": "pnpm --filter @pnm/api db:seed",
+    "db:reset": "pnpm --filter @pnm/api prisma:reset",
     "setup": "pnpm install && pnpm db:start && pnpm db:setup && pnpm db:migrate"
   },
   "devDependencies": {

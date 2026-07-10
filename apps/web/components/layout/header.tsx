@@ -10,19 +10,19 @@ import { useLanguage } from "@/lib/language-context"
 import { cn } from "@/lib/utils"
 
 const productLinks = [
-  { id: "#problem", label: "Problem" },
-  { id: "#solution", label: "Solution" },
-  { id: "#features", label: "Features" },
+  { id: "#problem", tKey: "nav.product.problem" },
+  { id: "#solution", tKey: "nav.product.solution" },
+  { id: "#features", tKey: "nav.product.features" },
 ]
 
 const resourceLinks = [
-  { href: "/notices", label: "Notices" },
-  { href: "/documents", label: "Documents" },
+  { href: "/notices", tKey: "nav.notices" },
+  { href: "/documents", tKey: "nav.rag" },
 ]
 
 const standaloneLinks = [
-  { id: "#pricing", label: "Pricing", anchor: true },
-  { href: "/about", label: "About", anchor: false },
+  { id: "#pricing", tKey: "nav.pricing", anchor: true },
+  { href: "/about", tKey: "nav.about", anchor: false },
 ]
 
 function Dropdown({ label, children, solid }: { label: string; children: React.ReactNode; solid: boolean }) {
@@ -63,7 +63,7 @@ function Dropdown({ label, children, solid }: { label: string; children: React.R
 
 export function Header() {
   const { user, logout } = useAuth()
-  const { language, setLanguage } = useLanguage()
+  const { language, setLanguage, t } = useLanguage()
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -127,22 +127,22 @@ export function Header() {
               solid ? "bg-white/40 border-white/50" : "bg-white/10 border-white/20"
             )}
           >
-            <Dropdown label="Product" solid={solid}>
+            <Dropdown label={t("nav.product")} solid={solid}>
               {productLinks.map((link) => (
                 <Link
-                  key={link.label}
+                  key={link.tKey}
                   href={isHome ? link.id : `/${link.id}`}
                   onClick={(e) => handleNavClick(e, isHome ? link.id : `/${link.id}`, true)}
                   className="block rounded-lg px-3 py-2 text-base text-vez-ink transition-colors hover:bg-vez-sky/40"
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
               ))}
             </Dropdown>
 
             {resourceLinks.map((link) => (
               <Link
-                key={link.label}
+                key={link.tKey}
                 href={link.href}
                 className={cn(
                   "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
@@ -151,7 +151,7 @@ export function Header() {
                     : "text-vez-ink hover:bg-white/60"
                 )}
               >
-                {link.label}
+                {t(link.tKey)}
               </Link>
             ))}
 
@@ -159,7 +159,7 @@ export function Header() {
               const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
               return (
                 <Link
-                  key={link.label}
+                  key={link.tKey}
                   href={href}
                   onClick={(e) => handleNavClick(e, href, link.anchor)}
                   className={cn(
@@ -169,7 +169,7 @@ export function Header() {
                       : "text-vez-ink hover:bg-white/60"
                   )}
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
               )
             })}
@@ -186,7 +186,7 @@ export function Header() {
                   : "bg-vez-navy/10 text-vez-navy border border-vez-navy/10 hover:bg-vez-navy hover:text-white hover:border-vez-navy"
               )}
             >
-              Contact
+              {t("nav.contact")}
               <ArrowUpRight className="size-3.5" />
             </Link>
 
@@ -231,7 +231,7 @@ export function Header() {
                   className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
                 >
                   <LayoutDashboard className="size-4" />
-                  Dashboard
+                  {t("nav.dashboard")}
                 </Link>
 
                 <div className="ml-1 flex items-center gap-2 border-l border-vez-ink/15 pl-3">
@@ -252,7 +252,7 @@ export function Header() {
                 href="/login"
                 className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
               >
-                Sign in
+                {t("nav.signin")}
                 <ArrowUpRight className="size-4" />
               </Link>
             )}
@@ -293,17 +293,17 @@ export function Header() {
           )}
         >
           <nav className="flex max-h-[75vh] flex-col gap-1 overflow-y-auto border-t border-vez-line bg-white px-6 py-4">
-            <p className="px-4 py-1 text-xs font-medium uppercase tracking-wider text-vez-mute">Product</p>
+            <p className="px-4 py-1 text-xs font-medium uppercase tracking-wider text-vez-mute">{t("nav.product")}</p>
             {productLinks.map((link) => {
               const href = isHome ? link.id : `/${link.id}`
               return (
                 <Link
-                  key={link.label}
+                  key={link.tKey}
                   href={href}
                   onClick={(e) => handleNavClick(e, href, true)}
                   className="rounded-[12px] px-4 py-3 text-base text-vez-ink transition-colors hover:bg-vez-surface"
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
               )
             })}
@@ -312,7 +312,7 @@ export function Header() {
 
             {resourceLinks.map((link) => (
               <Link
-                key={link.label}
+                key={link.tKey}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
@@ -320,7 +320,7 @@ export function Header() {
                   isActive(link.href, false) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                 )}
               >
-                {link.label}
+                {t(link.tKey)}
               </Link>
             ))}
 
@@ -330,7 +330,7 @@ export function Header() {
               const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
               return (
                 <Link
-                  key={link.label}
+                  key={link.tKey}
                   href={href}
                   onClick={(e) => handleNavClick(e, href, link.anchor)}
                   className={cn(
@@ -338,7 +338,7 @@ export function Header() {
                     isActive(href, link.anchor) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                   )}
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
               )
             })}
@@ -351,7 +351,7 @@ export function Header() {
                 pathname === "/contact" ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
               )}
             >
-              Contact
+              {t("nav.contact")}
             </Link>
 
             <div className="my-2 h-px bg-vez-line" />
@@ -383,7 +383,7 @@ export function Header() {
                   onClick={() => setMobileOpen(false)}
                   className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
                 >
-                  Dashboard
+                  {t("nav.dashboard")}
                 </Link>
                 {user.role === "admin" && (
                   <Link
@@ -391,7 +391,7 @@ export function Header() {
                     onClick={() => setMobileOpen(false)}
                     className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
                   >
-                    Admin panel
+                    {t("nav.adminPanel")}
                   </Link>
                 )}
                 <button
@@ -401,7 +401,7 @@ export function Header() {
                   }}
                   className="rounded-[12px] px-4 py-3 text-left text-base text-red-600 hover:bg-red-50"
                 >
-                  Sign out
+                  {t("nav.signout")}
                 </button>
               </>
             ) : (
@@ -410,7 +410,7 @@ export function Header() {
                 onClick={() => setMobileOpen(false)}
                 className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white"
               >
-                Sign in
+                {t("nav.signin")}
                 <ArrowUpRight className="size-4" />
               </Link>
             )}

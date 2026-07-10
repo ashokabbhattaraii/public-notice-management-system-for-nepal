@@ -1,16 +1,15 @@
 "use client"
 
-import React, { useState, useMemo, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import {
-  Search, Filter, Calendar, Eye, Clock, Bell, FileText,
-  Sparkles, ScanText, ChevronRight, X,
-  Bookmark, BookmarkCheck, Building2,
-  AlertTriangle, Globe,
+  Search, Filter, Calendar, Eye, Bell, FileText,
+  ChevronRight, X, Bookmark, BookmarkCheck, Building2,
+  Globe, Loader2, Paperclip,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { useAuth } from "@/lib/auth-context"
-import { mockNotices, categories } from "@/lib/mock-data"
-import { Notice, NoticeCategory } from "@/lib/types"
+import { fetchNotices, fetchNoticeCategoryCounts, fetchNoticeSources } from "@/lib/api"
+import type { ScrapedItem, ScrapedItemCategory, PublicNoticeSource } from "@/lib/types"
 import Link from "next/link"
 import gsap from "gsap"
 
@@ -24,10 +23,7 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
-function deadlineDays(d: string) {
-  const diff = new Date(d).getTime() - Date.now()
-  return Math.ceil(diff / 86_400_000)
-}
+const PAGE_SIZE = 20
 
 // ─── Notice Card ─────────────────────────────────────────────────────────────
 
@@ -36,13 +32,10 @@ function NoticeCard({
   saved,
   onToggleSave,
 }: {
-  notice: Notice
+  notice: ScrapedItem
   saved: boolean
   onToggleSave: () => void
 }) {
-  const days = notice.deadline ? deadlineDays(notice.deadline) : null
-  const urgentDeadline = days !== null && days <= 7 && days >= 0
-
   return (
     <Link
       href={`/notices/${generateSlug(notice.title, notice.id)}`}
@@ -52,23 +45,8 @@ function NoticeCard({
         {/* Top row - badges */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs capitalize text-vez-navy">
-            {notice.category}
+            {notice.category.toLowerCase()}
           </span>
-          {notice.isOcr && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
-              <ScanText className="size-3" /> OCR
-            </span>
-          )}
-          {notice.priority === "high" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-vez-navy px-3 py-1 text-xs text-white">
-              <AlertTriangle className="size-3" /> Urgent
-            </span>
-          )}
-          {notice.aiSummary && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-vez-surface px-3 py-1 text-xs text-vez-mute">
-              <Sparkles className="size-3" /> AI summary
-            </span>
-          )}
         </div>
 
         {/* Title */}
@@ -76,44 +54,34 @@ function NoticeCard({
           {notice.title}
         </h3>
 
-        {/* AI Summary */}
-        {notice.aiSummary && (
+        {/* Summary */}
+        {notice.summary && (
           <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-vez-mute">
-            {notice.aiSummary}
+            {notice.summary}
           </p>
         )}
 
         {/* Meta row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-vez-mute">
           <span className="flex items-center gap-1 text-vez-ink/80">
-            <Building2 className="size-3" /> {notice.organization}
+            <Building2 className="size-3" /> {notice.sourceLabel}
           </span>
-          {notice.sourcePortal && (
+          {notice.publishedAt && (
             <span className="flex items-center gap-1">
-              <Globe className="size-3" /> {notice.sourcePortal}
+              <Calendar className="size-3" /> {formatDate(notice.publishedAt)}
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <Calendar className="size-3" /> {formatDate(notice.publishedAt)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Eye className="size-3" /> {notice.views.toLocaleString()}
-          </span>
+          {typeof notice.views === "number" && (
+            <span className="flex items-center gap-1">
+              <Eye className="size-3" /> {notice.views.toLocaleString()}
+            </span>
+          )}
+          {notice.attachmentUrl && (
+            <span className="flex items-center gap-1">
+              <Paperclip className="size-3" /> Attachment
+            </span>
+          )}
         </div>
-
-        {/* Deadline */}
-        {days !== null && (
-          <div className={`mt-3 flex items-center gap-1.5 text-xs ${
-            days < 0 ? "text-vez-mute line-through" :
-            urgentDeadline ? "text-red-600" : "text-vez-mute"
-          }`}>
-            <Clock className="size-3" />
-            {days < 0 ? `Closed ${formatDate(notice.deadline!)}` :
-             days === 0 ? "Closes today" :
-             days === 1 ? "Closes tomorrow" :
-             `${days} days remaining - ${formatDate(notice.deadline!)}`}
-          </div>
-        )}
       </div>
 
       {/* Right actions */}
@@ -135,21 +103,73 @@ function NoticeCard({
 
 export default function NoticesPage() {
   const { user } = useAuth()
+  const [searchInput, setSearchInput] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<NoticeCategory | "all">("all")
-  const [selectedPriority, setSelectedPriority] = useState<"all" | "high" | "normal" | "low">("all")
-  const [sortBy, setSortBy] = useState<"date" | "views">("date")
+  const [selectedCategory, setSelectedCategory] = useState<ScrapedItemCategory | "all">("all")
+  const [selectedSourceId, setSelectedSourceId] = useState("")
+  const [sortBy, setSortBy] = useState<"publishedAt" | "views">("publishedAt")
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const feedRef = useRef<HTMLDivElement>(null)
 
+  const [notices, setNotices] = useState<ScrapedItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
+  const [sources, setSources] = useState<PublicNoticeSource[]>([])
+
   useEffect(() => {
-    if (!feedRef.current) return
-    const cards = feedRef.current.querySelectorAll("article")
+    const t = setTimeout(() => setSearchQuery(searchInput), 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  useEffect(() => {
+    fetchNoticeCategoryCounts().then(setCategoryCounts).catch(() => {})
+    fetchNoticeSources().then(setSources).catch(() => {})
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetchNotices({
+        page,
+        limit: PAGE_SIZE,
+        category: selectedCategory !== "all" ? selectedCategory : undefined,
+        sourceId: selectedSourceId || undefined,
+        search: searchQuery || undefined,
+        sortBy,
+        sortOrder: "desc",
+      })
+      // Defensive: tolerate a malformed/partial response (e.g. a stale API
+      // build without the `meta` envelope) instead of throwing on `.total`.
+      setNotices(res.data ?? [])
+      setTotal(res.meta?.total ?? 0)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load notices")
+    } finally {
+      setLoading(false)
+    }
+  }, [page, selectedCategory, selectedSourceId, searchQuery, sortBy])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Reset to page 1 whenever a filter changes (not page itself).
+  useEffect(() => {
+    setPage(1)
+  }, [selectedCategory, selectedSourceId, searchQuery, sortBy])
+
+  useEffect(() => {
+    if (!feedRef.current || loading) return
+    const cards = feedRef.current.querySelectorAll("a")
     gsap.fromTo(cards,
       { opacity: 0, y: 16 },
       { opacity: 1, y: 0, duration: 0.4, stagger: 0.04, ease: "power3.out" }
     )
-  }, [selectedCategory, selectedPriority, sortBy, searchQuery])
+  }, [notices, loading])
 
   const toggleSave = (id: string) => {
     setSavedIds((prev) => {
@@ -159,35 +179,15 @@ export default function NoticesPage() {
     })
   }
 
-  const filteredNotices = useMemo(() => {
-    let r = mockNotices.filter((n) => n.status === "published")
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      r = r.filter((n) =>
-        n.title.toLowerCase().includes(q) ||
-        n.aiSummary?.toLowerCase().includes(q) ||
-        n.description.toLowerCase().includes(q) ||
-        n.organization.toLowerCase().includes(q) ||
-        n.tags?.some((t) => t.toLowerCase().includes(q))
-      )
-    }
-    if (selectedCategory !== "all") r = r.filter((n) => n.category === selectedCategory)
-    if (selectedPriority !== "all") r = r.filter((n) => n.priority === selectedPriority)
-    r.sort((a, b) =>
-      sortBy === "views" ? b.views - a.views
-        : new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    )
-    return r
-  }, [searchQuery, selectedCategory, selectedPriority, sortBy])
+  function clearFilters() {
+    setSearchInput("")
+    setSelectedCategory("all")
+    setSelectedSourceId("")
+    setSortBy("publishedAt")
+  }
 
-  const categoryCounts = useMemo(() => {
-    const base = mockNotices.filter((n) => n.status === "published")
-    return Object.fromEntries(
-      categories.map((c) => [c.id, base.filter((n) => n.category === c.id).length])
-    )
-  }, [])
-
-  const publishedCount = mockNotices.filter(n => n.status === "published").length
+  const totalCount = (categoryCounts.NOTICE ?? 0) + (categoryCounts.NEWS ?? 0)
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
@@ -205,7 +205,7 @@ export default function NoticesPage() {
             <div>
               <h1 className="text-lg tracking-[-0.02em] text-vez-ink">Public notices</h1>
               <p className="text-xs text-vez-mute">
-                {publishedCount} notices · {new Set(mockNotices.map(n => n.sourcePortal)).size} official portals · OCR + AI summarized
+                {totalCount.toLocaleString()} notices &amp; news · {sources.length} official portals
               </p>
             </div>
           </div>
@@ -214,14 +214,14 @@ export default function NoticesPage() {
           <div className="relative w-full max-w-md flex-1 md:w-auto">
             <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
             <input
-              placeholder="Search title, keyword, organisation, tag…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search title, keyword, organisation…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="h-11 w-full rounded-full border border-vez-line bg-white pl-11 pr-10 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => setSearchInput("")}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-navy"
                 aria-label="Clear search"
               >
@@ -242,29 +242,28 @@ export default function NoticesPage() {
         <div className="flex shrink-0 gap-2 overflow-x-auto lg:hidden">
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value as NoticeCategory | "all")}
+            onChange={(e) => setSelectedCategory(e.target.value as ScrapedItemCategory | "all")}
             className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
             <option value="all">All categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.label}</option>
-            ))}
+            <option value="NOTICE">Notice</option>
+            <option value="NEWS">News</option>
           </select>
           <select
-            value={selectedPriority}
-            onChange={(e) => setSelectedPriority(e.target.value as "all" | "high" | "normal" | "low")}
+            value={selectedSourceId}
+            onChange={(e) => setSelectedSourceId(e.target.value)}
             className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
-            <option value="all">All priority</option>
-            <option value="high">Urgent</option>
-            <option value="normal">Normal</option>
-            <option value="low">Low</option>
+            <option value="">All sources</option>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
           </select>
           <button
-            onClick={() => setSortBy(sortBy === "date" ? "views" : "date")}
+            onClick={() => setSortBy(sortBy === "publishedAt" ? "views" : "publishedAt")}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
-            <Filter className="size-3.5" /> {sortBy === "date" ? "Newest" : "Popular"}
+            <Filter className="size-3.5" /> {sortBy === "publishedAt" ? "Newest" : "Popular"}
           </button>
         </div>
 
@@ -280,16 +279,16 @@ export default function NoticesPage() {
                   className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                 >
                   <span>All</span>
-                  <span className="text-xs">{publishedCount}</span>
+                  <span className="text-xs">{totalCount}</span>
                 </button>
-                {categories.map((cat) => (
+                {([["NOTICE", "Notice"], ["NEWS", "News"]] as const).map(([id, label]) => (
                   <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id as NoticeCategory)}
-                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === cat.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
+                    key={id}
+                    onClick={() => setSelectedCategory(id)}
+                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
-                    <span>{cat.label}</span>
-                    <span className="text-xs">{categoryCounts[cat.id] ?? 0}</span>
+                    <span>{label}</span>
+                    <span className="text-xs">{categoryCounts[id] ?? 0}</span>
                   </button>
                 ))}
               </div>
@@ -298,15 +297,22 @@ export default function NoticesPage() {
             <div className="my-5 h-px bg-vez-line" />
 
             <div>
-              <h3 className="mb-3 px-2 text-xs text-vez-mute">Priority</h3>
+              <h3 className="mb-3 px-2 text-xs text-vez-mute">Source</h3>
               <div className="space-y-1">
-                {(["all", "high", "normal", "low"] as const).map((p) => (
+                <button
+                  onClick={() => setSelectedSourceId("")}
+                  className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === "" ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
+                >
+                  All sources
+                </button>
+                {sources.map((s) => (
                   <button
-                    key={p}
-                    onClick={() => setSelectedPriority(p)}
-                    className={`w-full rounded-full px-4 py-2 text-left text-sm capitalize transition-colors ${selectedPriority === p ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
+                    key={s.id}
+                    onClick={() => setSelectedSourceId(s.id)}
+                    className={`w-full truncate rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
+                    title={s.name}
                   >
-                    {p === "all" ? "All priority" : p === "high" ? "Urgent" : p === "normal" ? "Normal" : "Low"}
+                    {s.name}
                   </button>
                 ))}
               </div>
@@ -317,10 +323,10 @@ export default function NoticesPage() {
             <div>
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Sort by</h3>
               <div className="space-y-1">
-                {[{ id: "date", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
+                {[{ id: "publishedAt", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setSortBy(s.id as "date" | "views")}
+                    onClick={() => setSortBy(s.id as "publishedAt" | "views")}
                     className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     {s.label}
@@ -331,17 +337,11 @@ export default function NoticesPage() {
 
             <div className="my-5 h-px bg-vez-line" />
 
-            <div className="space-y-2.5 px-2">
-              <h3 className="text-xs text-vez-mute">Legend</h3>
-              {[
-                { icon: <Sparkles className="size-3.5 text-vez-navy" />, label: "AI summarized" },
-                { icon: <ScanText className="size-3.5 text-vez-mute" />, label: "OCR extracted" },
-                { icon: <AlertTriangle className="size-3.5 text-vez-navy" />, label: "Urgent / high priority" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2 text-xs text-vez-mute">
-                  {item.icon} {item.label}
-                </div>
-              ))}
+            <div className="px-2">
+              <Globe className="mb-2 size-4 text-vez-mute" />
+              <p className="text-xs leading-relaxed text-vez-mute">
+                Notices and news are scraped directly from official government and public portals.
+              </p>
             </div>
           </aside>
 
@@ -349,7 +349,7 @@ export default function NoticesPage() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-vez-surface">
             <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-5 py-3.5">
               <p className="text-sm text-vez-ink">
-                {filteredNotices.length} notice{filteredNotices.length !== 1 ? "s" : ""}
+                {total.toLocaleString()} notice{total !== 1 ? "s" : ""}
                 {searchQuery && <span className="text-vez-mute"> matching &ldquo;{searchQuery}&rdquo;</span>}
               </p>
               <span className="flex items-center gap-1.5 rounded-full bg-vez-sky/40 px-3 py-1 text-xs text-vez-navy">
@@ -357,28 +357,60 @@ export default function NoticesPage() {
               </span>
             </div>
 
+            {error && (
+              <div className="mx-4 mt-4 rounded-[14px] bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+            )}
+
             <div ref={feedRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-              {filteredNotices.length === 0 ? (
+              {loading ? (
+                <div className="flex h-full items-center justify-center text-vez-mute">
+                  <Loader2 className="size-5 animate-spin" />
+                </div>
+              ) : notices.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center py-16 text-center text-vez-mute">
                   <Filter className="mb-4 size-10 opacity-30" />
                   <h3 className="mb-1 text-base text-vez-ink">No notices found</h3>
                   <p className="mb-5 text-sm">Try adjusting your search or filter criteria</p>
                   <button
                     className="rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-sky/20"
-                    onClick={() => { setSearchQuery(""); setSelectedCategory("all"); setSelectedPriority("all") }}
+                    onClick={clearFilters}
                   >
                     Clear filters
                   </button>
                 </div>
-              ) : filteredNotices.map((notice) => (
-                <NoticeCard
-                  key={notice.id}
-                  notice={notice}
-                  saved={savedIds.has(notice.id)}
-                  onToggleSave={() => toggleSave(notice.id)}
-                />
-              ))}
+              ) : (
+                notices.map((notice) => (
+                  <NoticeCard
+                    key={notice.id}
+                    notice={notice}
+                    saved={savedIds.has(notice.id)}
+                    onToggleSave={() => toggleSave(notice.id)}
+                  />
+                ))
+              )}
             </div>
+
+            {!loading && totalPages > 1 && (
+              <div className="flex shrink-0 items-center justify-between border-t border-vez-line px-5 py-3 text-sm">
+                <p className="text-vez-mute">Page {page} of {totalPages}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="rounded-full border border-vez-line px-4 py-1.5 text-vez-ink transition-colors hover:bg-white disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="rounded-full border border-vez-line px-4 py-1.5 text-vez-ink transition-colors hover:bg-white disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

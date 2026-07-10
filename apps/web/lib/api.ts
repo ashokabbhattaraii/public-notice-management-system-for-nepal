@@ -1,4 +1,19 @@
-import { User, RagDocument, RagDocumentListResponse, RagQueryResponse, DocumentStatus, DocumentProgress } from "./types"
+import {
+  User,
+  RagDocument,
+  RagDocumentListResponse,
+  RagQueryResponse,
+  DocumentStatus,
+  DocumentProgress,
+  ScrapedItem,
+  ScrapedItemCategory,
+  ScrapeRun,
+  ScrapeRunProgress,
+  ScrapeSource,
+  ScrapePaginationType,
+  PublicNoticeDetail,
+  PublicNoticeSource,
+} from "./types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
@@ -146,4 +161,128 @@ export async function ragQuery(
     method: "POST",
     body: JSON.stringify({ question, documentId, topK }),
   })
+}
+
+// ─── Admin Scraping API (crawl4ai pipeline, dynamic multi-source) ────────────
+
+export async function fetchScrapeSources(): Promise<ScrapeSource[]> {
+  return apiFetch("/admin/scraping/sources")
+}
+
+export interface ScrapeSourceInput {
+  name: string
+  baseUrl: string
+  noticeListUrl?: string
+  newsListUrl?: string
+  paginationType?: ScrapePaginationType
+  paginationParam?: string
+  startPage?: number
+  maxPages?: number
+}
+
+export async function createScrapeSource(input: ScrapeSourceInput): Promise<ScrapeSource> {
+  return apiFetch("/admin/scraping/sources", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateScrapeSource(
+  id: string,
+  input: Partial<ScrapeSourceInput & { enabled: boolean }>,
+): Promise<ScrapeSource> {
+  return apiFetch(`/admin/scraping/sources/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteScrapeSource(id: string): Promise<void> {
+  await apiFetch(`/admin/scraping/sources/${id}`, { method: "DELETE" })
+}
+
+/** Trigger a scrape run for one source. Returns immediately; poll fetchScrapeRunProgress for live status. */
+export async function runScrapeSource(
+  id: string,
+  categories?: ScrapedItemCategory[],
+): Promise<{ runId: string }> {
+  return apiFetch(`/admin/scraping/sources/${id}/run`, {
+    method: "POST",
+    body: JSON.stringify({ categories }),
+  })
+}
+
+/** Poll live status messages for a run while it's in progress. */
+export async function fetchScrapeRunProgress(runId: string): Promise<ScrapeRunProgress> {
+  return apiFetch(`/admin/scraping/runs/${runId}/progress`)
+}
+
+export interface ScrapedItemFilters {
+  sourceId?: string
+  category?: ScrapedItemCategory
+  search?: string
+  dateFrom?: string
+  dateTo?: string
+  sortBy?: "publishedAt" | "scrapedAt" | "title"
+  sortOrder?: "asc" | "desc"
+  page?: number
+  limit?: number
+}
+
+export async function fetchScrapedItems(
+  filters: ScrapedItemFilters = {},
+): Promise<{ data: ScrapedItem[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
+  const { page = 1, limit = 20, ...rest } = filters
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  for (const [key, value] of Object.entries(rest)) {
+    if (value) params.set(key, String(value))
+  }
+  return apiFetch(`/admin/scraping/items?${params}`)
+}
+
+export async function deleteScrapedItem(id: string): Promise<void> {
+  await apiFetch(`/admin/scraping/items/${id}`, { method: "DELETE" })
+}
+
+export async function fetchScrapeRuns(sourceId?: string, limit = 20): Promise<ScrapeRun[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (sourceId) params.set("sourceId", sourceId)
+  return apiFetch(`/admin/scraping/runs?${params}`)
+}
+
+// ─── Public Notices API (no auth required) ───────────────────────────────────
+
+export interface PublicNoticeFilters {
+  category?: ScrapedItemCategory
+  sourceId?: string
+  search?: string
+  dateFrom?: string
+  dateTo?: string
+  sortBy?: "publishedAt" | "views"
+  sortOrder?: "asc" | "desc"
+  page?: number
+  limit?: number
+}
+
+export async function fetchNotices(
+  filters: PublicNoticeFilters = {},
+): Promise<{ data: ScrapedItem[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
+  const { page = 1, limit = 20, ...rest } = filters
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  for (const [key, value] of Object.entries(rest)) {
+    if (value) params.set(key, String(value))
+  }
+  return apiFetch(`/notices?${params}`)
+}
+
+export async function fetchNotice(id: string): Promise<PublicNoticeDetail> {
+  return apiFetch(`/notices/${id}`)
+}
+
+export async function fetchNoticeCategoryCounts(): Promise<Record<string, number>> {
+  return apiFetch("/notices/meta/category-counts")
+}
+
+export async function fetchNoticeSources(): Promise<PublicNoticeSource[]> {
+  return apiFetch("/notices/meta/sources")
 }
