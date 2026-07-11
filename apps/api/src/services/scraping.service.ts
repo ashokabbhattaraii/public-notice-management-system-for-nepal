@@ -28,6 +28,7 @@ export interface CreateScrapeSourceInput {
   baseUrl: string;
   noticeListUrl?: string | null;
   newsListUrl?: string | null;
+  pressReleaseListUrl?: string | null;
   paginationType?: ScrapePaginationType;
   paginationParam?: string;
   startPage?: number;
@@ -39,6 +40,7 @@ export interface UpdateScrapeSourceInput {
   baseUrl?: string;
   noticeListUrl?: string | null;
   newsListUrl?: string | null;
+  pressReleaseListUrl?: string | null;
   enabled?: boolean;
   paginationType?: ScrapePaginationType;
   paginationParam?: string;
@@ -80,9 +82,9 @@ export class ScrapingService {
   }
 
   async createSource(input: CreateScrapeSourceInput) {
-    if (!input.noticeListUrl && !input.newsListUrl) {
+    if (!input.noticeListUrl && !input.newsListUrl && !input.pressReleaseListUrl) {
       throw new ConflictException(
-        'At least one of noticeListUrl or newsListUrl is required',
+        'At least one listing URL (notice, news, or press release) is required',
       );
     }
     return this.prisma.scrapeSource.create({
@@ -91,6 +93,7 @@ export class ScrapingService {
         baseUrl: input.baseUrl,
         noticeListUrl: input.noticeListUrl || null,
         newsListUrl: input.newsListUrl || null,
+        pressReleaseListUrl: input.pressReleaseListUrl || null,
         ...(input.paginationType ? { paginationType: input.paginationType } : {}),
         ...(input.paginationParam ? { paginationParam: input.paginationParam } : {}),
         ...(input.startPage ? { startPage: input.startPage } : {}),
@@ -106,6 +109,7 @@ export class ScrapingService {
     // category — the old selectors were derived from the old page.
     if (input.noticeListUrl !== undefined) data.noticeSchema = Prisma.JsonNull;
     if (input.newsListUrl !== undefined) data.newsSchema = Prisma.JsonNull;
+    if (input.pressReleaseListUrl !== undefined) data.pressReleaseSchema = Prisma.JsonNull;
     return this.prisma.scrapeSource.update({ where: { id }, data });
   }
 
@@ -123,7 +127,7 @@ export class ScrapingService {
    * multi-page, multi-detail-fetch) crawl runs in the background — mirrors
    * the fire-and-forget pattern used for document ingestion.
    */
-  async runSource(id: string, categories?: ('NOTICE' | 'NEWS')[]) {
+  async runSource(id: string, categories?: ('NOTICE' | 'NEWS' | 'PRESS_RELEASE')[]) {
     const source = await this.getSource(id);
     if (!source.enabled) {
       throw new ConflictException('This source is disabled');
@@ -148,16 +152,19 @@ export class ScrapingService {
   private async executeRun(
     runId: string,
     source: ScrapeSource,
-    categories?: ('NOTICE' | 'NEWS')[],
+    categories?: ('NOTICE' | 'NEWS' | 'PRESS_RELEASE')[],
   ) {
     try {
       const categoryUrls: Record<string, string> = {};
-      const wantedCategories = categories ?? ['NOTICE', 'NEWS'];
+      const wantedCategories = categories ?? ['NOTICE', 'NEWS', 'PRESS_RELEASE'];
       if (wantedCategories.includes('NOTICE') && source.noticeListUrl) {
         categoryUrls.NOTICE = source.noticeListUrl;
       }
       if (wantedCategories.includes('NEWS') && source.newsListUrl) {
         categoryUrls.NEWS = source.newsListUrl;
+      }
+      if (wantedCategories.includes('PRESS_RELEASE') && source.pressReleaseListUrl) {
+        categoryUrls.PRESS_RELEASE = source.pressReleaseListUrl;
       }
       if (Object.keys(categoryUrls).length === 0) {
         throw new ConflictException(
@@ -175,6 +182,7 @@ export class ScrapingService {
       const cachedSchemas: Record<string, unknown> = {};
       if (source.noticeSchema) cachedSchemas.NOTICE = source.noticeSchema;
       if (source.newsSchema) cachedSchemas.NEWS = source.newsSchema;
+      if (source.pressReleaseSchema) cachedSchemas.PRESS_RELEASE = source.pressReleaseSchema;
 
       const response = await firstValueFrom(
         this.httpService.post(
@@ -199,8 +207,16 @@ export class ScrapingService {
       const items: RawScrapedItem[] = response.data.items ?? [];
       const schemas: Record<string, unknown> = response.data.schemas ?? {};
 
+      // One batch lookup instead of one findUnique per item — the dedup
+      // check itself shouldn't be N database round-trips.
+      const existingItems = await this.prisma.scrapedItem.findMany({
+        where: { sourceUrl: { in: items.map((i) => i.source_url) } },
+      });
+      const existingByUrl = new Map(existingItems.map((i) => [i.sourceUrl, i]));
+
       let itemsNew = 0;
       let itemsUpdated = 0;
+      let itemsSkipped = 0;
 
       for (const item of items) {
         const contentHash = crypto
@@ -208,12 +224,10 @@ export class ScrapingService {
           .update(`${item.title}|${item.content_text ?? ''}`)
           .digest('hex');
 
-        const existing = await this.prisma.scrapedItem.findUnique({
-          where: { sourceUrl: item.source_url },
-        });
+        const existing = existingByUrl.get(item.source_url);
 
         if (!existing) {
-          await this.prisma.scrapedItem.create({
+          const created = await this.prisma.scrapedItem.create({
             data: {
               sourceId: source.id,
               sourceLabel: source.name,
@@ -229,8 +243,11 @@ export class ScrapingService {
             },
           });
           itemsNew++;
+          if (item.content_text) {
+            await this.analyzeNotice(created.id, item.title, item.content_text);
+          }
         } else if (existing.contentHash !== contentHash) {
-          await this.prisma.scrapedItem.update({
+          const updated = await this.prisma.scrapedItem.update({
             where: { id: existing.id },
             data: {
               title: item.title,
@@ -243,15 +260,18 @@ export class ScrapingService {
             },
           });
           itemsUpdated++;
+          const contentForAnalysis = item.content_text ?? existing.contentText;
+          if (contentForAnalysis) {
+            await this.analyzeNotice(updated.id, item.title, contentForAnalysis);
+          }
         } else if (item.attachment_url && existing.attachmentUrl !== item.attachment_url) {
-          // Content is unchanged (hash match) but a newly-detected schema now
-          // captures an attachment this item didn't have before — sync it
-          // without touching the rest of the record.
           await this.prisma.scrapedItem.update({
             where: { id: existing.id },
             data: { attachmentUrl: item.attachment_url },
           });
           itemsUpdated++;
+        } else {
+          itemsSkipped++;
         }
       }
 
@@ -262,6 +282,7 @@ export class ScrapingService {
           itemsFound: items.length,
           itemsNew,
           itemsUpdated,
+          itemsSkipped,
           finishedAt: new Date(),
         },
       });
@@ -273,6 +294,7 @@ export class ScrapingService {
           lastStatus: ScrapeRunStatus.SUCCESS,
           ...(schemas.NOTICE ? { noticeSchema: schemas.NOTICE as Prisma.InputJsonValue } : {}),
           ...(schemas.NEWS ? { newsSchema: schemas.NEWS as Prisma.InputJsonValue } : {}),
+          ...(schemas.PRESS_RELEASE ? { pressReleaseSchema: schemas.PRESS_RELEASE as Prisma.InputJsonValue } : {}),
         },
       });
     } catch (err: any) {
@@ -291,6 +313,37 @@ export class ScrapingService {
       });
     } finally {
       this.runningSourceIds.delete(source.id);
+    }
+  }
+
+  /** Pre-analyze a notice via the AI service and cache results in the DB. */
+  private async analyzeNotice(id: string, title: string, content: string) {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.aiServiceUrl}/notices/analyze`,
+          { title, content },
+          { timeout: 30000 },
+        ),
+      );
+      if (response.data?.analyzed) {
+        await this.prisma.scrapedItem.update({
+          where: { id },
+          data: {
+            aiSummary: response.data.summary,
+            keyFacts: response.data.key_facts ?? [],
+            tags: response.data.tags ?? [],
+            aiAnalyzedAt: new Date(),
+          },
+        });
+      } else {
+        await this.prisma.scrapedItem.update({
+          where: { id },
+          data: { aiAnalyzedAt: new Date() },
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Pre-analysis failed for notice ${id}: ${err.message}`);
     }
   }
 

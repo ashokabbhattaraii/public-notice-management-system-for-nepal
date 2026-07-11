@@ -49,6 +49,9 @@ EMBEDDING_BATCH_SIZE: int = _env_int("EMBEDDING_BATCH_SIZE", 32)
 GROQ_API_KEY: str = _env("GROQ_API_KEY")
 GROQ_MODEL: str = _env("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+GEMINI_API_KEY: str = _env("GEMINI_API_KEY")
+GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-2.0-flash")
+
 # Retrieval tuning: hits scoring below the threshold are dropped from context.
 # E5-family models compress cosine similarity into ~0.7-0.9; observed in
 # practice: irrelevant hits ~0.76-0.78, relevant ~0.82+.

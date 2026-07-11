@@ -1,5 +1,6 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseUUIDPipe, Query, Body } from '@nestjs/common';
 import { NoticesService } from '../services/notices.service';
+import { AskNoticeDto } from '../dto/ask-notice.dto';
 
 // Public read-only endpoints for browsing scraped notices/news — no auth
 // required. Admin CRUD/trigger endpoints live under /admin/scraping.
@@ -9,7 +10,7 @@ export class NoticesController {
 
   @Get()
   async findAll(
-    @Query('category') category?: 'NOTICE' | 'NEWS',
+    @Query('category') category?: 'NOTICE' | 'NEWS' | 'PRESS_RELEASE',
     @Query('sourceId') sourceId?: string,
     @Query('search') search?: string,
     @Query('dateFrom') dateFrom?: string,
@@ -45,5 +46,10 @@ export class NoticesController {
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.noticesService.findOne(id);
+  }
+
+  @Post(':id/ask')
+  async ask(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AskNoticeDto) {
+    return this.noticesService.askQuestion(id, dto.question);
   }
 }

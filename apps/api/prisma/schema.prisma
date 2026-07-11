@@ -141,6 +141,7 @@ model CompensationLeave {
 enum ScrapedItemCategory {
   NOTICE
   NEWS
+  PRESS_RELEASE
 }
 
 enum ScrapeRunStatus {
@@ -162,13 +163,15 @@ model ScrapeSource {
   id                String    @id @default(uuid()) @db.Uuid
   name              String
   baseUrl           String    @map("base_url")
-  // Listing page URLs; at least one of the two must be set.
-  noticeListUrl     String?   @map("notice_list_url")
-  newsListUrl       String?   @map("news_list_url")
+  // Listing page URLs; at least one must be set.
+  noticeListUrl         String?   @map("notice_list_url")
+  newsListUrl           String?   @map("news_list_url")
+  pressReleaseListUrl   String?   @map("press_release_list_url")
   // Cached JsonCssExtractionStrategy schemas (crawl4ai format), keyed implicitly
-  // by category via these two columns. Null until the first successful run.
-  noticeSchema      Json?     @map("notice_schema")
-  newsSchema        Json?     @map("news_schema")
+  // by category via these columns. Null until the first successful run.
+  noticeSchema          Json?     @map("notice_schema")
+  newsSchema            Json?     @map("news_schema")
+  pressReleaseSchema    Json?     @map("press_release_schema")
   // Pagination behavior — sites vary wildly (?page=N, ?start=N, /page/N/, or
   // no pagination at all), so this is admin-configurable per source rather
   // than assumed.
@@ -209,6 +212,12 @@ model ScrapedItem {
   contentHash   String              @map("content_hash")
   // Incremented each time the public notice detail page is viewed.
   views         Int                 @default(0)
+  // LLM-generated (Groq), computed lazily on first detail view and cached —
+  // never recomputed unless contentHash changes (see NoticesService).
+  aiSummary     String?             @map("ai_summary")
+  keyFacts      Json?               @map("key_facts")
+  tags          Json?
+  aiAnalyzedAt  DateTime?           @map("ai_analyzed_at")
   scrapedAt     DateTime            @default(now()) @map("scraped_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
 
@@ -228,6 +237,9 @@ model ScrapeRun {
   itemsFound   Int             @default(0) @map("items_found")
   itemsNew     Int             @default(0) @map("items_new")
   itemsUpdated Int             @default(0) @map("items_updated")
+  // Items the listing re-found that were already stored, unchanged — the
+  // dedup path working as intended, tracked explicitly for visibility.
+  itemsSkipped Int             @default(0) @map("items_skipped")
   error        String?
   startedAt    DateTime        @default(now()) @map("started_at")
   finishedAt   DateTime?       @map("finished_at")

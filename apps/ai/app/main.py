@@ -11,6 +11,7 @@ from app import config
 from app import chunker
 from app import embeddings
 from app import extractor
+from app import llm
 from app import progress
 from app import rag
 from app import scraper
@@ -112,6 +113,12 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
     scrape_progress_match = re.match(r"^/scrape/progress/([^/]+)$", path)
     if method == "GET" and scrape_progress_match:
         return _scrape_progress(scrape_progress_match.group(1))
+
+    if method == "POST" and path == "/notices/analyze":
+        return await _notices_analyze(receive)
+
+    if method == "POST" and path == "/notices/ask":
+        return await _notices_ask(receive)
 
     return 404, {"error": "Not found"}
 
@@ -428,6 +435,55 @@ def _scrape_progress(run_id: str) -> tuple[int, dict]:
     if entry is None:
         return 404, {"error": "No progress information for this run"}
     return 200, entry
+
+
+async def _notices_analyze(receive) -> tuple[int, dict]:
+    """POST /notices/analyze — body: {title, content}. Returns
+    {summary, key_facts, tags} or {analyzed: false} if no content/LLM."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    if not content:
+        return 200, {"analyzed": False}
+
+    try:
+        result = await llm.analyze_notice(title, content)
+    except Exception as e:
+        logger.exception("Notice analysis failed")
+        return 502, {"error": f"Analysis failed: {str(e)}"}
+
+    if result is None:
+        return 200, {"analyzed": False}
+    return 200, {"analyzed": True, **result}
+
+
+async def _notices_ask(receive) -> tuple[int, dict]:
+    """POST /notices/ask — body: {title, content, question}. Returns {answer}."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    question = (data.get("question") or "").strip()
+    if not question:
+        return 400, {"error": "Field 'question' is required"}
+    if not content:
+        return 200, {"answer": "This notice has no captured text content to answer questions about."}
+
+    try:
+        answer = await llm.answer_notice_question(title, content, question)
+        return 200, {"answer": answer}
+    except Exception as e:
+        logger.exception("Notice Q&A failed")
+        return 502, {"error": f"Failed to answer: {str(e)}"}
 
 
 # --- HTTP helpers ---

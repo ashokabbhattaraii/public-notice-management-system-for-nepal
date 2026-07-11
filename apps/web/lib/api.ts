@@ -174,6 +174,7 @@ export interface ScrapeSourceInput {
   baseUrl: string
   noticeListUrl?: string
   newsListUrl?: string
+  pressReleaseListUrl?: string
   paginationType?: ScrapePaginationType
   paginationParam?: string
   startPage?: number
@@ -277,6 +278,13 @@ export async function fetchNotices(
 
 export async function fetchNotice(id: string): Promise<PublicNoticeDetail> {
   return apiFetch(`/notices/${id}`)
+}
+
+export async function askNoticeQuestion(id: string, question: string): Promise<{ answer: string }> {
+  return apiFetch(`/notices/${id}/ask`, {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  })
 }
 
 export async function fetchNoticeCategoryCounts(): Promise<Record<string, number>> {

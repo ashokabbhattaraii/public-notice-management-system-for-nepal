@@ -1,4 +1,5 @@
 import asyncio
+import json
 import random
 import re
 
@@ -12,10 +13,9 @@ from app.logger import get_logger
 logger = get_logger(__name__)
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# Number of sentences the extractive fallback returns (kept short + precise).
 FALLBACK_SENTENCES = 4
-# Fallback sentences shorter than this are usually headings/fragments.
 _MIN_SENTENCE_CHARS = 25
 
 SYSTEM_PROMPT = """You are Suchana AI, an assistant that answers questions about Nepalese public notices and government documents using ONLY the provided context.
@@ -41,8 +41,6 @@ The user sent a conversational message (a greeting, thanks, goodbye, or similar)
 - You may briefly mention that they can ask about their uploaded documents, but only when it fits — never as a stock closing line.
 - Never claim to know document contents, and never repeat the same canned phrasing."""
 
-# A rotating style nudge keeps repeated greetings from converging on one
-# template phrase, even at high temperature.
 _STYLE_HINTS = [
     "Keep this reply especially brief — under 15 words.",
     "Open with something other than a greeting word this time.",
@@ -52,8 +50,6 @@ _STYLE_HINTS = [
     "Reply as if continuing a friendly conversation.",
 ]
 
-# Same idea for answers: a rotating structural directive makes the same
-# question produce genuinely different (but equally grounded) answers.
 _ANSWER_STYLE_HINTS = [
     "Lead with the single most important fact, then add supporting detail.",
     "If the material allows it, structure the answer as brief bullet points.",
@@ -73,7 +69,6 @@ _CANNED_NO_RESULTS = [
     "I didn't find relevant content for that question in the indexed documents — feel free to try different wording.",
 ]
 
-# Used when no LLM key is configured; picked at random for variety.
 _CANNED_GREETINGS_EN = [
     "Hello! I'm Suchana AI. Ask me anything about the uploaded notices or documents.",
     "Hi there! How can I help you today? You can ask me about any uploaded document.",
@@ -88,12 +83,8 @@ _CANNED_GREETINGS_NE = [
 async def generate_answer(
     question: str, context_chunks: list[dict], language: str = "en"
 ) -> str:
-    """Generate an answer from retrieved chunks.
-
-    context_chunks: [{"content": str, "title": str}, ...] in relevance order.
-    """
-    if not config.GROQ_API_KEY:
-        logger.info("GROQ_API_KEY not set; using extractive fallback")
+    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+        logger.info("No LLM key configured; using extractive fallback")
         return _extractive_fallback(question, context_chunks)
 
     context = "\n\n".join(
@@ -115,17 +106,14 @@ async def generate_answer(
         },
     ]
 
-    # Temperature 0.7 keeps answers grounded in context (the prompt enforces
-    # that) while letting repeated questions get naturally varied phrasing.
-    answer = await _groq_chat(messages, max_tokens=1024, temperature=0.7)
+    answer = await _llm_chat(messages, max_tokens=1024, temperature=0.7)
     if answer is None:
         return _extractive_fallback(question, context_chunks)
     return answer
 
 
 async def generate_chat(message: str, language: str = "en") -> str:
-    """Answer small talk (greetings, thanks) without document retrieval."""
-    if config.GROQ_API_KEY:
+    if config.GEMINI_API_KEY or config.GROQ_API_KEY:
         messages = [
             {
                 "role": "system",
@@ -133,7 +121,7 @@ async def generate_chat(message: str, language: str = "en") -> str:
             },
             {"role": "user", "content": message},
         ]
-        answer = await _groq_chat(messages, max_tokens=150, temperature=0.9)
+        answer = await _llm_chat(messages, max_tokens=150, temperature=0.9)
         if answer:
             return answer
 
@@ -142,8 +130,7 @@ async def generate_chat(message: str, language: str = "en") -> str:
 
 
 async def generate_no_results(question: str, language: str = "en") -> str:
-    """Generate a unique 'nothing found' reply; canned only without an LLM."""
-    if config.GROQ_API_KEY:
+    if config.GEMINI_API_KEY or config.GROQ_API_KEY:
         messages = [
             {
                 "role": "system",
@@ -151,7 +138,7 @@ async def generate_no_results(question: str, language: str = "en") -> str:
             },
             {"role": "user", "content": question},
         ]
-        answer = await _groq_chat(messages, max_tokens=150, temperature=0.9)
+        answer = await _llm_chat(messages, max_tokens=150, temperature=0.9)
         if answer:
             return answer
 
@@ -166,10 +153,9 @@ Reply with exactly one word:
 
 
 async def classify_intent(message: str) -> str | None:
-    """Classify a message as 'chat' or 'docs'. None if no LLM is available."""
-    if not config.GROQ_API_KEY:
+    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
         return None
-    result = await _groq_chat(
+    result = await _llm_chat(
         [
             {"role": "system", "content": _INTENT_PROMPT},
             {"role": "user", "content": message},
@@ -182,13 +168,105 @@ async def classify_intent(message: str) -> str | None:
     return "chat" if "chat" in result.lower() else "docs"
 
 
+# ---------------------------------------------------------------------------
+# Unified LLM dispatch: Gemini primary, Groq fallback
+# ---------------------------------------------------------------------------
+
+
+async def _llm_chat(
+    messages: list[dict], max_tokens: int, temperature: float
+) -> str | None:
+    """Try Gemini first, fall back to Groq on failure."""
+    if config.GEMINI_API_KEY:
+        result = await _gemini_chat(messages, max_tokens, temperature)
+        if result is not None:
+            return result
+        logger.warning("Gemini failed; falling back to Groq")
+
+    if config.GROQ_API_KEY:
+        return await _groq_chat(messages, max_tokens, temperature)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Gemini provider
+# ---------------------------------------------------------------------------
+
+
+async def _gemini_chat(
+    messages: list[dict], max_tokens: int, temperature: float
+) -> str | None:
+    """Call Google Gemini API. Returns None on any failure."""
+    system_parts = []
+    contents = []
+
+    for msg in messages:
+        if msg["role"] == "system":
+            system_parts.append(msg["content"])
+        elif msg["role"] == "user":
+            contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
+        elif msg["role"] == "assistant":
+            contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
+
+    payload = {
+        "contents": contents,
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    if system_parts:
+        payload["systemInstruction"] = {
+            "parts": [{"text": "\n\n".join(system_parts)}]
+        }
+
+    url = GEMINI_API_URL.format(model=config.GEMINI_MODEL) + f"?key={config.GEMINI_API_KEY}"
+
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(url, json=payload)
+        except httpx.HTTPError as e:
+            logger.error("Gemini request failed (attempt %d): %s", attempt + 1, e)
+            if attempt == 0:
+                await asyncio.sleep(1.0)
+                continue
+            return None
+
+        if response.status_code in (429, 500, 502, 503) and attempt == 0:
+            logger.warning("Gemini returned %d; retrying once", response.status_code)
+            await asyncio.sleep(1.5)
+            continue
+
+        if response.status_code != 200:
+            logger.error(
+                "Gemini returned %d: %.200s", response.status_code, response.text
+            )
+            return None
+
+        try:
+            data = response.json()
+            content = data["candidates"][0]["content"]["parts"][0]["text"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            logger.error("Gemini response missing content: %.200s", response.text)
+            return None
+
+        logger.debug("Gemini answer generated with model=%s", config.GEMINI_MODEL)
+        return _clean_answer(content)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Groq provider
+# ---------------------------------------------------------------------------
+
+
 async def _groq_chat(
     messages: list[dict], max_tokens: int, temperature: float
 ) -> str | None:
-    """Call Groq chat completions; returns None on any failure.
-
-    Retries once on transient failures (rate limit, upstream 5xx, network).
-    """
+    """Call Groq chat completions; returns None on any failure."""
     payload = {
         "model": config.GROQ_MODEL,
         "messages": messages,
@@ -237,34 +315,29 @@ async def _groq_chat(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
 def _clean_answer(text: str) -> str:
-    # Reasoning models leak <think> blocks; they must never reach the UI.
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     return text.strip()
 
 
 def _split_sentences(text: str) -> list[str]:
-    # Bullets/numbering read as noise once sentences are re-assembled.
     text = re.sub(r"[•●▪]|\s[-–]\s", " ", text.replace("\n", " "))
     text = re.sub(r"\s{2,}", " ", text)
-    # Split on sentence terminators, including the Devanagari danda (।).
     sentences = re.split(r"(?<=[.!?।])\s+", text)
     return [
         s.strip()
         for s in sentences
         if len(s.strip()) >= _MIN_SENTENCE_CHARS
-        # Drop fragments that start mid-word/mid-sentence (lowercase latin).
         and not s.strip()[0].islower()
     ]
 
 
 def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
-    """Return the few sentences most relevant to the question.
-
-    Sentences are ranked by cosine similarity to the question using the same
-    embedding model as retrieval, so the answer stays short and on-point
-    instead of dumping whole chunks.
-    """
     if not context_chunks:
         return "The provided documents do not contain this information."
 
@@ -278,12 +351,9 @@ def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
     try:
         q_vec = np.array(embeddings.get_embedding(question))
         sent_vecs = np.array(embeddings.get_embeddings(sentences))
-        # Embeddings are L2-normalized, so a dot product is cosine similarity.
         scores = sent_vecs @ q_vec
         ranked = np.argsort(scores)[::-1]
 
-        # Take the top sentences, skipping near-duplicates (overlapping chunks
-        # repeat their boundary sentences).
         picked: list[int] = []
         seen: set[str] = set()
         for i in ranked:
@@ -295,7 +365,6 @@ def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
             if len(picked) >= FALLBACK_SENTENCES:
                 break
 
-        # Preserve original reading order among the top matches.
         best = [sentences[i] for i in sorted(picked)]
         if len(best) == 1:
             return best[0]
@@ -305,3 +374,78 @@ def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
     except Exception:
         logger.exception("Extractive ranking failed; returning first sentence")
         return sentences[0]
+
+
+# --- Single-notice AI analysis (summary/key facts/tags) + Q&A ---
+
+_ANALYZE_PROMPT = """You analyze a single Nepalese government/public notice or news item and produce a JSON summary for display on a notice detail page.
+
+Return ONLY a JSON object (no markdown fences, no commentary) with this exact shape:
+{"summary": "2-3 sentence plain-language summary", "key_facts": ["short fact 1", "short fact 2", "..."], "tags": ["topic1", "topic2", "..."]}
+
+Rules:
+- summary: plain language, no jargon, captures what the notice actually says and who it affects. If the content is in Nepali, write the summary in English.
+- key_facts: 3-6 short, concrete, standalone facts (dates, eligibility, amounts, deadlines, affected wards/groups, procedures) — each under ~12 words. Omit facts not actually stated in the content.
+- tags: 2-5 short topical keywords (organization name, subject area, affected group) useful for filtering — not generic words like "notice" or "government".
+- Ground everything in the provided content. Never invent facts."""
+
+_ASK_PROMPT = """You are Suchana AI, answering a question about ONE specific Nepalese public notice/news item using ONLY its content below.
+
+Rules:
+- Ground every claim in the content. Never invent facts, dates, or numbers not present.
+- Answer in Markdown, short paragraphs or bullet points, under ~150 words.
+- Answer in the same language the question is asked in. If the notice content is in Nepali but the question is in English, translate/explain in English.
+- If the content doesn't contain the answer, say so plainly in one sentence — do not guess.
+- Answer directly, no filler like "Based on the notice...\""""
+
+
+async def analyze_notice(title: str, content: str) -> dict | None:
+    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+        return None
+
+    trimmed_content = content[:8000]
+
+    messages = [
+        {"role": "system", "content": _ANALYZE_PROMPT},
+        {"role": "user", "content": f"Title: {title}\n\nContent:\n{trimmed_content}"},
+    ]
+
+    raw = await _llm_chat(messages, max_tokens=600, temperature=0.2)
+    if raw is None:
+        return None
+
+    cleaned = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        logger.warning("analyze_notice: could not parse LLM JSON output")
+        return None
+
+    summary = data.get("summary")
+    if not summary:
+        return None
+
+    return {
+        "summary": str(summary).strip(),
+        "key_facts": [str(f).strip() for f in (data.get("key_facts") or []) if str(f).strip()][:6],
+        "tags": [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()][:5],
+    }
+
+
+async def answer_notice_question(title: str, content: str, question: str) -> str:
+    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+        return _extractive_fallback(question, [{"content": content, "title": title}])
+
+    trimmed_content = content[:8000]
+    messages = [
+        {"role": "system", "content": _ASK_PROMPT},
+        {
+            "role": "user",
+            "content": f"Notice title: {title}\n\nNotice content:\n{trimmed_content}\n\nQuestion: {question}",
+        },
+    ]
+
+    answer = await _llm_chat(messages, max_tokens=500, temperature=0.4)
+    if answer is None:
+        return _extractive_fallback(question, [{"content": content, "title": title}])
+    return answer

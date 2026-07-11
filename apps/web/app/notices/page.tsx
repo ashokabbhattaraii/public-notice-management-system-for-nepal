@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback, Suspense } from "react"
 import {
   Search, Filter, Calendar, Eye, Bell, FileText,
   ChevronRight, X, Bookmark, BookmarkCheck, Building2,
@@ -9,8 +9,11 @@ import {
 import { Header } from "@/components/layout/header"
 import { useAuth } from "@/lib/auth-context"
 import { fetchNotices, fetchNoticeCategoryCounts, fetchNoticeSources } from "@/lib/api"
+import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
+import { categoryLabel } from "@/lib/types"
 import type { ScrapedItem, ScrapedItemCategory, PublicNoticeSource } from "@/lib/types"
 import Link from "next/link"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import gsap from "gsap"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -44,8 +47,8 @@ function NoticeCard({
       <div className="min-w-0 flex-1 p-5 md:p-6">
         {/* Top row - badges */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs capitalize text-vez-navy">
-            {notice.category.toLowerCase()}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
+            {categoryLabel(notice.category)}
           </span>
         </div>
 
@@ -101,26 +104,68 @@ function NoticeCard({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function NoticesPage() {
+// URL query param keys — kept short but explicit so a filtered/selected view
+// is shareable and survives navigating to a notice and back (browser
+// back/forward restores this exact URL, and useSearchParams below re-syncs
+// local state to match).
+const QP = {
+  search: "q",
+  category: "category",
+  source: "source",
+  sort: "sort",
+  page: "page",
+} as const
+
+// Remembers the last-used filters/search/sort across full navigations and
+// reloads (URL params alone only survive browser back/forward — clicking a
+// plain nav link to "Notices" starts from a bare URL with no query string).
+const PREFS_KEY = "pnm_notices_prefs"
+
+interface NoticesPrefs {
+  search: string
+  category: ScrapedItemCategory | "all"
+  sourceId: string
+  sortBy: "publishedAt" | "views"
+}
+
+const DEFAULT_PREFS: NoticesPrefs = { search: "", category: "all", sourceId: "", sortBy: "publishedAt" }
+
+function NoticesPageContent() {
   const { user } = useAuth()
-  const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<ScrapedItemCategory | "all">("all")
-  const [selectedSourceId, setSelectedSourceId] = useState("")
-  const [sortBy, setSortBy] = useState<"publishedAt" | "views">("publishedAt")
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const didMountSync = useRef(false)
+
+  const storedPrefs = getStoredJSON(PREFS_KEY, DEFAULT_PREFS)
+
+  const [searchInput, setSearchInput] = useState(() => searchParams.get(QP.search) ?? storedPrefs.search)
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get(QP.search) ?? storedPrefs.search)
+  const [selectedCategory, setSelectedCategory] = useState<ScrapedItemCategory | "all">(
+    () => (searchParams.get(QP.category) as ScrapedItemCategory | null) ?? storedPrefs.category,
+  )
+  const [selectedSourceId, setSelectedSourceId] = useState(
+    () => searchParams.get(QP.source) ?? storedPrefs.sourceId,
+  )
+  const [sortBy, setSortBy] = useState<"publishedAt" | "views">(
+    () => (searchParams.get(QP.sort) as "publishedAt" | "views" | null) ?? storedPrefs.sortBy,
+  )
+  const [page, setPage] = useState(() => Number(searchParams.get(QP.page)) || 1)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const feedRef = useRef<HTMLDivElement>(null)
 
   const [notices, setNotices] = useState<ScrapedItem[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const [sources, setSources] = useState<PublicNoticeSource[]>([])
 
   useEffect(() => {
-    const t = setTimeout(() => setSearchQuery(searchInput), 350)
+    const t = setTimeout(() => {
+      setSearchQuery(searchInput)
+      setPage(1)
+    }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
 
@@ -128,6 +173,54 @@ export default function NoticesPage() {
     fetchNoticeCategoryCounts().then(setCategoryCounts).catch(() => {})
     fetchNoticeSources().then(setSources).catch(() => {})
   }, [])
+
+  // Re-sync local state whenever the URL's query string changes — this is
+  // what restores the previously-selected filters when the browser
+  // back/forward button returns from a notice detail page. Skipped on the
+  // very first run: the lazy useState initializers above already derived
+  // the correct mount-time value (URL param, else remembered preference,
+  // else default), and blindly applying "missing param -> hardcoded
+  // default" here on mount would stomp a preference restored from
+  // localStorage before the URL has caught up to it.
+  const searchParamsString = searchParams.toString()
+  useEffect(() => {
+    if (!didMountSync.current) {
+      didMountSync.current = true
+      return
+    }
+    setSearchInput(searchParams.get(QP.search) ?? "")
+    setSearchQuery(searchParams.get(QP.search) ?? "")
+    setSelectedCategory((searchParams.get(QP.category) as ScrapedItemCategory | null) ?? "all")
+    setSelectedSourceId(searchParams.get(QP.source) ?? "")
+    setSortBy((searchParams.get(QP.sort) as "publishedAt" | "views" | null) ?? "publishedAt")
+    setPage(Number(searchParams.get(QP.page)) || 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsString])
+
+  // Remember filters/search/sort (not page) for the next visit, independent
+  // of whether the URL still carries them.
+  useEffect(() => {
+    setStoredJSON(PREFS_KEY, {
+      search: searchQuery,
+      category: selectedCategory,
+      sourceId: selectedSourceId,
+      sortBy,
+    } satisfies NoticesPrefs)
+  }, [searchQuery, selectedCategory, selectedSourceId, sortBy])
+
+  // Push the current filter/sort/page state into the URL (no new history
+  // entry) so it's shareable and survives a round-trip to a detail page.
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (searchQuery) params.set(QP.search, searchQuery)
+    if (selectedCategory !== "all") params.set(QP.category, selectedCategory)
+    if (selectedSourceId) params.set(QP.source, selectedSourceId)
+    if (sortBy !== "publishedAt") params.set(QP.sort, sortBy)
+    if (page > 1) params.set(QP.page, String(page))
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, selectedCategory, selectedSourceId, sortBy, page])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -157,11 +250,6 @@ export default function NoticesPage() {
     load()
   }, [load])
 
-  // Reset to page 1 whenever a filter changes (not page itself).
-  useEffect(() => {
-    setPage(1)
-  }, [selectedCategory, selectedSourceId, searchQuery, sortBy])
-
   useEffect(() => {
     if (!feedRef.current || loading) return
     const cards = feedRef.current.querySelectorAll("a")
@@ -179,14 +267,31 @@ export default function NoticesPage() {
     })
   }
 
+  function selectCategory(category: ScrapedItemCategory | "all") {
+    setSelectedCategory(category)
+    setPage(1)
+  }
+
+  function selectSource(sourceId: string) {
+    setSelectedSourceId(sourceId)
+    setPage(1)
+  }
+
+  function selectSort(sort: "publishedAt" | "views") {
+    setSortBy(sort)
+    setPage(1)
+  }
+
   function clearFilters() {
     setSearchInput("")
+    setSearchQuery("")
     setSelectedCategory("all")
     setSelectedSourceId("")
     setSortBy("publishedAt")
+    setPage(1)
   }
 
-  const totalCount = (categoryCounts.NOTICE ?? 0) + (categoryCounts.NEWS ?? 0)
+  const totalCount = (categoryCounts.NOTICE ?? 0) + (categoryCounts.NEWS ?? 0) + (categoryCounts.PRESS_RELEASE ?? 0)
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
@@ -242,16 +347,17 @@ export default function NoticesPage() {
         <div className="flex shrink-0 gap-2 overflow-x-auto lg:hidden">
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value as ScrapedItemCategory | "all")}
+            onChange={(e) => selectCategory(e.target.value as ScrapedItemCategory | "all")}
             className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
             <option value="all">All categories</option>
             <option value="NOTICE">Notice</option>
             <option value="NEWS">News</option>
+            <option value="PRESS_RELEASE">Press Release</option>
           </select>
           <select
             value={selectedSourceId}
-            onChange={(e) => setSelectedSourceId(e.target.value)}
+            onChange={(e) => selectSource(e.target.value)}
             className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
             <option value="">All sources</option>
@@ -260,7 +366,7 @@ export default function NoticesPage() {
             ))}
           </select>
           <button
-            onClick={() => setSortBy(sortBy === "publishedAt" ? "views" : "publishedAt")}
+            onClick={() => selectSort(sortBy === "publishedAt" ? "views" : "publishedAt")}
             className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
           >
             <Filter className="size-3.5" /> {sortBy === "publishedAt" ? "Newest" : "Popular"}
@@ -275,16 +381,16 @@ export default function NoticesPage() {
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Category</h3>
               <div className="space-y-1">
                 <button
-                  onClick={() => setSelectedCategory("all")}
+                  onClick={() => selectCategory("all")}
                   className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                 >
                   <span>All</span>
                   <span className="text-xs">{totalCount}</span>
                 </button>
-                {([["NOTICE", "Notice"], ["NEWS", "News"]] as const).map(([id, label]) => (
+                {([["NOTICE", "Notice"], ["NEWS", "News"], ["PRESS_RELEASE", "Press Release"]] as const).map(([id, label]) => (
                   <button
                     key={id}
-                    onClick={() => setSelectedCategory(id)}
+                    onClick={() => selectCategory(id)}
                     className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     <span>{label}</span>
@@ -300,7 +406,7 @@ export default function NoticesPage() {
               <h3 className="mb-3 px-2 text-xs text-vez-mute">Source</h3>
               <div className="space-y-1">
                 <button
-                  onClick={() => setSelectedSourceId("")}
+                  onClick={() => selectSource("")}
                   className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === "" ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                 >
                   All sources
@@ -308,7 +414,7 @@ export default function NoticesPage() {
                 {sources.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setSelectedSourceId(s.id)}
+                    onClick={() => selectSource(s.id)}
                     className={`w-full truncate rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                     title={s.name}
                   >
@@ -326,7 +432,7 @@ export default function NoticesPage() {
                 {[{ id: "publishedAt", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setSortBy(s.id as "publishedAt" | "views")}
+                    onClick={() => selectSort(s.id as "publishedAt" | "views")}
                     className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
                   >
                     {s.label}
@@ -417,5 +523,13 @@ export default function NoticesPage() {
         {/* Notice detail - now uses slug-based route /notices/[slug] */}
       </div>
     </div>
+  )
+}
+
+export default function NoticesPage() {
+  return (
+    <Suspense fallback={null}>
+      <NoticesPageContent />
+    </Suspense>
   )
 }

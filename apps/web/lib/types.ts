@@ -126,7 +126,16 @@ export interface ScrapingSource {
 
 // ─── Live scraping (crawl4ai pipeline, dynamic multi-source) ─────────────────
 
-export type ScrapedItemCategory = "NOTICE" | "NEWS"
+export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE"
+
+const CATEGORY_LABELS: Record<ScrapedItemCategory, string> = {
+  NOTICE: "Notice",
+  NEWS: "News",
+  PRESS_RELEASE: "Press Release",
+}
+export function categoryLabel(cat: ScrapedItemCategory): string {
+  return CATEGORY_LABELS[cat] ?? cat.toLowerCase()
+}
 
 export interface ScrapedItem {
   id: string
@@ -148,6 +157,9 @@ export interface PublicNoticeDetail extends ScrapedItem {
   contentText: string | null
   contentHtml: string | null
   views: number
+  aiSummary: string | null
+  keyFacts: string[] | null
+  tags: string[] | null
 }
 
 export interface PublicNoticeSource {
@@ -165,6 +177,7 @@ export interface ScrapeRun {
   itemsFound: number
   itemsNew: number
   itemsUpdated: number
+  itemsSkipped: number
   error: string | null
   startedAt: string
   finishedAt: string | null
@@ -178,6 +191,7 @@ export interface ScrapeSource {
   baseUrl: string
   noticeListUrl: string | null
   newsListUrl: string | null
+  pressReleaseListUrl: string | null
   paginationType: ScrapePaginationType
   paginationParam: string
   startPage: number

@@ -1,10 +1,12 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useMemo } from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Search, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, X, SlidersHorizontal } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
 import { fetchScrapedItems, deleteScrapedItem, fetchScrapeSources } from "@/lib/api"
+import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
 import type { ScrapedItem, ScrapedItemCategory, ScrapeSource } from "@/lib/types"
 
 const inputClass =
@@ -18,25 +20,75 @@ const PAGE_SIZE = 20
 type SortOption = "publishedAt:desc" | "publishedAt:asc" | "scrapedAt:desc" | "title:asc"
 type ScrapedItemFiltersSortBy = "publishedAt" | "scrapedAt" | "title"
 
-export default function AdminNoticesPage() {
+// URL query param keys — persists filters/search/page across navigation
+// (e.g. opening a notice's original source in a new tab and coming back).
+const QP = {
+  search: "q",
+  category: "category",
+  source: "source",
+  dateFrom: "from",
+  dateTo: "to",
+  sort: "sort",
+  page: "page",
+} as const
+
+// Remembers the last-used filters across full navigations/reloads — URL
+// params alone only survive browser back/forward.
+const PREFS_KEY = "pnm_admin_notices_prefs"
+
+interface AdminNoticesPrefs {
+  search: string
+  category: ScrapedItemCategory | ""
+  sourceId: string
+  dateFrom: string
+  dateTo: string
+  sort: SortOption
+}
+
+const DEFAULT_PREFS: AdminNoticesPrefs = {
+  search: "",
+  category: "",
+  sourceId: "",
+  dateFrom: "",
+  dateTo: "",
+  sort: "publishedAt:desc",
+}
+
+function AdminNoticesPageContent() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const didMountSync = useRef(false)
+
+  const storedPrefs = getStoredJSON(PREFS_KEY, DEFAULT_PREFS)
+
   const [items, setItems] = useState<ScrapedItem[]>([])
   const [sources, setSources] = useState<ScrapeSource[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(() => Number(searchParams.get(QP.page)) || 1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [category, setCategory] = useState<ScrapedItemCategory | "">("")
-  const [sourceId, setSourceId] = useState("")
-  const [dateFrom, setDateFrom] = useState("")
-  const [dateTo, setDateTo] = useState("")
-  const [sort, setSort] = useState<SortOption>("publishedAt:desc")
+  const [search, setSearch] = useState(() => searchParams.get(QP.search) ?? storedPrefs.search)
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => searchParams.get(QP.search) ?? storedPrefs.search,
+  )
+  const [category, setCategory] = useState<ScrapedItemCategory | "">(
+    () => (searchParams.get(QP.category) as ScrapedItemCategory | null) ?? storedPrefs.category,
+  )
+  const [sourceId, setSourceId] = useState(() => searchParams.get(QP.source) ?? storedPrefs.sourceId)
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get(QP.dateFrom) ?? storedPrefs.dateFrom)
+  const [dateTo, setDateTo] = useState(() => searchParams.get(QP.dateTo) ?? storedPrefs.dateTo)
+  const [sort, setSort] = useState<SortOption>(
+    () => (searchParams.get(QP.sort) as SortOption | null) ?? storedPrefs.sort,
+  )
   const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 350)
     return () => clearTimeout(t)
   }, [search])
 
@@ -45,6 +97,56 @@ export default function AdminNoticesPage() {
   }, [])
 
   const [sortBy, sortOrder] = sort.split(":") as [ScrapedItemFiltersSortBy, "asc" | "desc"]
+
+  // Re-sync local state whenever the URL's query string changes (covers
+  // browser back/forward restoring a previously-filtered view). Skipped on
+  // the very first run — the lazy useState initializers above already
+  // derived the correct mount-time value (URL param, else remembered
+  // preference, else default).
+  const searchParamsString = searchParams.toString()
+  useEffect(() => {
+    if (!didMountSync.current) {
+      didMountSync.current = true
+      return
+    }
+    setSearch(searchParams.get(QP.search) ?? "")
+    setDebouncedSearch(searchParams.get(QP.search) ?? "")
+    setCategory((searchParams.get(QP.category) as ScrapedItemCategory | null) ?? "")
+    setSourceId(searchParams.get(QP.source) ?? "")
+    setDateFrom(searchParams.get(QP.dateFrom) ?? "")
+    setDateTo(searchParams.get(QP.dateTo) ?? "")
+    setSort((searchParams.get(QP.sort) as SortOption | null) ?? "publishedAt:desc")
+    setPage(Number(searchParams.get(QP.page)) || 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsString])
+
+  // Remember filters/search/sort (not page) for the next visit, independent
+  // of whether the URL still carries them.
+  useEffect(() => {
+    setStoredJSON(PREFS_KEY, {
+      search: debouncedSearch,
+      category,
+      sourceId,
+      dateFrom,
+      dateTo,
+      sort,
+    } satisfies AdminNoticesPrefs)
+  }, [debouncedSearch, category, sourceId, dateFrom, dateTo, sort])
+
+  // Push current filter/sort/page state into the URL (no new history entry).
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.set(QP.search, debouncedSearch)
+    if (category) params.set(QP.category, category)
+    if (sourceId) params.set(QP.source, sourceId)
+    if (dateFrom) params.set(QP.dateFrom, dateFrom)
+    if (dateTo) params.set(QP.dateTo, dateTo)
+    if (sort !== "publishedAt:desc") params.set(QP.sort, sort)
+    if (page > 1) params.set(QP.page, String(page))
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, category, sourceId, dateFrom, dateTo, sort, page])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,18 +176,28 @@ export default function AdminNoticesPage() {
     load()
   }, [load])
 
-  // Reset to page 1 whenever a filter (other than page itself) changes.
-  useEffect(() => {
-    setPage(1)
-  }, [category, sourceId, debouncedSearch, dateFrom, dateTo, sort])
+  function updateFilter<T>(setter: (v: T) => void) {
+    return (value: T) => {
+      setter(value)
+      setPage(1)
+    }
+  }
+
+  const setCategoryAndReset = updateFilter(setCategory)
+  const setSourceIdAndReset = updateFilter(setSourceId)
+  const setDateFromAndReset = updateFilter(setDateFrom)
+  const setDateToAndReset = updateFilter(setDateTo)
+  const setSortAndReset = updateFilter(setSort)
 
   function clearFilters() {
     setSearch("")
+    setDebouncedSearch("")
     setCategory("")
     setSourceId("")
     setDateFrom("")
     setDateTo("")
     setSort("publishedAt:desc")
+    setPage(1)
   }
 
   const activeFilterCount = [category, sourceId, dateFrom, dateTo, debouncedSearch].filter(Boolean).length
@@ -165,7 +277,7 @@ export default function AdminNoticesPage() {
                 <label className="mb-1 block text-xs text-vez-mute">Category</label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value as ScrapedItemCategory | "")}
+                  onChange={(e) => setCategoryAndReset(e.target.value as ScrapedItemCategory | "")}
                   className={`${fieldClass} h-10 py-0`}
                 >
                   <option value="">All categories</option>
@@ -177,7 +289,7 @@ export default function AdminNoticesPage() {
                 <label className="mb-1 block text-xs text-vez-mute">Source</label>
                 <select
                   value={sourceId}
-                  onChange={(e) => setSourceId(e.target.value)}
+                  onChange={(e) => setSourceIdAndReset(e.target.value)}
                   className={`${fieldClass} h-10 py-0`}
                 >
                   <option value="">All sources</option>
@@ -191,7 +303,7 @@ export default function AdminNoticesPage() {
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  onChange={(e) => setDateFromAndReset(e.target.value)}
                   className={`${fieldClass} h-10 py-0`}
                 />
               </div>
@@ -200,7 +312,7 @@ export default function AdminNoticesPage() {
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  onChange={(e) => setDateToAndReset(e.target.value)}
                   className={`${fieldClass} h-10 py-0`}
                 />
               </div>
@@ -208,7 +320,7 @@ export default function AdminNoticesPage() {
                 <label className="mb-1 block text-xs text-vez-mute">Sort by</label>
                 <select
                   value={sort}
-                  onChange={(e) => setSort(e.target.value as SortOption)}
+                  onChange={(e) => setSortAndReset(e.target.value as SortOption)}
                   className={`${fieldClass} h-10 py-0`}
                 >
                   <option value="publishedAt:desc">Newest published</option>
@@ -312,5 +424,13 @@ export default function AdminNoticesPage() {
         </div>
       </AdminLayout>
     </div>
+  )
+}
+
+export default function AdminNoticesPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminNoticesPageContent />
+    </Suspense>
   )
 }

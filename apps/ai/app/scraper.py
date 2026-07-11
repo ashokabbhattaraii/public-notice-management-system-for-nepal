@@ -749,12 +749,15 @@ async def scrape_source(
                     break
 
                 new_rows_on_page = 0
+                unknown_rows_on_page = 0
                 for row in rows:
                     source_url = _absolute_url(base_url, row.get("detail_href"))
                     if not source_url or source_url in seen_urls:
                         continue
                     seen_urls.add(source_url)
                     new_rows_on_page += 1
+                    if source_url not in known_urls:
+                        unknown_rows_on_page += 1
 
                     title = _clean_text(row.get("title")) or "(untitled)"
                     published_at = _parse_published(row.get("published_raw"))
@@ -791,11 +794,29 @@ async def scrape_source(
                         )
                     )
 
-                report(f"Found {new_rows_on_page} new item(s) on {category.title()} page {page_index + 1}")
+                already_known_on_page = new_rows_on_page - unknown_rows_on_page
+                report(
+                    f"{category.title()} page {page_index + 1}: {new_rows_on_page} row(s) — "
+                    f"{unknown_rows_on_page} new, {already_known_on_page} already scraped"
+                )
 
                 # Sites without real pagination re-render page 1's rows for
-                # any page param; treat "nothing new" as end of pagination.
+                # any page param; treat "nothing new on this page" as the end.
                 if new_rows_on_page == 0:
+                    break
+
+                # Resource-saving early exit: listings are read newest-first,
+                # so once an entire page is rows we've already stored, every
+                # deeper (older) page is with near-certainty duplicates too —
+                # stop instead of burning requests re-confirming that. Only
+                # kicks in once we've actually seen known URLs (an admin's
+                # very first run for a source has none yet, so it always
+                # walks the full max_pages window).
+                if known_urls and unknown_rows_on_page == 0:
+                    report(
+                        f"All {category.title()} items on page {page_index + 1} are already "
+                        "scraped — stopping pagination early"
+                    )
                     break
 
     report(f"Scrape complete — {len(items)} item(s) total")

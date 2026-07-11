@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useRef } from "react"
+import React, { useEffect, useState, useCallback, useRef, Suspense } from "react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import {
   Play,
   Plus,
@@ -31,6 +32,7 @@ import {
   fetchScrapeRuns,
   fetchScrapeRunProgress,
 } from "@/lib/api"
+import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
 import type { ScrapeSource, ScrapeRun, ScrapePaginationType, ScrapeRunProgress } from "@/lib/types"
 
 interface SourceFormState {
@@ -39,6 +41,7 @@ interface SourceFormState {
   baseUrl: string
   noticeListUrl: string
   newsListUrl: string
+  pressReleaseListUrl: string
   paginationType: ScrapePaginationType
   paginationParam: string
   startPage: number
@@ -50,6 +53,7 @@ const emptyForm: SourceFormState = {
   baseUrl: "",
   noticeListUrl: "",
   newsListUrl: "",
+  pressReleaseListUrl: "",
   paginationType: "QUERY_PARAM",
   paginationParam: "page",
   startPage: 1,
@@ -58,8 +62,74 @@ const emptyForm: SourceFormState = {
 
 const PROGRESS_POLL_MS = 1200
 
-export default function AdminScrapingPage() {
-  const [activeTab, setActiveTab] = useState<"sources" | "logs">("sources")
+const TAB_PREFS_KEY = "pnm_admin_scraping_tab"
+
+/** Small inline trend line for a source's recent run item-counts. */
+function MiniSparkline({ data }: { data: number[] }) {
+  if (data.length < 2) return null
+  const max = Math.max(...data, 1)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const width = 64
+  const height = 20
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width
+      const y = height - ((v - min) / range) * height
+      return `${x},${y}`
+    })
+    .join(" ")
+
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      <polyline
+        fill="none"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+        stroke="#a2c5d3"
+      />
+    </svg>
+  )
+}
+
+function AdminScrapingPageContent() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const didMountSync = useRef(false)
+
+  const [activeTab, setActiveTabState] = useState<"sources" | "logs">(
+    () =>
+      (searchParams.get("tab") as "sources" | "logs" | null) ??
+      getStoredJSON(TAB_PREFS_KEY, { tab: "sources" as const }).tab,
+  )
+
+  // Re-sync from the URL on back/forward, and push tab changes to the URL
+  // (no new history entry) so the selected tab survives navigating away
+  // and back (e.g. opening a source's site in a new tab). Skipped on the
+  // very first run so it doesn't stomp a tab restored from localStorage
+  // before the URL reflects it.
+  const searchParamsString = searchParams.toString()
+  useEffect(() => {
+    if (!didMountSync.current) {
+      didMountSync.current = true
+      return
+    }
+    setActiveTabState((searchParams.get("tab") as "sources" | "logs" | null) ?? "sources")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsString])
+
+  useEffect(() => {
+    setStoredJSON(TAB_PREFS_KEY, { tab: activeTab })
+  }, [activeTab])
+
+  function setActiveTab(tab: "sources" | "logs") {
+    setActiveTabState(tab)
+    router.replace(tab === "sources" ? pathname : `${pathname}?tab=${tab}`, { scroll: false })
+  }
+
   const [sources, setSources] = useState<ScrapeSource[]>([])
   const [runs, setRuns] = useState<ScrapeRun[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,6 +185,7 @@ export default function AdminScrapingPage() {
       baseUrl: source.baseUrl,
       noticeListUrl: source.noticeListUrl ?? "",
       newsListUrl: source.newsListUrl ?? "",
+      pressReleaseListUrl: source.pressReleaseListUrl ?? "",
       paginationType: source.paginationType,
       paginationParam: source.paginationParam,
       startPage: source.startPage,
@@ -127,8 +198,8 @@ export default function AdminScrapingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.noticeListUrl && !form.newsListUrl) {
-      setFormError("Provide at least one of Notice URL or News URL")
+    if (!form.noticeListUrl && !form.newsListUrl && !form.pressReleaseListUrl) {
+      setFormError("Provide at least one listing URL (notice, news, or press release)")
       return
     }
     setSaving(true)
@@ -139,6 +210,7 @@ export default function AdminScrapingPage() {
         baseUrl: form.baseUrl,
         noticeListUrl: form.noticeListUrl || undefined,
         newsListUrl: form.newsListUrl || undefined,
+        pressReleaseListUrl: form.pressReleaseListUrl || undefined,
         paginationType: form.paginationType,
         paginationParam: form.paginationParam || "page",
         startPage: form.startPage,
@@ -318,6 +390,7 @@ export default function AdminScrapingPage() {
                   const categories = [
                     source.noticeListUrl && "Notice",
                     source.newsListUrl && "News",
+                    source.pressReleaseListUrl && "Press Release",
                   ].filter(Boolean).join(" + ")
                   const progress = progressBySource[source.id]
                   const paginationLabel =
@@ -327,31 +400,47 @@ export default function AdminScrapingPage() {
                         ? `Path template · up to ${source.maxPages} pages`
                         : `?${source.paginationParam}=N · up to ${source.maxPages} pages`
 
+                  const sourceRuns = runs
+                    .filter((r) => r.sourceId === source.id && r.status === "SUCCESS")
+                    .slice(0, 7)
+                    .reverse()
+                  const sparklineData = sourceRuns.map((r) => r.itemsFound)
+                  const totalFound = sourceRuns.reduce((s, r) => s + r.itemsFound, 0)
+                  const totalSkipped = sourceRuns.reduce((s, r) => s + r.itemsSkipped, 0)
+                  const dedupRate = totalFound > 0 ? Math.round((totalSkipped / totalFound) * 100) : null
+
                   return (
                     <div key={source.id} className="rounded-[20px] bg-white p-6">
-                      <div className="mb-4 flex items-start justify-between">
-                        <div>
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
                           <h3 className="text-base text-vez-ink">{source.name}</h3>
                           <p className="mt-0.5 max-w-[260px] truncate text-xs text-vez-mute">{source.baseUrl}</p>
                         </div>
-                        <span
-                          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs capitalize ${
-                            !source.enabled
-                              ? "border border-vez-line text-vez-mute"
-                              : source.lastStatus === "FAILED"
-                                ? "bg-red-50 text-red-600"
-                                : "bg-vez-sky/30 text-vez-navy"
-                          }`}
-                        >
-                          {!source.enabled ? (
-                            <Ban className="size-3" />
-                          ) : source.lastStatus === "FAILED" ? (
-                            <AlertCircle className="size-3" />
-                          ) : (
-                            <CheckCircle className="size-3" />
+                        <div className="flex shrink-0 items-center gap-2">
+                          {sparklineData.length >= 2 && (
+                            <div title="Items found on listing, recent runs">
+                              <MiniSparkline data={sparklineData} />
+                            </div>
                           )}
-                          {!source.enabled ? "disabled" : source.lastStatus?.toLowerCase() ?? "not run yet"}
-                        </span>
+                          <span
+                            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs capitalize ${
+                              !source.enabled
+                                ? "border border-vez-line text-vez-mute"
+                                : source.lastStatus === "FAILED"
+                                  ? "bg-red-50 text-red-600"
+                                  : "bg-vez-sky/30 text-vez-navy"
+                            }`}
+                          >
+                            {!source.enabled ? (
+                              <Ban className="size-3" />
+                            ) : source.lastStatus === "FAILED" ? (
+                              <AlertCircle className="size-3" />
+                            ) : (
+                              <CheckCircle className="size-3" />
+                            )}
+                            {!source.enabled ? "disabled" : source.lastStatus?.toLowerCase() ?? "not run yet"}
+                          </span>
+                        </div>
                       </div>
                       <div className="mb-4 grid grid-cols-2 gap-3 rounded-[14px] bg-vez-surface px-4 py-3 text-xs">
                         <div>
@@ -366,6 +455,14 @@ export default function AdminScrapingPage() {
                           <span className="text-vez-mute">Pagination</span>
                           <p className="mt-0.5 text-vez-ink">{paginationLabel}</p>
                         </div>
+                        {dedupRate !== null && (
+                          <div className="col-span-2">
+                            <span className="text-vez-mute">Dedup efficiency (recent runs)</span>
+                            <p className="mt-0.5 text-vez-ink">
+                              {dedupRate}% already-scraped items skipped without re-fetching
+                            </p>
+                          </div>
+                        )}
                       </div>
                       {source.lastRunAt && !isRunning && (
                         <p className="mb-4 text-xs text-vez-mute">
@@ -469,8 +566,15 @@ export default function AdminScrapingPage() {
                               : "Scrape completed"}
                         </span>
                         {run.itemsFound > 0 && (
-                          <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy">
-                            {run.itemsNew} new · {run.itemsFound} found
+                          <span
+                            className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy"
+                            title={`${run.itemsNew} new · ${run.itemsUpdated} updated · ${run.itemsSkipped} already scraped (skipped) · ${run.itemsFound} found on listing`}
+                          >
+                            {run.itemsNew} new
+                            {run.itemsUpdated > 0 && ` · ${run.itemsUpdated} updated`}
+                            {run.itemsSkipped > 0 && ` · ${run.itemsSkipped} deduped`}
+                            {" · "}
+                            {run.itemsFound} found
                           </span>
                         )}
                       </div>
@@ -535,6 +639,16 @@ export default function AdminScrapingPage() {
                     value={form.newsListUrl}
                     onChange={(e) => setForm({ ...form, newsListUrl: e.target.value })}
                     placeholder="https://example.gov.np/news"
+                    className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none focus:border-vez-navy"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-vez-mute">Press release listing page URL (optional)</label>
+                  <input
+                    type="url"
+                    value={form.pressReleaseListUrl}
+                    onChange={(e) => setForm({ ...form, pressReleaseListUrl: e.target.value })}
+                    placeholder="https://example.gov.np/press-release"
                     className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none focus:border-vez-navy"
                   />
                 </div>
@@ -637,5 +751,13 @@ export default function AdminScrapingPage() {
         )}
       </AdminLayout>
     </div>
+  )
+}
+
+export default function AdminScrapingPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminScrapingPageContent />
+    </Suspense>
   )
 }
