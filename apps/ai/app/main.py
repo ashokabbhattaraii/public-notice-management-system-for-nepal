@@ -12,6 +12,8 @@ from app import chunker
 from app import embeddings
 from app import extractor
 from app import llm
+from app import notice_rag
+from app import notice_store
 from app import progress
 from app import rag
 from app import scraper
@@ -64,9 +66,10 @@ async def _handle_lifespan(scope, receive, send):
             config.ensure_upload_dir()
             try:
                 store.ensure_collection()
+                notice_store.ensure_collection()
             except Exception:
                 logger.exception(
-                    "Could not ensure Qdrant collection at startup; "
+                    "Could not ensure Qdrant collections at startup; "
                     "will retry on first request"
                 )
             await send({"type": "lifespan.startup.complete"})
@@ -117,8 +120,17 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
     if method == "POST" and path == "/notices/analyze":
         return await _notices_analyze(receive)
 
+    if method == "POST" and path == "/notices/extract-pdf":
+        return await _notices_extract_pdf(receive)
+
     if method == "POST" and path == "/notices/ask":
         return await _notices_ask(receive)
+
+    if method == "POST" and path == "/notices/search":
+        return await _notices_search(receive)
+
+    if method == "POST" and path == "/notices/embed":
+        return await _notices_embed(receive)
 
     return 404, {"error": "Not found"}
 
@@ -418,6 +430,16 @@ async def _scrape_source(receive) -> tuple[int, dict]:
                     "content_text": item.content_text,
                     "content_html": item.content_html,
                     "attachment_url": item.attachment_url,
+                    "source_slug": item.source_slug,
+                    "attachments": [
+                        {"url": a.url, "label": a.label, "mime_type": a.mime_type, "size_bytes": a.size_bytes}
+                        for a in (item.attachments or [])
+                    ],
+                    "ai_summary": item.ai_summary,
+                    "ai_summary_ne": item.ai_summary_ne,
+                    "ai_urgency": item.ai_urgency,
+                    "ai_category_confidence": item.ai_category_confidence,
+                    "metadata": item.metadata,
                 }
                 for item in items
             ],
@@ -462,6 +484,69 @@ async def _notices_analyze(receive) -> tuple[int, dict]:
     return 200, {"analyzed": True, **result}
 
 
+async def _notices_extract_pdf(receive) -> tuple[int, dict]:
+    """POST /notices/extract-pdf — body: {url: string, title?: string}.
+    Downloads a PDF from the URL, extracts text via OCR if needed,
+    then runs AI analysis. Returns {content_text, is_ocr, summary, summary_ne, key_facts, tags}."""
+    import httpx
+    import tempfile
+
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    url = (data.get("url") or "").strip()
+    title = (data.get("title") or "").strip()
+    if not url:
+        return 400, {"error": "Field 'url' is required"}
+
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            pdf_bytes = resp.content
+    except Exception as e:
+        logger.warning("PDF download failed for %s: %s", url, e)
+        return 502, {"error": f"Could not download PDF: {str(e)}"}
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+
+    try:
+        result = await asyncio.to_thread(
+            extractor.extract_text, tmp_path, "application/pdf"
+        )
+    except Exception as e:
+        Path(tmp_path).unlink(missing_ok=True)
+        logger.exception("PDF extraction failed for %s", url)
+        return 422, {"error": f"PDF extraction failed: {str(e)}"}
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    text = result.get("text", "").strip()
+    if not text:
+        return 200, {"content_text": "", "is_ocr": result.get("is_ocr", False), "analyzed": False}
+
+    analysis = None
+    try:
+        analysis = await llm.analyze_notice(title or "Untitled", text)
+    except Exception as e:
+        logger.warning("Analysis after PDF extraction failed: %s", e)
+
+    response = {
+        "content_text": text,
+        "is_ocr": result.get("is_ocr", False),
+        "page_count": result.get("page_count", 0),
+        "analyzed": analysis is not None,
+    }
+    if analysis:
+        response.update(analysis)
+    return 200, response
+
+
 async def _notices_ask(receive) -> tuple[int, dict]:
     """POST /notices/ask — body: {title, content, question}. Returns {answer}."""
     body = await _read_body(receive)
@@ -484,6 +569,78 @@ async def _notices_ask(receive) -> tuple[int, dict]:
     except Exception as e:
         logger.exception("Notice Q&A failed")
         return 502, {"error": f"Failed to answer: {str(e)}"}
+
+
+async def _notices_search(receive) -> tuple[int, dict]:
+    """POST /notices/search — hybrid notice search for the floating chatbot.
+    Body: {question, pg_results?: [...], category?: str, language?: str, top_k?: int}.
+    pg_results are pre-fetched PostgreSQL keyword matches from the NestJS API."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    question = (data.get("question") or "").strip()
+    if not question:
+        return 400, {"error": "Field 'question' is required"}
+
+    pg_results = data.get("pg_results")
+    category = data.get("category")
+    language = data.get("language", "en")
+    top_k = int(data.get("top_k", 5))
+
+    try:
+        result = await notice_rag.search_and_answer(
+            question=question,
+            pg_results=pg_results,
+            category=category,
+            language=language,
+            top_k=top_k,
+        )
+        return 200, result
+    except Exception as e:
+        logger.exception("Notice search failed")
+        return 500, {"error": f"Search failed: {str(e)}"}
+
+
+async def _notices_embed(receive) -> tuple[int, dict]:
+    """POST /notices/embed — index one or more notices into the vector store.
+    Body: {notices: [{id, title, ai_summary, category, source_label, source_url, published_at?}]}."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    notices = data.get("notices", [])
+    if not notices:
+        return 400, {"error": "Field 'notices' (array) is required"}
+
+    indexed = 0
+    failed = 0
+    for n in notices:
+        notice_id = n.get("id", "")
+        title = n.get("title", "")
+        ai_summary = n.get("ai_summary", "")
+        if not notice_id or not title:
+            failed += 1
+            continue
+        ok = notice_store.index_notice(
+            notice_id=notice_id,
+            title=title,
+            ai_summary=ai_summary or "",
+            category=n.get("category", ""),
+            source_label=n.get("source_label", ""),
+            source_url=n.get("source_url", ""),
+            published_at=n.get("published_at"),
+        )
+        if ok:
+            indexed += 1
+        else:
+            failed += 1
+
+    return 200, {"indexed": indexed, "failed": failed, "total": len(notices)}
 
 
 # --- HTTP helpers ---

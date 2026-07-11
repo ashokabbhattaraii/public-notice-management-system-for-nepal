@@ -259,6 +259,7 @@ export interface PublicNoticeFilters {
   search?: string
   dateFrom?: string
   dateTo?: string
+  urgency?: string
   sortBy?: "publishedAt" | "views"
   sortOrder?: "asc" | "desc"
   page?: number
@@ -284,6 +285,23 @@ export async function askNoticeQuestion(id: string, question: string): Promise<{
   return apiFetch(`/notices/${id}/ask`, {
     method: "POST",
     body: JSON.stringify({ question }),
+  })
+}
+
+export interface NoticeSearchResponse {
+  answer: string
+  sources: { id: string; title: string; category: string; sourceUrl: string; score?: number }[]
+  model_used: string | null
+}
+
+export async function searchNotices(
+  question: string,
+  category?: string,
+  language?: string,
+): Promise<NoticeSearchResponse> {
+  return apiFetch("/notices/search", {
+    method: "POST",
+    body: JSON.stringify({ question, category, language }),
   })
 }
 

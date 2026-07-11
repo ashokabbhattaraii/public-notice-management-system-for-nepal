@@ -142,6 +142,10 @@ enum ScrapedItemCategory {
   NOTICE
   NEWS
   PRESS_RELEASE
+  CIRCULAR
+  TENDER
+  VACANCY
+  OTHER
 }
 
 enum ScrapeRunStatus {
@@ -196,10 +200,10 @@ model ScrapedItem {
   id            String              @id @default(uuid()) @db.Uuid
   sourceId      String?             @map("source_id") @db.Uuid
   source        ScrapeSource?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  // Denormalized label snapshot (source.name at scrape time) so items still
-  // render sensibly if a source is later deleted.
   sourceLabel   String              @default("mofa.gov.np") @map("source_label")
   category      ScrapedItemCategory
+  // Raw URL slug segment from which the category was inferred (e.g. "press-release").
+  sourceSlug    String?             @map("source_slug")
   title         String
   // Canonical absolute URL of the detail page — used as the dedup key across scrape runs.
   sourceUrl     String              @unique @map("source_url")
@@ -208,18 +212,22 @@ model ScrapedItem {
   contentHtml   String?             @map("content_html")
   attachmentUrl String?             @map("attachment_url")
   publishedAt   DateTime?           @map("published_at")
-  // Hash of title+content, used to detect edits to a page we've already scraped.
   contentHash   String              @map("content_hash")
-  // Incremented each time the public notice detail page is viewed.
   views         Int                 @default(0)
-  // LLM-generated (Groq), computed lazily on first detail view and cached —
-  // never recomputed unless contentHash changes (see NoticesService).
+  // AI enrichment — computed concurrently during scraping, not lazily.
   aiSummary     String?             @map("ai_summary")
+  aiSummaryNe   String?             @map("ai_summary_ne")
+  aiUrgency     String?             @map("ai_urgency")
+  aiCategoryConfidence Float?       @map("ai_category_confidence")
   keyFacts      Json?               @map("key_facts")
   tags          Json?
+  // Structured metadata: reference number, issuing office, deadline, etc.
+  metadata      Json?
   aiAnalyzedAt  DateTime?           @map("ai_analyzed_at")
   scrapedAt     DateTime            @default(now()) @map("scraped_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  attachments   Attachment[]
 
   @@index([category])
   @@index([publishedAt])
@@ -227,22 +235,38 @@ model ScrapedItem {
   @@map("scraped_items")
 }
 
+model Attachment {
+  id            String    @id @default(uuid()) @db.Uuid
+  itemId        String    @map("item_id") @db.Uuid
+  item          ScrapedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  url           String
+  mimeType      String?   @map("mime_type")
+  sizeBytes     Int?      @map("size_bytes")
+  storageKey    String?   @map("storage_key")
+  downloadedAt  DateTime? @map("downloaded_at")
+  label         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([itemId])
+  @@map("attachments")
+}
+
 // One execution of a scraping job, for the admin dashboard's logs view.
 model ScrapeRun {
-  id           String          @id @default(uuid()) @db.Uuid
-  sourceId     String?         @map("source_id") @db.Uuid
-  source       ScrapeSource?   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  sourceLabel  String          @default("mofa.gov.np") @map("source_label")
-  status       ScrapeRunStatus @default(RUNNING)
-  itemsFound   Int             @default(0) @map("items_found")
-  itemsNew     Int             @default(0) @map("items_new")
-  itemsUpdated Int             @default(0) @map("items_updated")
-  // Items the listing re-found that were already stored, unchanged — the
-  // dedup path working as intended, tracked explicitly for visibility.
-  itemsSkipped Int             @default(0) @map("items_skipped")
-  error        String?
-  startedAt    DateTime        @default(now()) @map("started_at")
-  finishedAt   DateTime?       @map("finished_at")
+  id               String          @id @default(uuid()) @db.Uuid
+  sourceId         String?         @map("source_id") @db.Uuid
+  source           ScrapeSource?   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceLabel      String          @default("mofa.gov.np") @map("source_label")
+  status           ScrapeRunStatus @default(RUNNING)
+  itemsFound       Int             @default(0) @map("items_found")
+  itemsNew         Int             @default(0) @map("items_new")
+  itemsUpdated     Int             @default(0) @map("items_updated")
+  itemsSkipped     Int             @default(0) @map("items_skipped")
+  itemsSummarized  Int             @default(0) @map("items_summarized")
+  itemsSummaryFailed Int           @default(0) @map("items_summary_failed")
+  error            String?
+  startedAt        DateTime        @default(now()) @map("started_at")
+  finishedAt       DateTime?       @map("finished_at")
 
   @@index([sourceId])
   @@map("scrape_runs")

@@ -4,6 +4,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LanguageProvider } from "@/lib/language-context"
 import { AlertsProvider } from "@/lib/alerts-context"
+import { NoticeContextProvider } from "@/lib/notice-context"
 import { FloatingChat } from "@/components/floating-chat"
 import { AlertCtaBanner } from "@/components/alert-cta-banner"
 
@@ -15,9 +16,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         <LanguageProvider>
           <AlertsProvider>
-            {children}
-            <FloatingChat />
-            <AlertCtaBanner />
+            <NoticeContextProvider>
+              {children}
+              <FloatingChat />
+              <AlertCtaBanner />
+            </NoticeContextProvider>
           </AlertsProvider>
         </LanguageProvider>
       </AuthProvider>

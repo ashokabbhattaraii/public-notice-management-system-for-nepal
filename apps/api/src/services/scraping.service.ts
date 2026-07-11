@@ -12,8 +12,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 
+interface RawAttachment {
+  url: string;
+  label: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+}
+
 interface RawScrapedItem {
-  category: 'NOTICE' | 'NEWS';
+  category: string;
   title: string;
   source_url: string;
   published_at: string | null;
@@ -21,6 +28,13 @@ interface RawScrapedItem {
   content_text: string | null;
   content_html: string | null;
   attachment_url: string | null;
+  source_slug: string | null;
+  attachments: RawAttachment[];
+  ai_summary: string | null;
+  ai_summary_ne: string | null;
+  ai_urgency: string | null;
+  ai_category_confidence: number | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface CreateScrapeSourceInput {
@@ -217,12 +231,29 @@ export class ScrapingService {
       let itemsNew = 0;
       let itemsUpdated = 0;
       let itemsSkipped = 0;
+      let itemsSummarized = 0;
+      let itemsSummaryFailed = 0;
+
+      const validCategories = new Set([
+        'NOTICE', 'NEWS', 'PRESS_RELEASE', 'CIRCULAR', 'TENDER', 'VACANCY', 'OTHER',
+      ]);
 
       for (const item of items) {
         const contentHash = crypto
           .createHash('sha256')
           .update(`${item.title}|${item.content_text ?? ''}`)
           .digest('hex');
+
+        const resolvedCategory = validCategories.has(item.category)
+          ? (item.category as ScrapedItemCategory)
+          : ScrapedItemCategory.OTHER;
+
+        // Track AI summarization status from the Python service
+        if (item.ai_summary) {
+          itemsSummarized++;
+        } else if (item.content_text) {
+          itemsSummaryFailed++;
+        }
 
         const existing = existingByUrl.get(item.source_url);
 
@@ -231,7 +262,8 @@ export class ScrapingService {
             data: {
               sourceId: source.id,
               sourceLabel: source.name,
-              category: item.category as ScrapedItemCategory,
+              category: resolvedCategory,
+              sourceSlug: item.source_slug,
               title: item.title,
               sourceUrl: item.source_url,
               summary: item.summary,
@@ -240,29 +272,76 @@ export class ScrapingService {
               attachmentUrl: item.attachment_url,
               publishedAt: item.published_at ? new Date(item.published_at) : null,
               contentHash,
+              aiSummary: item.ai_summary,
+              aiSummaryNe: item.ai_summary_ne,
+              aiUrgency: item.ai_urgency,
+              aiCategoryConfidence: item.ai_category_confidence,
+              metadata: item.metadata ? (item.metadata as Prisma.InputJsonValue) : undefined,
+              aiAnalyzedAt: item.ai_summary ? new Date() : null,
             },
           });
           itemsNew++;
-          if (item.content_text) {
+
+          // Create attachment records
+          if (item.attachments?.length) {
+            await this.prisma.attachment.createMany({
+              data: item.attachments.map((att) => ({
+                itemId: created.id,
+                url: att.url,
+                label: att.label,
+                mimeType: att.mime_type,
+                sizeBytes: att.size_bytes,
+              })),
+            });
+          }
+
+          // PDF-only notices: extract content via OCR at scrape time
+          if (!item.content_text && !item.ai_summary) {
+            const pdfUrl = this.findPdfUrl(item.attachment_url, item.attachments);
+            if (pdfUrl) {
+              await this.extractPdfForNotice(created.id, item.title, pdfUrl);
+            }
+          }
+
+          // Fallback: if AI service didn't summarize but has text, analyze now
+          if (!item.ai_summary && item.content_text) {
             await this.analyzeNotice(created.id, item.title, item.content_text);
           }
         } else if (existing.contentHash !== contentHash) {
-          const updated = await this.prisma.scrapedItem.update({
+          await this.prisma.scrapedItem.update({
             where: { id: existing.id },
             data: {
               title: item.title,
+              category: resolvedCategory,
+              sourceSlug: item.source_slug,
               summary: item.summary,
               contentText: item.content_text ?? existing.contentText,
               contentHtml: item.content_html ?? existing.contentHtml,
               attachmentUrl: item.attachment_url,
               publishedAt: item.published_at ? new Date(item.published_at) : existing.publishedAt,
               contentHash,
+              aiSummary: item.ai_summary ?? existing.aiSummary,
+              aiSummaryNe: item.ai_summary_ne ?? existing.aiSummaryNe,
+              aiUrgency: item.ai_urgency ?? existing.aiUrgency,
+              aiCategoryConfidence: item.ai_category_confidence,
+              metadata: item.metadata ? (item.metadata as Prisma.InputJsonValue) : undefined,
+              aiAnalyzedAt: item.ai_summary ? new Date() : existing.aiAnalyzedAt,
             },
           });
           itemsUpdated++;
-          const contentForAnalysis = item.content_text ?? existing.contentText;
-          if (contentForAnalysis) {
-            await this.analyzeNotice(updated.id, item.title, contentForAnalysis);
+
+          // Upsert attachments on content change
+          if (item.attachments?.length) {
+            await this.prisma.attachment.deleteMany({ where: { itemId: existing.id } });
+            await this.prisma.attachment.createMany({
+              data: item.attachments.map((att) => ({
+                itemId: existing.id,
+                url: att.url,
+                label: att.label,
+                mimeType: att.mime_type,
+                sizeBytes: att.size_bytes,
+              })),
+            });
           }
         } else if (item.attachment_url && existing.attachmentUrl !== item.attachment_url) {
           await this.prisma.scrapedItem.update({
@@ -283,6 +362,8 @@ export class ScrapingService {
           itemsNew,
           itemsUpdated,
           itemsSkipped,
+          itemsSummarized,
+          itemsSummaryFailed,
           finishedAt: new Date(),
         },
       });
@@ -296,6 +377,11 @@ export class ScrapingService {
           ...(schemas.NEWS ? { newsSchema: schemas.NEWS as Prisma.InputJsonValue } : {}),
           ...(schemas.PRESS_RELEASE ? { pressReleaseSchema: schemas.PRESS_RELEASE as Prisma.InputJsonValue } : {}),
         },
+      });
+
+      // Embed newly summarized notices into vector store (fire-and-forget)
+      this.embedNewNotices(source.id).catch((err: any) => {
+        this.logger.warn(`Background embedding failed: ${err.message}`);
       });
     } catch (err: any) {
       this.logger.error(`Scrape run failed for source ${source.id}: ${err.message}`);
@@ -313,6 +399,48 @@ export class ScrapingService {
       });
     } finally {
       this.runningSourceIds.delete(source.id);
+    }
+  }
+
+  /** Send notices with aiSummary to the AI service for vector embedding. */
+  private async embedNewNotices(sourceId: string) {
+    const notices = await this.prisma.scrapedItem.findMany({
+      where: { sourceId, aiSummary: { not: null } },
+      select: {
+        id: true,
+        title: true,
+        aiSummary: true,
+        category: true,
+        sourceLabel: true,
+        sourceUrl: true,
+        publishedAt: true,
+      },
+      take: 200,
+    });
+
+    if (!notices.length) return;
+
+    const payload = notices.map((n) => ({
+      id: n.id,
+      title: n.title,
+      ai_summary: n.aiSummary || '',
+      category: n.category,
+      source_label: n.sourceLabel,
+      source_url: n.sourceUrl,
+      published_at: n.publishedAt?.toISOString() || null,
+    }));
+
+    try {
+      await firstValueFrom(
+        this.httpService.post(
+          `${this.aiServiceUrl}/notices/embed`,
+          { notices: payload },
+          { timeout: 120000 },
+        ),
+      );
+      this.logger.log(`Embedded ${notices.length} notices into vector store`);
+    } catch (err: any) {
+      this.logger.warn(`Notice embedding request failed: ${err.message}`);
     }
   }
 
@@ -344,6 +472,48 @@ export class ScrapingService {
       }
     } catch (err: any) {
       this.logger.warn(`Pre-analysis failed for notice ${id}: ${err.message}`);
+    }
+  }
+
+  private findPdfUrl(
+    attachmentUrl: string | null,
+    attachments: RawAttachment[],
+  ): string | null {
+    const pdfAtt = attachments?.find(
+      (a) => a.mime_type?.includes('pdf') || a.url?.toLowerCase().endsWith('.pdf'),
+    );
+    if (pdfAtt) return pdfAtt.url;
+    if (attachmentUrl?.toLowerCase().endsWith('.pdf')) return attachmentUrl;
+    if (attachmentUrl?.includes('pdf')) return attachmentUrl;
+    return null;
+  }
+
+  private async extractPdfForNotice(id: string, title: string, pdfUrl: string) {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.aiServiceUrl}/notices/extract-pdf`,
+          { url: pdfUrl, title },
+          { timeout: 90000 },
+        ),
+      );
+      if (!response.data?.content_text) return;
+
+      const data: any = {
+        contentText: response.data.content_text,
+        aiAnalyzedAt: new Date(),
+      };
+      if (response.data.analyzed) {
+        if (response.data.summary) data.aiSummary = response.data.summary;
+        if (response.data.summary_ne) data.aiSummaryNe = response.data.summary_ne;
+        if (response.data.key_facts) data.keyFacts = response.data.key_facts;
+        if (response.data.tags) data.tags = response.data.tags;
+      }
+
+      await this.prisma.scrapedItem.update({ where: { id }, data });
+      this.logger.log(`PDF extracted and cached for notice ${id}`);
+    } catch (err: any) {
+      this.logger.warn(`PDF extraction at scrape time failed for ${id}: ${err.message}`);
     }
   }
 

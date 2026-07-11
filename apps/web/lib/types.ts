@@ -126,15 +126,19 @@ export interface ScrapingSource {
 
 // ─── Live scraping (crawl4ai pipeline, dynamic multi-source) ─────────────────
 
-export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE"
+export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE" | "CIRCULAR" | "TENDER" | "VACANCY" | "OTHER"
 
 const CATEGORY_LABELS: Record<ScrapedItemCategory, string> = {
   NOTICE: "Notice",
   NEWS: "News",
   PRESS_RELEASE: "Press Release",
+  CIRCULAR: "Circular",
+  TENDER: "Tender",
+  VACANCY: "Vacancy",
+  OTHER: "Other",
 }
 export function categoryLabel(cat: ScrapedItemCategory): string {
-  return CATEGORY_LABELS[cat] ?? cat.toLowerCase()
+  return CATEGORY_LABELS[cat] ?? cat.replace(/_/g, " ").toLowerCase()
 }
 
 export interface ScrapedItem {
@@ -150,6 +154,18 @@ export interface ScrapedItem {
   scrapedAt: string
   updatedAt: string
   views?: number
+  aiSummary?: string | null
+  aiSummaryNe?: string | null
+  aiUrgency?: string | null
+}
+
+export interface Attachment {
+  id: string
+  url: string
+  mimeType: string | null
+  sizeBytes: number | null
+  storageKey: string | null
+  label: string | null
 }
 
 /** Full detail (includes body content), returned by GET /notices/:id. */
@@ -158,8 +174,13 @@ export interface PublicNoticeDetail extends ScrapedItem {
   contentHtml: string | null
   views: number
   aiSummary: string | null
+  aiSummaryNe: string | null
+  aiUrgency: string | null
   keyFacts: string[] | null
   tags: string[] | null
+  attachments: Attachment[]
+  metadata: Record<string, string> | null
+  sourceSlug: string | null
 }
 
 export interface PublicNoticeSource {

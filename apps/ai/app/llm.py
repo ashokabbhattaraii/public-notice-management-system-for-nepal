@@ -263,10 +263,24 @@ async def _gemini_chat(
 # ---------------------------------------------------------------------------
 
 
+_LLM_GROQ_KEY_INDEX = 0
+
+
+def _next_llm_groq_key() -> str:
+    """Round-robin through available Groq API keys for llm module."""
+    global _LLM_GROQ_KEY_INDEX
+    keys = config.GROQ_API_KEYS
+    if not keys:
+        return ""
+    key = keys[_LLM_GROQ_KEY_INDEX % len(keys)]
+    _LLM_GROQ_KEY_INDEX += 1
+    return key
+
+
 async def _groq_chat(
     messages: list[dict], max_tokens: int, temperature: float
 ) -> str | None:
-    """Call Groq chat completions; returns None on any failure."""
+    """Call Groq chat completions with key rotation; returns None on any failure."""
     payload = {
         "model": config.GROQ_MODEL,
         "messages": messages,
@@ -274,26 +288,38 @@ async def _groq_chat(
         "temperature": temperature,
     }
 
-    for attempt in range(2):
+    num_keys = len(config.GROQ_API_KEYS)
+    max_attempts = max(2, num_keys + 1)
+
+    for attempt in range(max_attempts):
+        api_key = _next_llm_groq_key()
+        if not api_key:
+            return None
         try:
             async with httpx.AsyncClient(timeout=45.0) as client:
                 response = await client.post(
                     GROQ_API_URL,
                     headers={
-                        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                        "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     },
                     json=payload,
                 )
         except httpx.HTTPError as e:
             logger.error("Groq request failed (attempt %d): %s", attempt + 1, e)
-            if attempt == 0:
+            if attempt < max_attempts - 1:
                 await asyncio.sleep(1.5)
                 continue
             return None
 
-        if response.status_code in (429, 500, 502, 503) and attempt == 0:
-            logger.warning("Groq returned %d; retrying once", response.status_code)
+        if response.status_code == 429 and attempt < max_attempts - 1:
+            logger.info("Groq 429, rotating key (attempt %d/%d)", attempt + 1, max_attempts)
+            if (attempt + 1) % num_keys == 0:
+                await asyncio.sleep(2.0)
+            continue
+
+        if response.status_code in (500, 502, 503) and attempt < max_attempts - 1:
+            logger.warning("Groq returned %d; retrying", response.status_code)
             await asyncio.sleep(2.0)
             continue
 
@@ -381,10 +407,11 @@ def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
 _ANALYZE_PROMPT = """You analyze a single Nepalese government/public notice or news item and produce a JSON summary for display on a notice detail page.
 
 Return ONLY a JSON object (no markdown fences, no commentary) with this exact shape:
-{"summary": "2-3 sentence plain-language summary", "key_facts": ["short fact 1", "short fact 2", "..."], "tags": ["topic1", "topic2", "..."]}
+{"summary": "2-3 sentence plain-language summary in English", "summary_ne": "Same summary translated to Nepali (देवनागरी script)", "key_facts": ["short fact 1", "short fact 2", "..."], "tags": ["topic1", "topic2", "..."]}
 
 Rules:
-- summary: plain language, no jargon, captures what the notice actually says and who it affects. If the content is in Nepali, write the summary in English.
+- summary: plain language English, no jargon, captures what the notice actually says and who it affects. If the content is in Nepali, translate and summarize in English.
+- summary_ne: the same summary written in Nepali (देवनागरी). If the content is already in Nepali, summarize directly. If in English, translate to Nepali.
 - key_facts: 3-6 short, concrete, standalone facts (dates, eligibility, amounts, deadlines, affected wards/groups, procedures) — each under ~12 words. Omit facts not actually stated in the content.
 - tags: 2-5 short topical keywords (organization name, subject area, affected group) useful for filtering — not generic words like "notice" or "government".
 - Ground everything in the provided content. Never invent facts."""
@@ -427,6 +454,7 @@ async def analyze_notice(title: str, content: str) -> dict | None:
 
     return {
         "summary": str(summary).strip(),
+        "summary_ne": str(data.get("summary_ne") or "").strip() or None,
         "key_facts": [str(f).strip() for f in (data.get("key_facts") or []) if str(f).strip()][:6],
         "tags": [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()][:5],
     }

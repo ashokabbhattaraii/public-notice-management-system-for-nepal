@@ -1,51 +1,64 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Bot, User, Sparkles, Minimize2 } from "lucide-react"
+import { MessageCircle, X, Send, Bot, User, Sparkles, Minimize2, ExternalLink, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { searchNotices, askNoticeQuestion, NoticeSearchResponse } from "@/lib/api"
+import { useNoticeContext } from "@/lib/notice-context"
 import gsap from "gsap"
+
+interface Source {
+  id: string
+  title: string
+  category: string
+  sourceUrl: string
+}
 
 interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  sources?: Source[]
+  contextUsed?: "notice" | "general"
 }
 
-const suggestions = [
+const GENERAL_SUGGESTIONS = [
   "What exams are coming up?",
   "Latest tender notices",
   "NRB policy updates",
-  "Teacher recruitment info",
+  "Recent vacancy announcements",
 ]
 
-const mockResponses: Record<string, string> = {
-  "exam": "Based on the latest notices, the Nepal Public Service Commission Section Officer Exam 2082 is scheduled with applications open until Shrawan 15, 2082. Tribhuvan University PhD admissions are also open with entrance exams on Bhadra 1, 2082.",
-  "tender": "There are 2 active tenders: 1) Road Division Office - Highway Construction (45km, Province 5, deadline Jun 20, 2026) and 2) Department of Roads - Bridge Construction in Karnali Province (ICB, deadline Jul 14, 2026, ADB funded).",
-  "policy": "Nepal Rastra Bank issued updated monetary policy guidelines for FY 2082/83 including revised interest rate corridors and digital payment regulations. Nepal Electricity Authority also announced a 50% subsidy program for rooftop solar installations.",
-  "teacher": "The Ministry of Education announced 2,500 permanent teaching positions across all 7 provinces at primary, lower-secondary, and secondary levels. Deadline: Jun 30, 2026. Applications via online portal only.",
-  "default": "I can help you find information about government notices including exams, vacancies, tenders, and policy updates. Try asking about specific topics or browse the notices page for full details.",
-}
-
-function getResponse(query: string): string {
-  const q = query.toLowerCase()
-  if (q.includes("exam") || q.includes("psc")) return mockResponses.exam
-  if (q.includes("tender") || q.includes("bid") || q.includes("procurement")) return mockResponses.tender
-  if (q.includes("policy") || q.includes("nrb") || q.includes("monetary")) return mockResponses.policy
-  if (q.includes("teacher") || q.includes("education") || q.includes("recruit")) return mockResponses.teacher
-  return mockResponses.default
-}
+const NOTICE_SUGGESTIONS = [
+  "What is this notice about?",
+  "What are the key deadlines?",
+  "Who does this affect?",
+  "What action should I take?",
+]
 
 export function FloatingChat() {
   const pathname = usePathname()
+  const { activeNotice } = useNoticeContext()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [typing, setTyping] = useState(false)
+  const [loading, setLoading] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
   const messagesEnd = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
+  const prevNoticeId = useRef<string | null>(null)
+
+  // Reset messages when switching between notices
+  useEffect(() => {
+    if (activeNotice?.id !== prevNoticeId.current) {
+      if (prevNoticeId.current !== null) {
+        setMessages([])
+      }
+      prevNoticeId.current = activeNotice?.id ?? null
+    }
+  }, [activeNotice?.id])
 
   useEffect(() => {
     if (fabRef.current) {
@@ -67,26 +80,63 @@ export function FloatingChat() {
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, typing])
+  }, [messages, loading])
 
-  const handleSend = (text?: string) => {
+  const handleSend = useCallback(async (text?: string) => {
     const query = text || input.trim()
-    if (!query) return
+    if (!query || loading) return
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: query }
     setMessages(prev => [...prev, userMsg])
     setInput("")
-    setTyping(true)
+    setLoading(true)
 
-    setTimeout(() => {
-      const response = getResponse(query)
-      const botMsg: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: response }
+    try {
+      // If we have an active notice context, try notice-specific Q&A first
+      if (activeNotice?.id && activeNotice.contentText) {
+        const isAboutCurrentNotice = isNoticeRelatedQuery(query, activeNotice.title)
+
+        if (isAboutCurrentNotice) {
+          const { answer } = await askNoticeQuestion(activeNotice.id, query)
+          const botMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: answer,
+            contextUsed: "notice",
+          }
+          setMessages(prev => [...prev, botMsg])
+          return
+        }
+      }
+
+      // General notice search
+      const result: NoticeSearchResponse = await searchNotices(query)
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: result.answer,
+        sources: result.sources?.length ? result.sources : undefined,
+        contextUsed: "general",
+      }
       setMessages(prev => [...prev, botMsg])
-      setTyping(false)
-    }, 800 + Math.random() * 700)
-  }
+    } catch {
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I couldn't process that request right now. Please try again.",
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
+      setLoading(false)
+    }
+  }, [input, loading, activeNotice])
 
   if (pathname?.startsWith("/documents")) return null
+
+  const suggestions = activeNotice ? NOTICE_SUGGESTIONS : GENERAL_SUGGESTIONS
+  const subtitle = activeNotice
+    ? `Answering about: ${activeNotice.title.slice(0, 40)}${activeNotice.title.length > 40 ? "…" : ""}`
+    : "Ask about any government notice"
 
   return (
     <>
@@ -102,9 +152,9 @@ export function FloatingChat() {
               <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Bot className="size-4 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">Suchana AI</p>
-                <p className="text-[10px] text-muted-foreground">Ask about any government notice</p>
+                <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{subtitle}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -117,6 +167,19 @@ export function FloatingChat() {
             </div>
           </div>
 
+          {/* Context badge */}
+          {activeNotice && (
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-primary/3">
+              <FileText className="size-3 text-primary shrink-0" />
+              <p className="text-[10px] text-primary truncate flex-1">
+                Context: {activeNotice.title}
+              </p>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary shrink-0">
+                Locked
+              </span>
+            </div>
+          )}
+
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
@@ -124,8 +187,14 @@ export function FloatingChat() {
                 <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                   <Sparkles className="size-6 text-primary" />
                 </div>
-                <p className="text-sm font-medium mb-1">How can I help?</p>
-                <p className="text-xs text-muted-foreground mb-4">Ask about notices, exams, tenders, or policies</p>
+                <p className="text-sm font-medium mb-1">
+                  {activeNotice ? "Ask about this notice" : "How can I help?"}
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  {activeNotice
+                    ? "I have the full context of this notice — ask me anything"
+                    : "Ask about notices, exams, tenders, or policies"}
+                </p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
                   {suggestions.map((s) => (
                     <button
@@ -147,13 +216,34 @@ export function FloatingChat() {
                     <Bot className="size-3 text-primary" />
                   </div>
                 )}
-                <div className={cn(
-                  "max-w-[80%] rounded-xl px-3 py-2 text-xs leading-relaxed",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-sm"
-                    : "bg-accent/60 rounded-bl-sm"
-                )}>
-                  {msg.content}
+                <div className="max-w-[80%]">
+                  <div className={cn(
+                    "rounded-xl px-3 py-2 text-xs leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : "bg-accent/60 rounded-bl-sm"
+                  )}>
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                  {msg.contextUsed === "notice" && (
+                    <p className="mt-0.5 text-[9px] text-muted-foreground flex items-center gap-1">
+                      <FileText className="size-2.5" /> From current notice
+                    </p>
+                  )}
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      {msg.sources.slice(0, 3).map((src) => (
+                        <a
+                          key={src.id}
+                          href={`/notices/${src.id}`}
+                          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-primary transition-colors group"
+                        >
+                          <ExternalLink className="size-2.5 shrink-0 opacity-50 group-hover:opacity-100" />
+                          <span className="truncate">{src.title}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {msg.role === "user" && (
                   <div className="size-6 rounded-full bg-accent flex items-center justify-center shrink-0 mt-0.5">
@@ -163,7 +253,7 @@ export function FloatingChat() {
               </div>
             ))}
 
-            {typing && (
+            {loading && (
               <div className="flex gap-2">
                 <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <Bot className="size-3 text-primary" />
@@ -187,10 +277,11 @@ export function FloatingChat() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about notices..."
+                placeholder={activeNotice ? "Ask about this notice…" : "Ask about notices..."}
                 className="flex-1 h-9 rounded-lg border border-border/60 bg-background px-3 text-sm outline-none focus:border-primary/50 transition-colors"
+                disabled={loading}
               />
-              <Button type="submit" size="icon" className="size-9 rounded-lg shrink-0" disabled={!input.trim()}>
+              <Button type="submit" size="icon" className="size-9 rounded-lg shrink-0" disabled={!input.trim() || loading}>
                 <Send className="size-3.5" />
               </Button>
             </form>
@@ -219,4 +310,42 @@ export function FloatingChat() {
       </button>
     </>
   )
+}
+
+/**
+ * Heuristic to determine if a user's question is about the currently viewed
+ * notice or a general/unrelated query. Returns true if likely about the
+ * current notice.
+ */
+function isNoticeRelatedQuery(query: string, noticeTitle: string): boolean {
+  const q = query.toLowerCase()
+
+  // Explicit signals that the user is asking about something else
+  const generalPatterns = [
+    /^(show|find|list|search|get)\s+(me\s+)?(all|latest|recent|other|new)/,
+    /other notices/,
+    /different (notice|topic)/,
+    /what('s| is) (new|happening|latest)/,
+    /how many notices/,
+  ]
+  if (generalPatterns.some(p => p.test(q))) return false
+
+  // Explicit signals about "this" notice
+  const thisNoticePatterns = [
+    /\b(this|the|current)\s+(notice|document|pdf|circular|tender|announcement)/,
+    /\b(it|its|it's)\b/,
+    /^(what|who|when|where|how|why|is|are|does|do|can|should|tell me|explain|summarize|summarise)/,
+    /deadline|due date|last date/,
+    /eligib|qualif|require|criteria/,
+    /apply|application|submit/,
+    /affect|impact|concern/,
+    /contact|phone|email|address/,
+    /fee|cost|amount|salary|payment/,
+  ]
+  if (thisNoticePatterns.some(p => p.test(q))) return true
+
+  // If the query is short and question-like, assume it's about the current notice
+  if (q.length < 60 && (q.endsWith("?") || q.split(" ").length <= 8)) return true
+
+  return true
 }

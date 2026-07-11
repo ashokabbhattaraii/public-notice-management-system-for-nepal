@@ -47,6 +47,7 @@ CHUNK_OVERLAP: int = _env_int("CHUNK_OVERLAP", 120)
 EMBEDDING_BATCH_SIZE: int = _env_int("EMBEDDING_BATCH_SIZE", 32)
 
 GROQ_API_KEY: str = _env("GROQ_API_KEY")
+GROQ_API_KEYS: list[str] = [k.strip() for k in _env("GROQ_API_KEYS", "").split(",") if k.strip()] or ([GROQ_API_KEY] if GROQ_API_KEY else [])
 GROQ_MODEL: str = _env("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 GEMINI_API_KEY: str = _env("GEMINI_API_KEY")

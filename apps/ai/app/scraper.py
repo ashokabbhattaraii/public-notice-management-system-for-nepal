@@ -21,6 +21,7 @@ plain markdown/cleaned text via crawl4ai, which generalizes across sites far
 better than a per-site body selector would.
 """
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -128,6 +129,14 @@ def _parse_bs_date(raw: str) -> str | None:
 
 
 @dataclass
+class AttachmentInfo:
+    url: str
+    label: str | None = None
+    mime_type: str | None = None
+    size_bytes: int | None = None
+
+
+@dataclass
 class ScrapedItem:
     category: str
     title: str
@@ -137,6 +146,13 @@ class ScrapedItem:
     content_text: str | None = None
     content_html: str | None = None
     attachment_url: str | None = None
+    source_slug: str | None = None
+    attachments: list[AttachmentInfo] | None = None
+    ai_summary: str | None = None
+    ai_summary_ne: str | None = None
+    ai_urgency: str | None = None
+    ai_category_confidence: float | None = None
+    metadata: dict | None = None
 
 
 # --- date / text helpers ---
@@ -647,13 +663,226 @@ async def _crawl_detail_generic(crawler: AsyncWebCrawler, url: str, base_url: st
         or _find_attachment_in_scripts(result.html or "", base_url)
     )
 
+    all_attachments = _scan_all_attachments(soup, result.html or "", base_url)
+
     return {
         "title": title,
         "published_raw": published_raw,
         "content_text": content_text,
         "content_html": content_html,
         "attachment_url": attachment_url,
+        "attachments": all_attachments,
     }
+
+
+# --- attachment scanning (full page) ---
+
+_ATTACHMENT_PATH_HINTS = ("/download/", "/uploads/", "/attachment/", "/media/", "/files/")
+
+
+def _scan_all_attachments(soup: BeautifulSoup, raw_html: str, base_url: str) -> list[dict]:
+    """Scan the entire detail page for all file-like links (PDFs, docs, images, etc.)."""
+    seen_urls: set[str] = set()
+    attachments: list[dict] = []
+
+    for anchor in soup.find_all("a", href=True):
+        href = anchor["href"].strip()
+        if not href or href in ("#", "javascript:void(0)"):
+            continue
+        abs_url = _absolute_url(base_url, href)
+        if not abs_url or abs_url in seen_urls:
+            continue
+        lower_href = href.lower().split("?")[0]
+        is_file = any(lower_href.endswith(ext) for ext in _FILE_EXTENSIONS)
+        has_path_hint = any(hint in href.lower() for hint in _ATTACHMENT_PATH_HINTS)
+        if not is_file and not has_path_hint:
+            continue
+        seen_urls.add(abs_url)
+        label = _clean_text(anchor.get_text(" ", strip=True)) or None
+        attachments.append({"url": abs_url, "label": label})
+
+    # Also check JS-embedded URLs (PDF viewers)
+    for match in _JS_FILE_URL_RE.finditer(raw_html):
+        js_url = _absolute_url(base_url, match.group(1))
+        if js_url and js_url not in seen_urls:
+            seen_urls.add(js_url)
+            attachments.append({"url": js_url, "label": None})
+
+    return attachments
+
+
+# --- slug-based category inference ---
+
+_CATEGORY_SLUG_MAP = {
+    "notice": "NOTICE",
+    "notices": "NOTICE",
+    "suchana": "NOTICE",
+    "news": "NEWS",
+    "samachar": "NEWS",
+    "press-release": "PRESS_RELEASE",
+    "press_release": "PRESS_RELEASE",
+    "pressrelease": "PRESS_RELEASE",
+    "circular": "CIRCULAR",
+    "paripatra": "CIRCULAR",
+    "tender": "TENDER",
+    "bid": "TENDER",
+    "boli": "TENDER",
+    "vacancy": "VACANCY",
+    "job": "VACANCY",
+    "career": "VACANCY",
+}
+
+
+def _infer_category_from_slug(url: str) -> tuple[str | None, str | None]:
+    """Parse URL path segments to infer a category. Returns (category, raw_slug)."""
+    try:
+        path = urlparse(url).path.lower().strip("/")
+    except Exception:
+        return None, None
+    segments = [s for s in path.split("/") if s and not s.isdigit()]
+    for segment in segments:
+        clean = segment.replace("_", "-")
+        if clean in _CATEGORY_SLUG_MAP:
+            return _CATEGORY_SLUG_MAP[clean], segment
+        # Check if segment contains a category keyword
+        for key, cat in _CATEGORY_SLUG_MAP.items():
+            if key in clean and len(clean) < 30:
+                return cat, segment
+    return None, None
+
+
+# --- metadata extraction ---
+
+_REF_NUMBER_RE = re.compile(
+    r"(?:notice|ref|reference|letter|file|ch\.?|no\.?|sankhya)[:\s#]*"
+    r"([\w\-/().]+\d[\w\-/().]*)",
+    re.IGNORECASE,
+)
+_DEADLINE_RE = re.compile(
+    r"(?:deadline|last\s*date|due\s*date|expires?|valid\s*(?:until|till|up\s*to))[:\s]*"
+    r"([^\n,;]{8,40})",
+    re.IGNORECASE,
+)
+
+
+def _extract_metadata(title: str, content: str | None) -> dict | None:
+    """Extract structured metadata (reference number, deadline) when confident."""
+    if not content:
+        return None
+    text = f"{title}\n{content[:3000]}"
+    meta: dict = {}
+
+    ref_match = _REF_NUMBER_RE.search(text)
+    if ref_match:
+        ref = ref_match.group(1).strip().rstrip(".")
+        if 3 <= len(ref) <= 50:
+            meta["referenceNumber"] = ref
+
+    deadline_match = _DEADLINE_RE.search(text)
+    if deadline_match:
+        raw_deadline = deadline_match.group(1).strip()
+        parsed = _parse_published(raw_deadline)
+        if parsed:
+            meta["deadline"] = parsed
+
+    return meta if meta else None
+
+
+# --- concurrent AI summarization ---
+
+_SUMMARIZE_PROMPT = """You analyze a Nepalese government notice/news item and produce a structured JSON response. Return ONLY valid JSON (no markdown fences).
+
+{
+  "summary": "<2-3 sentence plain-language summary in English>",
+  "summary_ne": "<2-3 sentence summary in Nepali (Devanagari script)>",
+  "urgency": "<LOW|MEDIUM|HIGH — HIGH for exam deadlines, visa deadlines, tenders with close dates, vacancy deadlines; MEDIUM for important policy/regulatory changes; LOW for routine press releases, general news>",
+  "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, OTHER — classify based on content>",
+  "category_confidence": <0.0-1.0 float>,
+  "key_facts": ["<fact 1>", "<fact 2>", ...],
+  "tags": ["<tag1>", "<tag2>", ...]
+}
+
+Rules:
+- "summary" MUST always be in English regardless of source content language. Translate if needed.
+- "summary_ne" MUST always be in Nepali (Devanagari script) regardless of source content language. Translate if needed.
+- key_facts: extract 3-5 most important facts (dates, amounts, names, requirements) in English.
+- tags: 3-6 classification tags in English useful for filtering.
+- Be concise. Do not pad or restate."""
+
+
+def _next_groq_key() -> str:
+    """Round-robin through available Groq API keys."""
+    global _GROQ_KEY_INDEX
+    keys = config.GROQ_API_KEYS
+    if not keys:
+        return ""
+    key = keys[_GROQ_KEY_INDEX % len(keys)]
+    _GROQ_KEY_INDEX += 1
+    return key
+
+
+async def _summarize_item(title: str, content: str, category_hint: str | None) -> dict | None:
+    """Call Groq/Gemini to summarize a single item. Returns parsed dict or None on failure.
+    Rotates across multiple API keys and retries on 429."""
+    if not config.GROQ_API_KEYS and not config.GEMINI_API_KEY:
+        return None
+
+    truncated_content = content[:4000] if content else ""
+    user_msg = f"Title: {title}\n"
+    if category_hint:
+        user_msg += f"Listing category: {category_hint}\n"
+    user_msg += f"\nContent:\n{truncated_content}"
+
+    payload = {
+        "model": config.GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": _SUMMARIZE_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+        "max_tokens": 600,
+        "temperature": 0.1,
+    }
+
+    num_keys = len(config.GROQ_API_KEYS)
+    max_retries = max(3, num_keys)
+
+    for attempt in range(max_retries + 1):
+        api_key = _next_groq_key()
+        if not api_key:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    GROQ_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+            if response.status_code == 429:
+                if attempt < max_retries:
+                    # On 429, rotate to next key immediately; only sleep if we've
+                    # cycled through all keys once
+                    if (attempt + 1) % num_keys == 0:
+                        wait = 2 ** (attempt // num_keys) + 1
+                        logger.info("Summarization: all keys rate-limited, sleeping %ds", wait)
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.info("Summarization: key rate-limited, rotating to next key")
+                    continue
+                logger.warning("Summarization: all retries exhausted for: %s", title[:60])
+                return None
+            if response.status_code != 200:
+                logger.warning("Summarization: Groq returned %d", response.status_code)
+                return None
+            raw = response.json()["choices"][0]["message"]["content"]
+            raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+            return json.loads(raw)
+        except Exception:
+            logger.exception("Summarization failed for: %s", title[:60])
+            return None
+    return None
 
 
 @dataclass
@@ -686,6 +915,42 @@ def _paginated_url(listing_url: str, page_index: int, config: PaginationConfig) 
     return f"{listing_url}{separator}{config.param}={page_number}"
 
 
+_SUMMARIZE_SEMAPHORE: asyncio.Semaphore | None = None
+_SUMMARIZE_CONCURRENCY = 2
+_GROQ_KEY_INDEX = 0
+
+
+def _get_summarize_semaphore() -> asyncio.Semaphore:
+    global _SUMMARIZE_SEMAPHORE
+    if _SUMMARIZE_SEMAPHORE is None:
+        _SUMMARIZE_SEMAPHORE = asyncio.Semaphore(_SUMMARIZE_CONCURRENCY)
+    return _SUMMARIZE_SEMAPHORE
+
+
+async def _summarize_with_semaphore(item: ScrapedItem, category_hint: str, report) -> bool:
+    """Run summarization for an item under a concurrency-limiting semaphore.
+    Returns True if summarization succeeded, False otherwise."""
+    if not item.content_text:
+        return False
+    sem = _get_summarize_semaphore()
+    async with sem:
+        report(f"Summarizing: {item.title[:60]}")
+        result = await _summarize_item(item.title, item.content_text, category_hint)
+        if result:
+            item.ai_summary = result.get("summary")
+            item.ai_summary_ne = result.get("summary_ne")
+            item.ai_urgency = result.get("urgency", "LOW")
+            # If slug didn't confidently assign a category, use LLM's classification
+            if item.ai_category_confidence is None or item.ai_category_confidence < 0.7:
+                llm_cat = result.get("category")
+                llm_conf = result.get("category_confidence", 0.0)
+                if llm_cat and llm_conf > 0.6:
+                    item.category = llm_cat
+                    item.ai_category_confidence = llm_conf
+            return True
+        return False
+
+
 async def scrape_source(
     base_url: str,
     category_urls: dict[str, str],
@@ -696,17 +961,8 @@ async def scrape_source(
     pagination: PaginationConfig | None = None,
     on_progress=None,
 ) -> tuple[list[ScrapedItem], dict[str, dict]]:
-    """Scrape an admin-configured source's notice/news listings.
-
-    `category_urls` maps "NOTICE"/"NEWS" to that category's listing page URL
-    (only categories present are scraped). `cached_schemas` supplies a
-    previously-detected extraction schema per category so most runs skip
-    detection entirely. `pagination` controls how page URLs are built (see
-    `PaginationConfig`). `on_progress(message: str)`, if given, is called at
-    each meaningful step for live status reporting. Returns (items,
-    schemas_used) — schemas_used holds every schema (cached or freshly
-    detected) actually used, for the caller to persist for next time.
-    """
+    """Scrape an admin-configured source's notice/news listings with concurrent
+    AI summarization. Returns (items, schemas_used)."""
     cached_schemas = cached_schemas or {}
     known_urls = known_urls or set()
     pagination = pagination or PaginationConfig()
@@ -714,11 +970,8 @@ async def scrape_source(
     items: list[ScrapedItem] = []
     schemas_used: dict[str, dict] = {}
     seen_urls: set[str] = set()
+    summarize_tasks: list[asyncio.Task] = []
 
-    # JS stays enabled: many admin-added sites render their listing entirely
-    # client-side, and disabling it does not avoid the Bikram Sambat/English
-    # date-locale variance seen on some Nepali gov sites (that's a CDN-level
-    # cache split, not JS — see _parse_bs_date).
     browser_config = BrowserConfig(headless=True, verbose=False)
 
     async with AsyncWebCrawler(config=browser_config) as crawler:
@@ -763,8 +1016,17 @@ async def scrape_source(
                     published_at = _parse_published(row.get("published_raw"))
                     attachment_url = _absolute_url(base_url, row.get("attachment_href"))
 
+                    # Slug-based category inference
+                    slug_category, source_slug = _infer_category_from_slug(source_url)
+                    resolved_category = category
+                    category_confidence = None
+                    if slug_category and slug_category != category:
+                        resolved_category = slug_category
+                        category_confidence = 0.8
+
                     content_text = None
                     content_html = None
+                    detail_attachments = []
                     if fetch_detail and source_url not in known_urls:
                         report(f"Fetching detail: {title[:60]}")
                         detail = await _crawl_detail_generic(crawler, source_url, base_url)
@@ -775,24 +1037,46 @@ async def scrape_source(
                                 published_at = _parse_published(detail.get("published_raw"))
                             if title == "(untitled)" and detail.get("title"):
                                 title = detail["title"]
-                            # The listing row's attachment link (if any) wins —
-                            # it's usually the canonical one for that specific
-                            # notice, vs. a body-embedded link on the detail page.
                             if not attachment_url and detail.get("attachment_url"):
                                 attachment_url = detail["attachment_url"]
+                            detail_attachments = detail.get("attachments") or []
 
-                    items.append(
-                        ScrapedItem(
-                            category=category,
-                            title=title,
-                            source_url=source_url,
-                            published_at=published_at,
-                            summary=(content_text or title)[:500],
-                            content_text=content_text,
-                            content_html=content_html,
-                            attachment_url=attachment_url,
-                        )
+                    # Build attachment list
+                    attachments: list[AttachmentInfo] = []
+                    seen_att_urls: set[str] = set()
+                    if attachment_url:
+                        attachments.append(AttachmentInfo(url=attachment_url))
+                        seen_att_urls.add(attachment_url)
+                    for att in detail_attachments:
+                        if att["url"] not in seen_att_urls:
+                            attachments.append(AttachmentInfo(url=att["url"], label=att.get("label")))
+                            seen_att_urls.add(att["url"])
+
+                    # Extract metadata
+                    meta = _extract_metadata(title, content_text)
+
+                    item = ScrapedItem(
+                        category=resolved_category,
+                        title=title,
+                        source_url=source_url,
+                        published_at=published_at,
+                        summary=(content_text or title)[:500],
+                        content_text=content_text,
+                        content_html=content_html,
+                        attachment_url=attachment_url,
+                        source_slug=source_slug,
+                        attachments=attachments if attachments else None,
+                        ai_category_confidence=category_confidence,
+                        metadata=meta,
                     )
+                    items.append(item)
+
+                    # Fire concurrent summarization task (non-blocking)
+                    if content_text and source_url not in known_urls:
+                        task = asyncio.create_task(
+                            _summarize_with_semaphore(item, category, report)
+                        )
+                        summarize_tasks.append(task)
 
                 already_known_on_page = new_rows_on_page - unknown_rows_on_page
                 report(
@@ -800,24 +1084,23 @@ async def scrape_source(
                     f"{unknown_rows_on_page} new, {already_known_on_page} already scraped"
                 )
 
-                # Sites without real pagination re-render page 1's rows for
-                # any page param; treat "nothing new on this page" as the end.
                 if new_rows_on_page == 0:
                     break
 
-                # Resource-saving early exit: listings are read newest-first,
-                # so once an entire page is rows we've already stored, every
-                # deeper (older) page is with near-certainty duplicates too —
-                # stop instead of burning requests re-confirming that. Only
-                # kicks in once we've actually seen known URLs (an admin's
-                # very first run for a source has none yet, so it always
-                # walks the full max_pages window).
                 if known_urls and unknown_rows_on_page == 0:
                     report(
                         f"All {category.title()} items on page {page_index + 1} are already "
                         "scraped — stopping pagination early"
                     )
                     break
+
+    # Wait for all pending summarization tasks to complete
+    if summarize_tasks:
+        report(f"Waiting for {len(summarize_tasks)} summarization task(s) to complete…")
+        results = await asyncio.gather(*summarize_tasks, return_exceptions=True)
+        succeeded = sum(1 for r in results if r is True)
+        failed = len(results) - succeeded
+        report(f"Summarization complete: {succeeded} succeeded, {failed} failed/skipped")
 
     report(f"Scrape complete — {len(items)} item(s) total")
     logger.info(

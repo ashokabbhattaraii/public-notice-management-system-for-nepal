@@ -10,11 +10,12 @@ export class NoticesController {
 
   @Get()
   async findAll(
-    @Query('category') category?: 'NOTICE' | 'NEWS' | 'PRESS_RELEASE',
+    @Query('category') category?: string,
     @Query('sourceId') sourceId?: string,
     @Query('search') search?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('urgency') urgency?: string,
     @Query('sortBy') sortBy?: 'publishedAt' | 'views',
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
     @Query('page') page?: string,
@@ -26,11 +27,20 @@ export class NoticesController {
       search,
       dateFrom,
       dateTo,
+      urgency,
       sortBy,
       sortOrder,
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 20,
     });
+  }
+
+  @Post('search')
+  async search(@Body() body: { question: string; category?: string; language?: string }) {
+    if (!body.question?.trim()) {
+      return { answer: '', sources: [], model_used: null };
+    }
+    return this.noticesService.search(body.question.trim(), body.category, body.language);
   }
 
   @Get('meta/category-counts')

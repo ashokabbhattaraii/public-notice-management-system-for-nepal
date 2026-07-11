@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from "react
 import {
   Search, Filter, Calendar, Eye, Bell, FileText,
   ChevronRight, X, Bookmark, BookmarkCheck, Building2,
-  Globe, Loader2, Paperclip,
+  Globe, Loader2, Paperclip, Sparkles,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { useAuth } from "@/lib/auth-context"
@@ -30,6 +30,18 @@ const PAGE_SIZE = 20
 
 // ─── Notice Card ─────────────────────────────────────────────────────────────
 
+function UrgencyBadge({ urgency }: { urgency: string | null | undefined }) {
+  if (!urgency || urgency === "LOW") return null
+  const isHigh = urgency === "HIGH"
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs ${
+      isHigh ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+    }`}>
+      {isHigh ? "Urgent" : "Important"}
+    </span>
+  )
+}
+
 function NoticeCard({
   notice,
   saved,
@@ -50,6 +62,7 @@ function NoticeCard({
           <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
             {categoryLabel(notice.category)}
           </span>
+          <UrgencyBadge urgency={notice.aiUrgency} />
         </div>
 
         {/* Title */}
@@ -57,11 +70,31 @@ function NoticeCard({
           {notice.title}
         </h3>
 
-        {/* Summary */}
-        {notice.summary && (
-          <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-vez-mute">
-            {notice.summary}
-          </p>
+        {/* AI Summary — English & Nepali */}
+        {(notice.aiSummary || notice.aiSummaryNe || notice.summary) && (
+          <div className="mb-3 space-y-2">
+            {notice.aiSummary && (
+              <div className="flex items-start gap-2 rounded-[10px] bg-vez-sky/8 px-3 py-2">
+                <Sparkles className="mt-0.5 size-3 shrink-0 text-vez-navy/60" />
+                <p className="line-clamp-2 text-sm leading-relaxed text-vez-ink/80">
+                  {notice.aiSummary}
+                </p>
+              </div>
+            )}
+            {notice.aiSummaryNe && (
+              <div className="flex items-start gap-2 rounded-[10px] bg-amber-50/60 px-3 py-2">
+                <span className="mt-0.5 shrink-0 text-[10px] font-medium text-amber-600">ने</span>
+                <p className="line-clamp-2 text-sm leading-relaxed text-vez-ink/80" lang="ne">
+                  {notice.aiSummaryNe}
+                </p>
+              </div>
+            )}
+            {!notice.aiSummary && !notice.aiSummaryNe && notice.summary && (
+              <p className="line-clamp-2 text-sm leading-relaxed text-vez-mute">
+                {notice.summary}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Meta row */}
@@ -291,7 +324,7 @@ function NoticesPageContent() {
     setPage(1)
   }
 
-  const totalCount = (categoryCounts.NOTICE ?? 0) + (categoryCounts.NEWS ?? 0) + (categoryCounts.PRESS_RELEASE ?? 0)
+  const totalCount = Object.values(categoryCounts).reduce((sum, n) => sum + n, 0)
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
@@ -354,6 +387,9 @@ function NoticesPageContent() {
             <option value="NOTICE">Notice</option>
             <option value="NEWS">News</option>
             <option value="PRESS_RELEASE">Press Release</option>
+            <option value="CIRCULAR">Circular</option>
+            <option value="TENDER">Tender</option>
+            <option value="VACANCY">Vacancy</option>
           </select>
           <select
             value={selectedSourceId}
@@ -387,15 +423,17 @@ function NoticesPageContent() {
                   <span>All</span>
                   <span className="text-xs">{totalCount}</span>
                 </button>
-                {([["NOTICE", "Notice"], ["NEWS", "News"], ["PRESS_RELEASE", "Press Release"]] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => selectCategory(id)}
-                    className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                  >
-                    <span>{label}</span>
-                    <span className="text-xs">{categoryCounts[id] ?? 0}</span>
-                  </button>
+                {([["NOTICE", "Notice"], ["NEWS", "News"], ["PRESS_RELEASE", "Press Release"], ["CIRCULAR", "Circular"], ["TENDER", "Tender"], ["VACANCY", "Vacancy"]] as const).map(([id, label]) => (
+                  (categoryCounts[id] ?? 0) > 0 || id === "NOTICE" || id === "NEWS" || id === "PRESS_RELEASE" ? (
+                    <button
+                      key={id}
+                      onClick={() => selectCategory(id)}
+                      className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
+                    >
+                      <span>{label}</span>
+                      <span className="text-xs">{categoryCounts[id] ?? 0}</span>
+                    </button>
+                  ) : null
                 ))}
               </div>
             </div>

@@ -9,10 +9,12 @@ import {
   Bookmark, BookmarkCheck, Loader2, Check,
   Paperclip, FileImage, Download, Sparkles,
   CheckCircle, Tag, MessageSquare, Send, ArrowRight,
+  AlertTriangle, Clock, Timer, ChevronDown, ChevronUp,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { fetchNotice, askNoticeQuestion } from "@/lib/api"
 import { categoryLabel } from "@/lib/types"
+import { useNoticeContext } from "@/lib/notice-context"
 import type { PublicNoticeDetail } from "@/lib/types"
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
@@ -39,6 +41,253 @@ function formatDateShort(d: string) {
   return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
 }
 
+function daysUntil(d: string): number {
+  const target = new Date(d)
+  const now = new Date()
+  target.setHours(0, 0, 0, 0)
+  now.setHours(0, 0, 0, 0)
+  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function deadlineLabel(d: string): { text: string; color: "red" | "amber" | "green" | "gray" } {
+  const days = daysUntil(d)
+  if (days < 0) return { text: `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`, color: "gray" }
+  if (days === 0) return { text: "Due today", color: "red" }
+  if (days === 1) return { text: "Due tomorrow", color: "red" }
+  if (days <= 3) return { text: `${days} days remaining`, color: "red" }
+  if (days <= 7) return { text: `${days} days remaining`, color: "amber" }
+  return { text: `${days} days remaining`, color: "green" }
+}
+
+type BlockType = "heading" | "numbered-heading" | "subheading" | "paragraph" | "list-item" | "address" | "separator" | "divider" | "related"
+
+function preprocessContent(raw: string): string {
+  let text = raw
+
+  // Normalize multiple spaces to single
+  text = text.replace(/[ \t]{2,}/g, " ")
+
+  // Insert line breaks before Nepali numbered sections (१., २., ३. etc.)
+  text = text.replace(/([^\n])\s*([०-९]+[.)]\s)/g, "$1\n\n$2")
+  // Insert line breaks before Arabic numbered sections when preceded by sentence-end
+  text = text.replace(/([।.?!])\s+(\d+[.)]\s)/g, "$1\n\n$2")
+  // Insert line breaks before dash-prefixed sub-points
+  text = text.replace(/([।.?!।])\s+(-[^\d-])/g, "$1\n$2")
+  text = text.replace(/([^\n-])\s+(-[क-ह])/g, "$1\n$2")
+  // Break before "On " heading patterns
+  text = text.replace(/([.।])\s+(On\s[A-Z][A-Za-z\s'':,]+)/g, "$1\n\n$2")
+  // Break before "Distinguished Guests" / address patterns
+  text = text.replace(/([.।])\s+(Distinguished\s|Honourable\s|Ladies\s|Excellencies)/g, "$1\n\n$2")
+  // Break before "सम्बन्धित सूचना"
+  text = text.replace(/([।.])\s*(सम्बन्धित सूचना)/g, "$1\n\n$2")
+  // Break on *** dividers
+  text = text.replace(/\s*\*{3,}\s*/g, "\n\n***\n\n")
+  // Break before English section-title patterns ending with colon
+  text = text.replace(/([.।])\s+([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){1,6}:)/g, "$1\n\n$2")
+  // Break long paragraphs at sentence boundaries for readability (only if paragraph > 500 chars without breaks)
+  text = text.replace(/([।])\s+/g, "$1\n")
+
+  // Clean up excessive newlines
+  text = text.replace(/\n{4,}/g, "\n\n\n")
+
+  return text.trim()
+}
+
+function FormattedContent({ text }: { text: string }) {
+  const lines = preprocessContent(text).split("\n")
+  const blocks: Array<{ type: BlockType; content: string; number?: string }> = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) {
+      if (blocks.length > 0 && blocks[blocks.length - 1].type !== "separator") {
+        blocks.push({ type: "separator", content: "" })
+      }
+      continue
+    }
+
+    // *** dividers
+    if (/^\*{3,}$/.test(line)) {
+      blocks.push({ type: "divider", content: "" })
+      continue
+    }
+
+    // "सम्बन्धित सूचना" / "Related" footer — stop rendering
+    if (/^(सम्बन्धित सूचना|Related\s+(notices|news|information))/i.test(line)) {
+      blocks.push({ type: "related", content: line })
+      continue
+    }
+
+    const isShort = line.length < 140
+
+    // Numbered section headings: "१." "२." "1." "2." etc
+    const numberedMatch = line.match(/^([०-९]+|\d+)[.)]\s+(.+)/)
+    if (numberedMatch) {
+      const body = numberedMatch[2]
+      // If the numbered line is long (contains full paragraph after the heading part),
+      // split at the first sentence boundary
+      if (body.length > 120) {
+        const sentenceEnd = body.search(/[।.]\s/)
+        if (sentenceEnd > 20 && sentenceEnd < 120) {
+          blocks.push({ type: "numbered-heading", content: body.slice(0, sentenceEnd + 1).trim(), number: numberedMatch[1] })
+          blocks.push({ type: "paragraph", content: body.slice(sentenceEnd + 1).trim() })
+          continue
+        }
+      }
+      blocks.push({ type: "numbered-heading", content: body, number: numberedMatch[1] })
+      continue
+    }
+
+    // Dash/hyphen-prefixed sub-points
+    const dashMatch = line.match(/^[-–—]\s*(.+)/)
+    if (dashMatch && dashMatch[1].length > 2) {
+      blocks.push({ type: "list-item", content: dashMatch[1] })
+      continue
+    }
+
+    // Bullet/symbol list items
+    if (/^[•●▪►]\s/.test(line)) {
+      blocks.push({ type: "list-item", content: line.replace(/^[•●▪►]\s+/, "") })
+      continue
+    }
+
+    // English lettered/roman list
+    if (/^[a-z][.)]\s/.test(line)) {
+      blocks.push({ type: "list-item", content: line.replace(/^[a-z][.)]\s+/, "") })
+      continue
+    }
+
+    // ALL CAPS headings
+    const isAllCaps = line === line.toUpperCase() && line.length > 3 && /[A-Z]/.test(line)
+    if (isAllCaps && isShort) {
+      blocks.push({ type: "heading", content: line })
+      continue
+    }
+
+    // "On ..." subheadings
+    if (/^On\s[A-Z]/.test(line) && isShort && !line.endsWith(".") && !line.endsWith("।")) {
+      blocks.push({ type: "subheading", content: line })
+      continue
+    }
+
+    // Colon-ended short lines
+    if (line.endsWith(":") && line.length < 90) {
+      blocks.push({ type: "subheading", content: line.replace(/:$/, "") })
+      continue
+    }
+
+    // Title-like short lines (English): capitalized words, no period/purnabiram
+    const words = line.split(" ")
+    const isTitlePattern = isShort && words.length >= 2 && words.length <= 14 &&
+      !line.endsWith(".") && !line.endsWith(",") && !line.endsWith("।") &&
+      /^[A-Z]/.test(line) &&
+      (words.filter((w: string) => /^[A-Z]/.test(w)).length / words.length > 0.6)
+
+    // Address block (Distinguished Guests, etc.)
+    const isAddress = /^(Distinguished|Honourable|Ladies|Friends|Excellencies|Namaskar|Dr\s|Mr\s|Prof)/i.test(line) &&
+      isShort && (line.endsWith(",") || line.endsWith("."))
+
+    if (isAddress) {
+      blocks.push({ type: "address", content: line })
+    } else if (isTitlePattern) {
+      blocks.push({ type: "subheading", content: line })
+    } else {
+      blocks.push({ type: "paragraph", content: line })
+    }
+  }
+
+  // Render
+  const rendered: React.ReactNode[] = []
+  let idx = 0
+  let inRelated = false
+
+  while (idx < blocks.length) {
+    const block = blocks[idx]
+
+    if (block.type === "related") { inRelated = true; idx++; continue }
+    if (inRelated) { idx++; continue }
+    if (block.type === "separator") { idx++; continue }
+
+    if (block.type === "divider") {
+      rendered.push(
+        <hr key={idx} className="my-8 border-vez-line" />
+      )
+      idx++
+    } else if (block.type === "heading") {
+      rendered.push(
+        <h2 key={idx} className="mt-10 mb-4 border-b border-vez-line pb-3 text-xl font-bold tracking-tight text-vez-ink first:mt-0">
+          {block.content}
+        </h2>
+      )
+      idx++
+    } else if (block.type === "numbered-heading") {
+      rendered.push(
+        <div key={idx} className="mt-8 mb-3 flex items-start gap-4 rounded-xl bg-gradient-to-r from-vez-sky/10 to-transparent py-4 pl-4 pr-6 first:mt-0">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-navy text-sm font-bold text-white shadow-sm">
+            {block.number}
+          </span>
+          <h3 className="pt-1.5 text-base font-bold leading-snug text-vez-ink md:text-[17px]">
+            {block.content}
+          </h3>
+        </div>
+      )
+      idx++
+    } else if (block.type === "subheading") {
+      rendered.push(
+        <h3 key={idx} className="mt-8 mb-3 border-l-4 border-vez-navy/40 pl-4 text-[17px] font-semibold text-vez-ink">
+          {block.content}
+        </h3>
+      )
+      idx++
+    } else if (block.type === "address") {
+      const addressLines: string[] = []
+      while (idx < blocks.length && blocks[idx].type === "address") {
+        addressLines.push(blocks[idx].content)
+        idx++
+      }
+      rendered.push(
+        <div key={`addr-${idx}`} className="my-5 rounded-2xl border border-vez-line/60 bg-vez-surface/40 px-6 py-4">
+          <div className="space-y-1 text-[15px] leading-relaxed text-vez-ink/75 italic">
+            {addressLines.map((l, j) => <p key={j}>{l}</p>)}
+          </div>
+        </div>
+      )
+    } else if (block.type === "list-item") {
+      const items: string[] = []
+      while (idx < blocks.length && blocks[idx].type === "list-item") {
+        items.push(blocks[idx].content)
+        idx++
+      }
+      rendered.push(
+        <div key={`list-${idx}`} className="my-4 rounded-xl border-l-[3px] border-vez-navy/20 bg-vez-surface/30 py-3 pl-5 pr-4">
+          <ul className="space-y-3">
+            {items.map((item, j) => (
+              <li key={j} className="flex items-start gap-3">
+                <span className="mt-[10px] size-[6px] shrink-0 rounded-full bg-vez-navy/50" />
+                <span className="text-[15px] leading-[1.8] text-vez-ink">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )
+    } else {
+      // Group consecutive paragraphs for visual spacing
+      rendered.push(
+        <p key={idx} className="text-[15px] leading-[1.9] text-vez-ink/90">
+          {block.content}
+        </p>
+      )
+      idx++
+    }
+  }
+
+  return (
+    <article className="formatted-content space-y-4 [&>*:first-child]:mt-0">
+      {rendered}
+    </article>
+  )
+}
+
 const SUGGESTED_QUESTIONS = [
   "What is this notice about?",
   "Who does this affect?",
@@ -46,11 +295,154 @@ const SUGGESTED_QUESTIONS = [
   "What should I do next?",
 ]
 
+function AttachmentSection({
+  attachments,
+  contentText,
+  keyFacts,
+}: {
+  attachments: Array<{ id: string; url: string; mimeType: string | null; sizeBytes: number | null; storageKey: string | null; label: string | null }>
+  contentText: string | null
+  keyFacts: string[] | null
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const hasExtractedContent = !!contentText
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center gap-2">
+        <Paperclip className="size-5 text-vez-navy" />
+        <h2 className="text-lg text-vez-ink">
+          Document{attachments.length > 1 ? "s" : ""} & Extracted Content
+        </h2>
+      </div>
+
+      <div className="space-y-4">
+        {attachments.map((att) => (
+          <div key={att.id ?? att.url} className="overflow-hidden rounded-[16px] border border-vez-line bg-white">
+            {/* File header with download */}
+            <div className="flex items-center gap-4 border-b border-vez-line bg-vez-surface/50 px-5 py-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-vez-sky/30">
+                {attachmentKind(att.url) === "image" ? (
+                  <FileImage className="size-5 text-vez-navy" />
+                ) : (
+                  <FileText className="size-5 text-vez-navy" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-vez-ink">
+                  {att.label || attachmentLabel(att.url)}
+                </p>
+                <p className="text-xs text-vez-mute">
+                  {att.sizeBytes ? `${(att.sizeBytes / 1024).toFixed(0)} KB` : ""}
+                  {att.sizeBytes && att.mimeType ? " · " : ""}
+                  {att.mimeType || ""}
+                </p>
+              </div>
+              <a
+                href={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90"
+              >
+                <Download className="size-3.5" /> Download
+              </a>
+            </div>
+
+            {/* Inline image preview for images */}
+            {attachmentKind(att.url) === "image" && (
+              <div className="flex justify-center bg-gray-50 p-4">
+                <img
+                  src={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                  alt={att.label || "Attachment preview"}
+                  className="max-h-[500px] rounded-lg object-contain"
+                />
+              </div>
+            )}
+
+            {/* Inline PDF viewer */}
+            {attachmentKind(att.url) === "file" && (att.mimeType?.includes("pdf") || att.url?.toLowerCase().endsWith(".pdf")) && (
+              <div className="border-b border-vez-line bg-gray-50 p-4">
+                <iframe
+                  src={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                  title={att.label || "PDF Document"}
+                  className="h-[600px] w-full rounded-lg border border-vez-line"
+                />
+              </div>
+            )}
+
+            {/* Extracted content for non-image files */}
+            {attachmentKind(att.url) === "file" && hasExtractedContent && (
+              <div className="px-5 py-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-vez-navy" />
+                    <span className="text-sm font-medium text-vez-navy">Extracted Content</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">AI Processed</span>
+                  </div>
+                  <button
+                    onClick={() => setExpanded(!expanded)}
+                    className="flex items-center gap-1 text-xs text-vez-mute transition-colors hover:text-vez-navy"
+                  >
+                    {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                    {expanded ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+
+                {expanded && (
+                  <div className="space-y-4">
+                    {/* Key facts extracted from document */}
+                    {keyFacts && keyFacts.length > 0 && (
+                      <div className="rounded-[12px] bg-vez-sky/8 p-4">
+                        <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-vez-navy/70">Key Points from Document</p>
+                        <ul className="space-y-2">
+                          {keyFacts.map((fact, i) => (
+                            <li key={i} className="flex items-start gap-2.5">
+                              <CheckCircle className="mt-0.5 size-4 shrink-0 text-vez-navy" />
+                              <span className="text-sm leading-relaxed text-vez-ink">{fact}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Extracted text preview */}
+                    <div className="relative">
+                      <div className={`overflow-hidden rounded-[12px] bg-vez-surface/70 p-5 ${contentText && contentText.length > 800 ? "max-h-[320px]" : ""}`}>
+                        <p className="text-sm leading-relaxed text-vez-ink line-clamp-[12]">
+                          {contentText?.slice(0, 600)}
+                          {contentText && contentText.length > 600 ? "…" : ""}
+                        </p>
+                      </div>
+                      {contentText && contentText.length > 400 && (
+                        <div className="absolute inset-x-0 bottom-0 flex items-end justify-center rounded-b-[12px] bg-gradient-to-t from-vez-surface/95 to-transparent pb-3 pt-12">
+                          <button
+                            onClick={() => {
+                              const el = document.getElementById("full-content-section")
+                              el?.scrollIntoView({ behavior: "smooth" })
+                            }}
+                            className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs text-vez-navy shadow-sm border border-vez-line transition-colors hover:bg-vez-sky/10"
+                          >
+                            Read full content below <ArrowRight className="size-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function NoticeDetailPage() {
   const params = useParams()
   const slug = params.slug as string
-  // generateSlug() appends "-" + <uuid>; a UUID is always exactly 36 chars.
   const noticeId = slug.slice(-36)
+  const { setActiveNotice } = useNoticeContext()
 
   const [notice, setNotice] = useState<PublicNoticeDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,6 +453,7 @@ export default function NoticeDetailPage() {
   const [question, setQuestion] = useState("")
   const [qaHistory, setQaHistory] = useState<Array<{ q: string; a: string }>>([])
   const [answering, setAnswering] = useState(false)
+  const [extracting, setExtracting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -79,6 +472,39 @@ export default function NoticeDetailPage() {
       cancelled = true
     }
   }, [noticeId])
+
+  // If the notice loaded but has no content and has a PDF, the backend is
+  // extracting it now. Show an indicator and poll once after a delay.
+  useEffect(() => {
+    if (!notice || notice.contentText) return
+    const hasPdf =
+      notice.attachments?.some((a) => a.mimeType?.includes("pdf") || a.url?.toLowerCase().endsWith(".pdf")) ||
+      notice.attachmentUrl?.toLowerCase().includes("pdf")
+    if (!hasPdf) return
+
+    setExtracting(true)
+    const timer = setTimeout(() => {
+      fetchNotice(noticeId)
+        .then((data) => setNotice(data))
+        .catch(() => {})
+        .finally(() => setExtracting(false))
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [notice?.id])
+
+  // Set active notice in global context for floating chatbot
+  useEffect(() => {
+    if (!notice) return
+    setActiveNotice({
+      id: notice.id,
+      title: notice.title,
+      contentText: notice.contentText,
+      aiSummary: notice.aiSummary,
+      keyFacts: notice.keyFacts,
+      sourceLabel: notice.sourceLabel,
+    })
+    return () => setActiveNotice(null)
+  }, [notice?.id, notice?.contentText, notice?.aiSummary])
 
   async function handleShare() {
     try {
@@ -112,8 +538,10 @@ export default function NoticeDetailPage() {
     return (
       <div className="flex min-h-screen flex-col bg-white font-poppins">
         <Header />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="size-6 animate-spin text-vez-mute" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <Loader2 className="size-6 animate-spin text-vez-navy" />
+          <p className="text-sm text-vez-mute">Loading notice…</p>
+          <p className="text-xs text-vez-mute/60">PDF documents may take a moment to process</p>
         </div>
       </div>
     )
@@ -135,12 +563,70 @@ export default function NoticeDetailPage() {
     )
   }
 
+  const deadline = notice.metadata?.deadline as string | undefined
+  const deadlineInfo = deadline ? deadlineLabel(deadline) : null
+
   return (
     <div className="min-h-screen bg-white font-poppins">
       <Header />
 
+      {/* ── Sticky Date Banner ── */}
+      {(deadline || notice.publishedAt) && (
+        <div className="sticky top-0 z-40 border-b border-vez-line bg-white/95 backdrop-blur-sm shadow-sm">
+          <div className="mx-auto flex max-w-[1480px] items-center justify-between px-6 py-3 md:px-8 lg:px-12">
+            <div className="flex flex-wrap items-center gap-4 md:gap-6">
+              {deadline && deadlineInfo && (
+                <div className="flex items-center gap-2.5">
+                  <div className={`flex size-9 items-center justify-center rounded-full ${
+                    deadlineInfo.color === "red" ? "bg-red-100" :
+                    deadlineInfo.color === "amber" ? "bg-amber-100" :
+                    deadlineInfo.color === "green" ? "bg-emerald-100" : "bg-gray-100"
+                  }`}>
+                    <Timer className={`size-4.5 ${
+                      deadlineInfo.color === "red" ? "text-red-600" :
+                      deadlineInfo.color === "amber" ? "text-amber-600" :
+                      deadlineInfo.color === "green" ? "text-emerald-600" : "text-gray-500"
+                    }`} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-medium ${
+                      deadlineInfo.color === "red" ? "text-red-700" :
+                      deadlineInfo.color === "amber" ? "text-amber-700" :
+                      deadlineInfo.color === "green" ? "text-emerald-700" : "text-gray-600"
+                    }`}>
+                      Deadline: {formatDate(deadline)}
+                    </p>
+                    <p className={`text-xs ${
+                      deadlineInfo.color === "red" ? "text-red-500" :
+                      deadlineInfo.color === "amber" ? "text-amber-500" :
+                      deadlineInfo.color === "green" ? "text-emerald-500" : "text-gray-400"
+                    }`}>
+                      {deadlineInfo.text}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {notice.publishedAt && (
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky/20">
+                    <Calendar className="size-4.5 text-vez-navy" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-vez-ink">Published: {formatDate(notice.publishedAt)}</p>
+                    <p className="text-xs text-vez-mute">{notice.sourceLabel}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="hidden items-center gap-2 text-xs text-vez-mute md:flex">
+              <Eye className="size-3.5" /> {notice.views.toLocaleString()} views
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Page hero / title section */}
-      <section className="border-b border-vez-line bg-vez-surface/50 pt-20 pb-6 md:pt-22 md:pb-8">
+      <section className="border-b border-vez-line bg-vez-surface/50 pt-6 pb-6 md:pt-8 md:pb-8">
         <div className="mx-auto max-w-[1480px] px-6 md:px-8 lg:px-12">
           {/* Breadcrumb */}
           <nav className="mb-3 flex items-center gap-2 text-sm text-vez-mute">
@@ -154,6 +640,16 @@ export default function NoticeDetailPage() {
             <span className="inline-flex items-center gap-1.5 rounded-full bg-vez-sky/30 px-4 py-1.5 text-sm text-vez-navy">
               {categoryLabel(notice.category)}
             </span>
+            {notice.aiUrgency === "HIGH" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-4 py-1.5 text-sm text-red-700">
+                <AlertTriangle className="size-3.5" /> Urgent
+              </span>
+            )}
+            {notice.aiUrgency === "MEDIUM" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-4 py-1.5 text-sm text-amber-700">
+                <Clock className="size-3.5" /> Important
+              </span>
+            )}
             {notice.aiSummary && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm text-vez-mute border border-vez-line">
                 <Sparkles className="size-3.5" /> AI summarized
@@ -223,17 +719,30 @@ export default function NoticeDetailPage() {
 
           {/* ── Left: Main content ── */}
           <div className="min-w-0 space-y-8">
-            {/* AI Summary */}
-            {notice.aiSummary && (
+            {/* AI Summary — English & Nepali */}
+            {(notice.aiSummary || notice.aiSummaryNe) && (
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles className="size-5 text-vez-navy" />
                   <h2 className="text-lg text-vez-ink">AI Summary</h2>
                 </div>
-                <div className="rounded-[16px] bg-vez-sky/10 p-6 md:p-8">
-                  <p className="text-base leading-relaxed text-vez-ink md:text-lg md:leading-relaxed">
-                    {notice.aiSummary}
-                  </p>
+                <div className="space-y-4">
+                  {notice.aiSummary && (
+                    <div className="rounded-[16px] bg-vez-sky/10 p-6 md:p-8">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-vez-navy/60">English</p>
+                      <p className="text-base leading-relaxed text-vez-ink md:text-lg md:leading-relaxed">
+                        {notice.aiSummary}
+                      </p>
+                    </div>
+                  )}
+                  {notice.aiSummaryNe && (
+                    <div className="rounded-[16px] bg-amber-50/60 p-6 md:p-8">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-amber-700/60">नेपाली</p>
+                      <p className="text-base leading-relaxed text-vez-ink md:text-lg md:leading-relaxed" lang="ne">
+                        {notice.aiSummaryNe}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -253,50 +762,54 @@ export default function NoticeDetailPage() {
               </section>
             )}
 
-            {/* Attachment */}
-            {notice.attachmentUrl && (
+            {/* Metadata — non-deadline fields */}
+            {notice.metadata && Object.keys(notice.metadata).filter(k => k !== "deadline").length > 0 && (
               <section>
-                <div className="mb-4 flex items-center gap-2">
-                  <Paperclip className="size-5 text-vez-navy" />
-                  <h2 className="text-lg text-vez-ink">Attachment</h2>
+                <h2 className="mb-3 text-lg text-vez-ink">Details</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {Object.entries(notice.metadata)
+                    .filter(([k]) => k !== "deadline")
+                    .map(([key, value]) => (
+                      <div key={key} className="rounded-[12px] bg-vez-surface p-4">
+                        <p className="text-xs text-vez-mute capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</p>
+                        <p className="text-sm text-vez-ink">{String(value)}</p>
+                      </div>
+                    ))}
                 </div>
-                <a
-                  href={notice.attachmentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-4 rounded-[16px] border border-vez-line bg-white p-5 transition-colors hover:bg-vez-surface"
-                >
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-vez-sky/30">
-                    {attachmentKind(notice.attachmentUrl) === "image" ? (
-                      <FileImage className="size-5 text-vez-navy" />
-                    ) : (
-                      <FileText className="size-5 text-vez-navy" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-vez-ink">{attachmentLabel(notice.attachmentUrl)}</p>
-                    <p className="text-xs text-vez-mute">Open or download the original file</p>
-                  </div>
-                  <Download className="size-4 shrink-0 text-vez-mute" />
-                </a>
               </section>
             )}
 
+            {/* Attachments — with inline extracted content */}
+            {(notice.attachments?.length > 0 || notice.attachmentUrl) && (
+              <AttachmentSection
+                attachments={notice.attachments?.length ? notice.attachments : notice.attachmentUrl ? [{ id: "legacy", url: notice.attachmentUrl, label: null, mimeType: null, sizeBytes: null, storageKey: null }] : []}
+                contentText={notice.contentText}
+                keyFacts={notice.keyFacts}
+              />
+            )}
+
             {/* Full Content */}
-            <section>
-              <div className="mb-4 flex items-center gap-2">
+            <section id="full-content-section">
+              <div className="mb-5 flex items-center gap-2">
                 <FileText className="size-5 text-vez-navy" />
-                <h2 className="text-lg text-vez-ink">Full Content</h2>
+                <h2 className="text-lg font-semibold text-vez-ink">Full Content</h2>
               </div>
-              <div className="rounded-[16px] border border-vez-line bg-white p-6 md:p-8">
+              <div className="rounded-[20px] border border-vez-line bg-white px-6 py-8 shadow-sm md:px-10 md:py-10 lg:px-12">
                 {notice.contentText ? (
-                  <p className="whitespace-pre-wrap text-base leading-relaxed text-vez-ink">
-                    {notice.contentText}
-                  </p>
-                ) : notice.attachmentUrl ? (
-                  <p className="text-sm text-vez-mute">
-                    This notice&apos;s content is provided as an attachment above — see also the original source.
-                  </p>
+                  <FormattedContent text={notice.contentText} />
+                ) : extracting ? (
+                  <div className="flex flex-col items-center gap-3 py-8 text-center">
+                    <Loader2 className="size-6 animate-spin text-vez-navy" />
+                    <p className="text-sm font-medium text-vez-ink">Extracting PDF content…</p>
+                    <p className="text-xs text-vez-mute">Running OCR and AI analysis on the document</p>
+                  </div>
+                ) : notice.attachmentUrl || (notice.attachments?.length > 0) ? (
+                  <div className="flex flex-col items-center gap-3 py-6 text-center">
+                    <FileText className="size-8 text-vez-mute/30" />
+                    <p className="text-sm text-vez-mute">
+                      Content extraction is being processed — reload to check if it&apos;s ready, or view the original document above.
+                    </p>
+                  </div>
                 ) : (
                   <p className="text-sm text-vez-mute">
                     Full content wasn&apos;t captured for this item — view it on the original source.
@@ -309,7 +822,7 @@ export default function NoticeDetailPage() {
             </section>
 
             {/* Ask AI section */}
-            {notice.contentText && (
+            {(notice.contentText || notice.attachmentUrl || notice.attachments?.length > 0) && (
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <MessageSquare className="size-5 text-vez-navy" />
@@ -385,7 +898,42 @@ export default function NoticeDetailPage() {
 
           {/* ── Right: Sidebar ── */}
           <aside className="space-y-6">
-            <div className="sticky top-24 space-y-6">
+            <div className="sticky top-20 space-y-6">
+              {/* Deadline card — high prominence */}
+              {deadline && deadlineInfo && (
+                <div className={`rounded-[16px] p-5 ${
+                  deadlineInfo.color === "red" ? "bg-red-50 border border-red-200" :
+                  deadlineInfo.color === "amber" ? "bg-amber-50 border border-amber-200" :
+                  deadlineInfo.color === "green" ? "bg-emerald-50 border border-emerald-200" :
+                  "bg-gray-50 border border-gray-200"
+                }`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Timer className={`size-5 ${
+                      deadlineInfo.color === "red" ? "text-red-600" :
+                      deadlineInfo.color === "amber" ? "text-amber-600" :
+                      deadlineInfo.color === "green" ? "text-emerald-600" : "text-gray-500"
+                    }`} />
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-vez-mute">Deadline</p>
+                      <p className={`text-base font-semibold ${
+                        deadlineInfo.color === "red" ? "text-red-700" :
+                        deadlineInfo.color === "amber" ? "text-amber-700" :
+                        deadlineInfo.color === "green" ? "text-emerald-700" : "text-gray-600"
+                      }`}>{formatDate(deadline)}</p>
+                    </div>
+                  </div>
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                    deadlineInfo.color === "red" ? "bg-red-100 text-red-700" :
+                    deadlineInfo.color === "amber" ? "bg-amber-100 text-amber-700" :
+                    deadlineInfo.color === "green" ? "bg-emerald-100 text-emerald-700" :
+                    "bg-gray-100 text-gray-600"
+                  }`}>
+                    <Clock className="size-3" />
+                    {deadlineInfo.text}
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-[16px] border border-vez-line bg-white p-6">
                 <h3 className="mb-4 text-sm font-medium text-vez-ink">Notice Details</h3>
                 <dl className="space-y-4">
