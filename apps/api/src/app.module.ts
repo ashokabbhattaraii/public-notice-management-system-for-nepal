@@ -6,7 +6,6 @@ import { DocumentsModule } from './modules/documents.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RagModule } from './modules/rag.module';
-import { InternsModule } from './modules/interns.module';
 import { ScrapingModule } from './modules/scraping.module';
 
 @Module({
@@ -18,7 +17,6 @@ import { ScrapingModule } from './modules/scraping.module';
     DocumentsModule,
     WebhooksModule,
     RagModule,
-    InternsModule,
     ScrapingModule,
   ],
 })

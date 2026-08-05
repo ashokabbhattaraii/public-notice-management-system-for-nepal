@@ -13,7 +13,6 @@ import {
   X,
   ArrowLeft,
   FileSearch,
-  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -24,7 +23,6 @@ const navGroups = [
     label: "Overview",
     links: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/dashboard/interns", label: "Intern Tracker", icon: Users },
     ],
   },
   {
