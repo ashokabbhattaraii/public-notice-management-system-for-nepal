@@ -34,12 +34,14 @@ export class DocumentsService {
   }
 
   async create(data: {
+    id: string;
     title: string;
     filename: string;
     mimeType: string;
     fileSize: number;
     filePath: string;
     uploadedBy: string;
+    fileHash: string;
   }): Promise<Document> {
     const document = await this.prisma.document.create({ data });
 
@@ -51,6 +53,13 @@ export class DocumentsService {
     });
 
     return document;
+  }
+
+  /** Find a document by its content hash (for deduplication). */
+  async findByHash(fileHash: string): Promise<Document | null> {
+    return this.prisma.document.findFirst({
+      where: { fileHash },
+    });
   }
 
   async findAll(dto: ListDocumentsDto, userId?: string) {

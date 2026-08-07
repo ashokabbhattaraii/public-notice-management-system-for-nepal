@@ -44,7 +44,7 @@ const slides = [
 
 export function AnimatedHeroSections() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const sectionsRef = useRef<HTMLDivElement[]>([])
+  const sectionsRef = useRef<HTMLElement[]>([])
   const outerWrappersRef = useRef<HTMLDivElement[]>([])
   const innerWrappersRef = useRef<HTMLDivElement[]>([])
   const headingsRef = useRef<HTMLHeadingElement[]>([])

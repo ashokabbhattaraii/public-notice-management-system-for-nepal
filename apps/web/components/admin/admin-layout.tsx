@@ -6,11 +6,12 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
-  Settings, ArrowLeft, Menu, X, Link2, Bell, Shield,
+  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { mockScrapingSources } from "@/lib/mock-data"
+import { RequireAuth } from "@/components/auth/require-auth"
 
 const navGroups = [
   {
@@ -38,6 +39,7 @@ const navGroups = [
     label: "Administration",
     links: [
       { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/settings", label: "Settings", icon: SlidersHorizontal },
       { href: "/admin/system", label: "System", icon: Settings },
     ],
   },
@@ -130,7 +132,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
+    <RequireAuth admin>
+      <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
       {/* Mobile toggle */}
       <div className="fixed bottom-4 left-4 z-50 md:hidden">
         <button
@@ -171,6 +174,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </div>
+      </div>
+    </RequireAuth>
   )
 }

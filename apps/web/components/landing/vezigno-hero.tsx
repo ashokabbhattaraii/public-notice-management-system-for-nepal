@@ -13,15 +13,48 @@ import { Magnetic } from "./motion"
 gsap.registerPlugin(ScrollTrigger)
 
 const headlineWords = ["Every", "public", "notice.", "One", "place."]
-const quickTags = ["Tenders", "PSC Exams", "Vacancies", "Policy Updates", "Gazette"]
+const fallbackTags = ["Tenders", "PSC Exams", "Vacancies", "Policy Updates", "Gazette"]
 
-export function VezignoHero() {
+const quickTagNames: Record<string, string> = {
+  NOTICE: "Notices",
+  NEWS: "News",
+  PRESS_RELEASE: "Press Releases",
+  CIRCULAR: "Circulars",
+  TENDER: "Tenders",
+  VACANCY: "Vacancies",
+  JOB: "Jobs",
+  INTERNSHIP: "Internships",
+  OTHER: "More",
+}
+
+export function VezignoHero({
+  sourceCount,
+  categories,
+}: {
+  sourceCount?: number | null
+  categories?: Record<string, number> | null
+}) {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const sectionRef = useRef<HTMLElement>(null)
   const headlineRef = useRef<HTMLHeadingElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const introRef = useRef<HTMLDivElement>(null)
+
+  // Rank real categories by volume into quick-search chips
+  const quickTags =
+    categories && Object.keys(categories).length > 0
+      ? Object.entries(categories)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([cat]) => quickTagNames[cat] ?? cat)
+      : fallbackTags
+
+  // Tickle stats line with the live source count when available
+  const sourceCopy =
+    sourceCount != null
+      ? `Suchana AI aggregates government notices from ${sourceCount} official portals across Nepal - classified, summarized, and made instantly searchable for every citizen.`
+      : "Suchana AI aggregates government notices from 50+ official portals across Nepal - classified, summarized, and made instantly searchable for every citizen."
 
   useEffect(() => {
     const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -118,8 +151,7 @@ export function VezignoHero() {
         <Reveal delay={120}>
           <div className="mt-8 flex flex-col gap-10 lg:mt-12 lg:flex-row lg:items-end lg:justify-between">
             <p className="max-w-xl text-base leading-6 text-vez-ink md:text-lg md:leading-7">
-              Suchana AI aggregates government notices from 50+ official portals across
-              Nepal - classified, summarized, and made instantly searchable for every citizen.
+              {sourceCopy}
             </p>
 
             <div className="flex flex-wrap items-center gap-4">

@@ -46,6 +46,16 @@ export class CreateScrapeSourceDto {
   @Min(1)
   @Max(20)
   maxPages?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(60)
+  @Max(86400)
+  pollIntervalSeconds?: number;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  sitemapUrl?: string | null;
 }
 
 export class UpdateScrapeSourceDto {
@@ -89,4 +99,14 @@ export class UpdateScrapeSourceDto {
   @Min(1)
   @Max(20)
   maxPages?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(60)
+  @Max(86400)
+  pollIntervalSeconds?: number;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  sitemapUrl?: string | null;
 }

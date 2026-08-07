@@ -10,18 +10,21 @@ import { VezignoPricing } from "@/components/landing/vezigno-pricing"
 import { VezignoFeedback } from "@/components/landing/vezigno-feedback"
 import { VezignoCta } from "@/components/landing/vezigno-cta"
 import { VezignoFooter } from "@/components/landing/vezigno-footer"
+import { getLandingData } from "@/lib/landing-data"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const data = await getLandingData()
+
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-white font-poppins antialiased">
       <Header />
-      <NewsTicker />
-      <VezignoHero />
-      <VezignoNotices />
+      <NewsTicker headlines={data?.latest} />
+      <VezignoHero sourceCount={data?.sourceCount ?? null} categories={data?.categoryCounts ?? null} />
+      <VezignoNotices latest={data?.latest ?? []} totalNotices={data?.totalNotices ?? null} sourceCount={data?.sourceCount ?? null} categoryCounts={data?.categoryCounts ?? null} />
       <VezignoProblem />
       <VezignoSolution />
       <VezignoFeatures />
-      <VezignoDemo />
+      <VezignoDemo notices={data?.latest} />
       <VezignoPricing />
       <VezignoFeedback />
       <VezignoCta />

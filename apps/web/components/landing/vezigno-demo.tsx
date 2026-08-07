@@ -2,6 +2,7 @@
 
 import React from "react"
 import { NoticesDashboardMockup } from "@/components/notices-dashboard-mockup"
+import type { ScrapedItem } from "@/lib/types"
 import { Reveal } from "./reveal"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow } from "./vezigno-ui"
@@ -13,7 +14,15 @@ const steps = [
   { number: "04", label: "Plain-language answers" },
 ]
 
-export function VezignoDemo() {
+export function VezignoDemo({ notices }: { notices?: ScrapedItem[] }) {
+  const stepLabels = notices
+    ? [
+        { number: "01", label: "Aggregate all official portals" },
+        { number: "02", label: "OCR + AI summaries" },
+        { number: "03", label: "Instant alerts" },
+        { number: "04", label: "Plain-language answers" },
+      ]
+    : steps
   return (
     <section id="demo" className="bg-vez-navy">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12 lg:py-24">
@@ -27,14 +36,14 @@ export function VezignoDemo() {
 
         <Reveal delay={150} className="mt-12 lg:mt-16">
           <div className="overflow-hidden rounded-[24px] bg-white/90 backdrop-blur-md border border-white/50 shadow-2xl shadow-black/10">
-            <NoticesDashboardMockup />
+            <NoticesDashboardMockup notices={notices} />
           </div>
         </Reveal>
 
         {/* Step legend */}
         <Reveal delay={250}>
           <div className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-4">
-            {steps.map((step) => (
+            {stepLabels.map((step) => (
               <div key={step.number} className="border-t border-white/15">
                 <div className="vz-sweep group -mx-3 rounded-[14px] bg-white/5 backdrop-blur-sm border border-white/10 px-3 pb-3 pt-5">
                   <p className="text-sm text-vez-sky transition-colors duration-300 group-hover:text-vez-navy">{step.number}</p>

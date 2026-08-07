@@ -18,7 +18,7 @@ export class WhatsappService {
        const url = `${this.apiUrl}/message/${action}/${this.instanceName}`;
 
        try {
-        const res = await fetch(url,{
+        await fetch(url,{
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

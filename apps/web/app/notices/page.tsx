@@ -4,13 +4,13 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from "react
 import {
   Search, Filter, Calendar, Eye, Bell, FileText,
   ChevronRight, X, Bookmark, BookmarkCheck, Building2,
-  Globe, Loader2, Paperclip, Sparkles,
+  Loader2, Paperclip, Sparkles, RotateCcw, Tag as TagIcon,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { useAuth } from "@/lib/auth-context"
 import { fetchNotices, fetchNoticeCategoryCounts, fetchNoticeSources } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
-import { categoryLabel } from "@/lib/types"
+import { categoryLabel, CATEGORY_ORDER, CANONICAL_TAGS, normalizeTag } from "@/lib/types"
 import type { ScrapedItem, ScrapedItemCategory, PublicNoticeSource } from "@/lib/types"
 import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
@@ -147,6 +147,7 @@ const QP = {
   source: "source",
   sort: "sort",
   page: "page",
+  tag: "tag",
 } as const
 
 // Remembers the last-used filters/search/sort across full navigations and
@@ -159,9 +160,10 @@ interface NoticesPrefs {
   category: ScrapedItemCategory | "all"
   sourceId: string
   sortBy: "publishedAt" | "views"
+  tag: string
 }
 
-const DEFAULT_PREFS: NoticesPrefs = { search: "", category: "all", sourceId: "", sortBy: "publishedAt" }
+const DEFAULT_PREFS: NoticesPrefs = { search: "", category: "all", sourceId: "", sortBy: "publishedAt", tag: "" }
 
 function NoticesPageContent() {
   const { user } = useAuth()
@@ -185,6 +187,7 @@ function NoticesPageContent() {
   )
   const [page, setPage] = useState(() => Number(searchParams.get(QP.page)) || 1)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [selectedTag, setSelectedTag] = useState(() => searchParams.get(QP.tag) ?? storedPrefs.tag)
   const feedRef = useRef<HTMLDivElement>(null)
 
   const [notices, setNotices] = useState<ScrapedItem[]>([])
@@ -226,6 +229,7 @@ function NoticesPageContent() {
     setSelectedCategory((searchParams.get(QP.category) as ScrapedItemCategory | null) ?? "all")
     setSelectedSourceId(searchParams.get(QP.source) ?? "")
     setSortBy((searchParams.get(QP.sort) as "publishedAt" | "views" | null) ?? "publishedAt")
+    setSelectedTag(searchParams.get(QP.tag) ?? "")
     setPage(Number(searchParams.get(QP.page)) || 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParamsString])
@@ -238,8 +242,9 @@ function NoticesPageContent() {
       category: selectedCategory,
       sourceId: selectedSourceId,
       sortBy,
+      tag: selectedTag,
     } satisfies NoticesPrefs)
-  }, [searchQuery, selectedCategory, selectedSourceId, sortBy])
+  }, [searchQuery, selectedCategory, selectedSourceId, sortBy, selectedTag])
 
   // Push the current filter/sort/page state into the URL (no new history
   // entry) so it's shareable and survives a round-trip to a detail page.
@@ -249,11 +254,12 @@ function NoticesPageContent() {
     if (selectedCategory !== "all") params.set(QP.category, selectedCategory)
     if (selectedSourceId) params.set(QP.source, selectedSourceId)
     if (sortBy !== "publishedAt") params.set(QP.sort, sortBy)
+    if (selectedTag) params.set(QP.tag, selectedTag)
     if (page > 1) params.set(QP.page, String(page))
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, selectedCategory, selectedSourceId, sortBy, page])
+  }, [searchQuery, selectedCategory, selectedSourceId, sortBy, selectedTag, page])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -264,6 +270,7 @@ function NoticesPageContent() {
         category: selectedCategory !== "all" ? selectedCategory : undefined,
         sourceId: selectedSourceId || undefined,
         search: searchQuery || undefined,
+        tag: selectedTag || undefined,
         sortBy,
         sortOrder: "desc",
       })
@@ -277,7 +284,7 @@ function NoticesPageContent() {
     } finally {
       setLoading(false)
     }
-  }, [page, selectedCategory, selectedSourceId, searchQuery, sortBy])
+  }, [page, selectedCategory, selectedSourceId, searchQuery, selectedTag, sortBy])
 
   useEffect(() => {
     load()
@@ -321,11 +328,14 @@ function NoticesPageContent() {
     setSelectedCategory("all")
     setSelectedSourceId("")
     setSortBy("publishedAt")
+    setSelectedTag("")
     setPage(1)
   }
 
   const totalCount = Object.values(categoryCounts).reduce((sum, n) => sum + n, 0)
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const hasActiveFilters =
+    searchQuery !== "" || selectedCategory !== "all" || selectedSourceId !== "" || selectedTag !== ""
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
@@ -376,125 +386,136 @@ function NoticesPageContent() {
           </Link>
         </div>
 
-        {/* Mobile filters */}
-        <div className="flex shrink-0 gap-2 overflow-x-auto lg:hidden">
-          <select
-            value={selectedCategory}
-            onChange={(e) => selectCategory(e.target.value as ScrapedItemCategory | "all")}
-            className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
-          >
-            <option value="all">All categories</option>
-            <option value="NOTICE">Notice</option>
-            <option value="NEWS">News</option>
-            <option value="PRESS_RELEASE">Press Release</option>
-            <option value="CIRCULAR">Circular</option>
-            <option value="TENDER">Tender</option>
-            <option value="VACANCY">Vacancy</option>
-          </select>
-          <select
-            value={selectedSourceId}
-            onChange={(e) => selectSource(e.target.value)}
-            className="h-10 shrink-0 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
-          >
-            <option value="">All sources</option>
-            {sources.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+        {/* Type chips — the primary filter, visible on all breakpoints.
+            "All" + each type with its live count; selected chip fills navy. */}
+        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
-            onClick={() => selectSort(sortBy === "publishedAt" ? "views" : "publishedAt")}
-            className="flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-ink"
+            onClick={() => selectCategory("all")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+              selectedCategory === "all"
+                ? "bg-vez-navy text-white"
+                : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
+            }`}
           >
-            <Filter className="size-3.5" /> {sortBy === "publishedAt" ? "Newest" : "Popular"}
+            All
+            <span className={`text-xs ${selectedCategory === "all" ? "text-white/70" : "text-vez-mute"}`}>
+              {totalCount.toLocaleString()}
+            </span>
           </button>
+          {CATEGORY_ORDER.map((id) => (
+            <button
+              key={id}
+              onClick={() => selectCategory(id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+                selectedCategory === id
+                  ? "bg-vez-navy text-white"
+                  : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
+              }`}
+            >
+              {categoryLabel(id)}
+              <span className={`text-xs ${selectedCategory === id ? "text-white/70" : "text-vez-mute"}`}>
+                {(categoryCounts[id] ?? 0).toLocaleString()}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tag chips — secondary filter for thematic topics. Shows the top
+            canonical tags with live counts (derived from current page items),
+            plus "All" to clear. */}
+        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            onClick={() => setSelectedTag("")}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+              !selectedTag
+                ? "bg-vez-navy text-white"
+                : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
+            }`}
+          >
+            All tags
+            <TagIcon className="size-3.5" />
+          </button>
+          {CANONICAL_TAGS.slice(0, 20).map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setSelectedTag(tag)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+                selectedTag === normalizeTag(tag)
+                  ? "bg-vez-sky/50 text-vez-navy"
+                  : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
+              }`}
+            >
+              <TagIcon className="size-3.5" />
+              {tag}
+            </button>
+          ))}
+        </div>
+
+        {/* Refine bar — source + sort dropdowns and clear-all, in a row
+            everyone recognizes from news/marketplace sites. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="relative">
+            <Building2 className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-vez-mute" />
+            <select
+              value={selectedSourceId}
+              onChange={(e) => selectSource(e.target.value)}
+              className="h-10 appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+              aria-label="Filter by source"
+            >
+              <option value="">All sources</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <ChevronRight className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 rotate-90 text-vez-mute" />
+          </div>
+
+          <div className="relative">
+            <Filter className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-vez-mute" />
+            <select
+              value={sortBy}
+              onChange={(e) => selectSort(e.target.value as "publishedAt" | "views")}
+              className="h-10 appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+              aria-label="Sort notices"
+            >
+              <option value="publishedAt">Newest first</option>
+              <option value="views">Most viewed</option>
+            </select>
+            <ChevronRight className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 rotate-90 text-vez-mute" />
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex h-10 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-mute transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+            >
+              <RotateCcw className="size-3.5" /> Clear
+            </button>
+          )}
         </div>
 
         {/* Panels - fill remaining height, page itself never scrolls */}
         <div className="flex min-h-0 flex-1 gap-4 pb-5">
-          {/* ── Filter sidebar (scrolls internally) ── */}
-          <aside className="hidden w-64 shrink-0 overflow-y-auto rounded-[20px] bg-vez-surface p-5 lg:block">
-            <div>
-              <h3 className="mb-3 px-2 text-xs text-vez-mute">Category</h3>
-              <div className="space-y-1">
-                <button
-                  onClick={() => selectCategory("all")}
-                  className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === "all" ? "bg-vez-navy text-white" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                >
-                  <span>All</span>
-                  <span className="text-xs">{totalCount}</span>
-                </button>
-                {([["NOTICE", "Notice"], ["NEWS", "News"], ["PRESS_RELEASE", "Press Release"], ["CIRCULAR", "Circular"], ["TENDER", "Tender"], ["VACANCY", "Vacancy"]] as const).map(([id, label]) => (
-                  (categoryCounts[id] ?? 0) > 0 || id === "NOTICE" || id === "NEWS" || id === "PRESS_RELEASE" ? (
-                    <button
-                      key={id}
-                      onClick={() => selectCategory(id)}
-                      className={`flex w-full items-center justify-between rounded-full px-4 py-2 text-sm transition-colors ${selectedCategory === id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                    >
-                      <span>{label}</span>
-                      <span className="text-xs">{categoryCounts[id] ?? 0}</span>
-                    </button>
-                  ) : null
-                ))}
-              </div>
-            </div>
-
-            <div className="my-5 h-px bg-vez-line" />
-
-            <div>
-              <h3 className="mb-3 px-2 text-xs text-vez-mute">Source</h3>
-              <div className="space-y-1">
-                <button
-                  onClick={() => selectSource("")}
-                  className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === "" ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                >
-                  All sources
-                </button>
-                {sources.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => selectSource(s.id)}
-                    className={`w-full truncate rounded-full px-4 py-2 text-left text-sm transition-colors ${selectedSourceId === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                    title={s.name}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="my-5 h-px bg-vez-line" />
-
-            <div>
-              <h3 className="mb-3 px-2 text-xs text-vez-mute">Sort by</h3>
-              <div className="space-y-1">
-                {[{ id: "publishedAt", label: "Newest first" }, { id: "views", label: "Most viewed" }].map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => selectSort(s.id as "publishedAt" | "views")}
-                    className={`w-full rounded-full px-4 py-2 text-left text-sm transition-colors ${sortBy === s.id ? "bg-vez-sky/50 text-vez-navy" : "text-vez-mute hover:bg-white hover:text-vez-navy"}`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="my-5 h-px bg-vez-line" />
-
-            <div className="px-2">
-              <Globe className="mb-2 size-4 text-vez-mute" />
-              <p className="text-xs leading-relaxed text-vez-mute">
-                Notices and news are scraped directly from official government and public portals.
-              </p>
-            </div>
-          </aside>
-
           {/* ── Notice feed (scrolls internally) ── */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-vez-surface">
             <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-5 py-3.5">
               <p className="text-sm text-vez-ink">
                 {total.toLocaleString()} notice{total !== 1 ? "s" : ""}
                 {searchQuery && <span className="text-vez-mute"> matching &ldquo;{searchQuery}&rdquo;</span>}
+                {selectedCategory !== "all" && (
+                  <span className="text-vez-mute"> · {categoryLabel(selectedCategory)}</span>
+                )}
+                {selectedTag && (
+                  <span className="flex items-center gap-1 text-vez-mute">
+                    <TagIcon className="size-3" /> {selectedTag}
+                  </span>
+                )}
+                {selectedSourceId && (
+                  <span className="text-vez-mute">
+                    {" · "}
+                    {sources.find((s) => s.id === selectedSourceId)?.name ?? "selected source"}
+                  </span>
+                )}
               </p>
               <span className="flex items-center gap-1.5 rounded-full bg-vez-sky/40 px-3 py-1 text-xs text-vez-navy">
                 <span className="size-1.5 animate-pulse rounded-full bg-vez-navy" /> Live

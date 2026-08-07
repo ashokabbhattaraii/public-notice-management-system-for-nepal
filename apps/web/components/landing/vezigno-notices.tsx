@@ -3,28 +3,38 @@
 import React from "react"
 import Link from "next/link"
 import { mockNotices } from "@/lib/mock-data"
+import type { ScrapedItem } from "@/lib/types"
 import { Reveal } from "./reveal"
 import { CountUp } from "./count-up"
 import { AnimatedHeading } from "./animated-heading"
 import { Eyebrow, ArrowCta } from "./vezigno-ui"
 import { Magnetic, StaggerGrid, TiltCard } from "./motion"
 
-const stats = [
+const fallbackStats = [
   { value: "50+", label: "Government sources" },
   { value: "10K+", label: "Daily queries" },
   { value: "24/7", label: "Automated monitoring" },
   { value: "2", label: "Languages supported" },
 ]
 
-const categoryLabels: Record<string, string> = {
-  exams: "Exams",
-  vacancies: "Vacancies",
-  tenders: "Tenders",
-  policy: "Policy",
-  announcements: "Announcements",
+function generateSlug(title: string, id: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + id
 }
 
-function formatDate(iso: string) {
+const categoryLabels: Record<string, string> = {
+  NOTICE: "Notice",
+  NEWS: "News",
+  PRESS_RELEASE: "Press Release",
+  CIRCULAR: "Circular",
+  TENDER: "Tender",
+  VACANCY: "Vacancy",
+  JOB: "Job",
+  INTERNSHIP: "Internship",
+  OTHER: "Other",
+}
+
+function formatDate(iso: string | null) {
+  if (!iso) return ""
   return new Date(iso).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -32,11 +42,27 @@ function formatDate(iso: string) {
   })
 }
 
-export function VezignoNotices() {
-  const featured = mockNotices
-    .filter((n) => n.status === "published")
-    .sort((a, b) => (a.priority === "high" ? -1 : 1) - (b.priority === "high" ? -1 : 1))
-    .slice(0, 3)
+export function VezignoNotices({
+  latest,
+  totalNotices,
+  sourceCount,
+  categoryCounts,
+}: {
+  latest?: ScrapedItem[]
+  totalNotices?: number | null
+  sourceCount?: number | null
+  categoryCounts?: Record<string, number> | null
+}) {
+  // Real feed first; static showcase cards as the no-API fallback
+  const featured: ScrapedItem[] =
+    latest && latest.length > 0 ? latest.slice(0, 3) : (mockNotices.slice(0, 3) as unknown as ScrapedItem[])
+
+  const stats = [
+    { value: `${sourceCount ?? 50}+`, label: "Government sources" },
+    { value: `${totalNotices ?? "10K+"}`, label: "Notices indexed" },
+    { value: "24/7", label: "Automated monitoring" },
+    { value: `${categoryCounts ? Object.keys(categoryCounts).length : 2}`, label: "Categories tracked" },
+  ]
 
   return (
     <section className="bg-white">
@@ -81,30 +107,27 @@ export function VezignoNotices() {
             {featured.map((notice) => (
               <TiltCard key={notice.id}>
                 <Link
-                  href="/notices"
+                  href={`/notices/${generateSlug(notice.title, notice.id)}`}
                   className="vz-sweep vz-glass group flex h-full flex-col rounded-[20px] p-8"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="rounded-full bg-white/50 px-4 py-1.5 text-sm text-vez-ink backdrop-blur-sm border border-white/50">
                       {categoryLabels[notice.category] ?? notice.category}
                     </span>
-                    {notice.priority === "high" && (
-                      <span className="rounded-full bg-vez-navy px-4 py-1.5 text-sm text-white">
-                        Priority
-                      </span>
-                    )}
                   </div>
 
                   <h3 className="mt-6 text-2xl font-normal leading-[30px] text-vez-ink">
                     {notice.title}
                   </h3>
                   <p className="mt-3 line-clamp-3 flex-1 text-base leading-6 text-vez-mute transition-colors duration-300 group-hover:text-vez-ink/70">
-                    {notice.aiSummary ?? notice.description}
+                    {notice.aiSummary ?? notice.summary}
                   </p>
 
                   <div className="mt-6 flex items-center justify-between border-t border-vez-line pt-5 text-sm text-vez-mute transition-colors duration-300 group-hover:border-vez-ink/10 group-hover:text-vez-ink/70">
-                    <span className="line-clamp-1">{notice.organization}</span>
-                    <span className="shrink-0">{formatDate(notice.publishedAt)}</span>
+                    <span className="line-clamp-1">{notice.sourceLabel}</span>
+                    <span className="shrink-0">
+                      {formatDate(notice.publishedAt) || formatDate(notice.scrapedAt)}
+                    </span>
                   </div>
                 </Link>
               </TiltCard>

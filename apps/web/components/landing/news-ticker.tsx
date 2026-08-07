@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
+import type { ScrapedItem } from "@/lib/types"
 
-const headlines = [
+const fallbackHeadlines = [
   { text: "PSC Section Officer Exam 2082 - Application deadline: Shrawan 15, 2082", id: "n1", title: "Nepal Public Service Commission - Section Officer Exam 2082" },
   { text: "Ministry of Education: 2,500 permanent teacher positions announced across all 7 provinces", id: "n2", title: "Ministry of Education - Teacher Recruitment Drive 2082" },
   { text: "Road Division Office - Highway Construction Tender for Province 5 (45km section)", id: "n3", title: "Road Division Office - Highway Construction Tender" },
@@ -16,7 +17,23 @@ function generateSlug(title: string, id: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + id
 }
 
-export function NewsTicker() {
+/** Prefer the AI summary as the headline, falling back to the raw title. */
+function headlineFor(notice: ScrapedItem): string {
+  return notice.aiSummary ?? notice.title
+}
+
+export function NewsTicker({ headlines }: { headlines?: ScrapedItem[] }) {
+  const items =
+    headlines && headlines.length > 0
+      ? headlines
+          .map((n) => ({
+            text: headlineFor(n),
+            id: n.id,
+            title: n.title,
+          }))
+          .slice(0, 6)
+      : fallbackHeadlines
+
   const [current, setCurrent] = useState(0)
   const [animating, setAnimating] = useState(false)
   const [hidden, setHidden] = useState(false)
@@ -28,12 +45,12 @@ export function NewsTicker() {
     timerRef.current = setInterval(() => {
       setAnimating(true)
       setTimeout(() => {
-        setCurrent((prev) => (prev + 1) % headlines.length)
+        setCurrent((prev) => (prev + 1) % items.length)
         setAnimating(false)
       }, 350)
     }, 5000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [])
+  }, [items.length])
 
   // Hide on scroll down, show on scroll up
   const handleScroll = useCallback(() => {
@@ -62,7 +79,7 @@ export function NewsTicker() {
           <span className="h-3.5 w-px bg-vez-ink/10" />
           <div className="min-w-0 flex-1 overflow-hidden">
             <Link
-              href={`/notices/${generateSlug(headlines[current].title, headlines[current].id)}`}
+              href={`/notices/${generateSlug(items[current].title, items[current].id)}`}
               className="block truncate text-[13px] text-vez-ink/75 transition-colors hover:text-vez-navy"
             >
               <span
@@ -72,7 +89,7 @@ export function NewsTicker() {
                     : "opacity-100 translate-y-0 blur-0"
                 }`}
               >
-                {headlines[current].text}
+                {items[current].text}
               </span>
             </Link>
           </div>

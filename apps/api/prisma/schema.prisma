@@ -53,6 +53,7 @@ model Document {
   mimeType    String         @map("mime_type")
   fileSize    Int            @map("file_size")
   filePath    String         @map("file_path")
+  fileHash    String?        @unique @map("file_hash")  // SHA-256 for deduplication
   status      DocumentStatus @default(PENDING)
   isOcr       Boolean        @default(false) @map("is_ocr")
   isSystem    Boolean        @default(false) @map("is_system")
@@ -74,6 +75,8 @@ enum ScrapedItemCategory {
   CIRCULAR
   TENDER
   VACANCY
+  JOB
+  INTERNSHIP
   OTHER
 }
 
@@ -112,6 +115,20 @@ model ScrapeSource {
   paginationParam   String    @default("page") @map("pagination_param")
   startPage         Int       @default(1) @map("start_page")
   maxPages          Int       @default(3) @map("max_pages")
+  // How often the automatic scheduler probes this source. HTML-only sources
+  // need a full crawl per poll, so they default to a slow 15-min cadence;
+  // sources with a usable sitemap fast-path can poll much more aggressively
+  // (3 min or less). Admin-editable per source because posting frequency
+  // varies wildly across ministries.
+  pollIntervalSeconds Int @default(900) @map("poll_interval_seconds")
+  // Cached sitemap URL for the cheap "new URLs only" fast-path. Null means
+  // "no usable sitemap — HTML-poll only". Detection is attempted exactly once
+  // (see sitemapCheckedAt) and the winner cached here, mirroring how
+  // noticeSchema/newsSchema cache CSS extraction patterns.
+  sitemapUrl         String?   @map("sitemap_url")
+  // When sitemap detection was last attempted. Non-null means "tried once,
+  // don't re-detect every tick" (null result is cached as a null sitemapUrl).
+  sitemapCheckedAt   DateTime? @map("sitemap_checked_at")
   enabled           Boolean   @default(true)
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -199,4 +216,12 @@ model ScrapeRun {
 
   @@index([sourceId])
   @@map("scrape_runs")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }

@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { Search, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, X, SlidersHorizontal } from "lucide-react"
+import { Search, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, X, SlidersHorizontal, Edit, RotateCcw, BadgeCheck, Tag, ShieldCheck } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
-import { fetchScrapedItems, deleteScrapedItem, fetchScrapeSources } from "@/lib/api"
+import { fetchScrapedItems, deleteScrapedItem, fetchScrapeSources, correctScrapedItem } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
 import type { ScrapedItem, ScrapedItemCategory, ScrapeSource } from "@/lib/types"
 
@@ -83,6 +83,13 @@ function AdminNoticesPageContent() {
     () => (searchParams.get(QP.sort) as SortOption | null) ?? storedPrefs.sort,
   )
   const [showFilters, setShowFilters] = useState(false)
+
+  // Notice editor drawer state
+  const [editingItem, setEditingItem] = useState<ScrapedItem | null>(null)
+  const [editCategory, setEditCategory] = useState<ScrapedItemCategory>("")
+  const [editTags, setEditTags] = useState<string>("")
+  const [editConfidence, setEditConfidence] = useState<number | null>(null)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -198,6 +205,50 @@ function AdminNoticesPageContent() {
     setDateTo("")
     setSort("publishedAt:desc")
     setPage(1)
+  }
+
+  function openEditor(item: ScrapedItem) {
+    setEditingItem(item)
+    setEditCategory(item.category)
+    setEditTags(item.tags?.join(", ") ?? "")
+    setEditConfidence(item.aiCategoryConfidence ?? null)
+  }
+
+  function closeEditor() {
+    setEditingItem(null)
+    setEditing(false)
+  }
+
+  async function handleSaveEdit() {
+    if (!editingItem) return
+    setEditing(true)
+    try {
+      await correctScrapedItem(editingItem.id, {
+        category: editCategory,
+        tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
+        aiCategoryConfidence: editConfidence,
+      })
+      await load()
+      closeEditor()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update notice")
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  async function handleReClassify() {
+    if (!editingItem) return
+    setEditing(true)
+    try {
+      await correctScrapedItem(editingItem.id, { reClassify: true })
+      await load()
+      closeEditor()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-classification failed")
+    } finally {
+      setEditing(false)
+    }
   }
 
   const activeFilterCount = [category, sourceId, dateFrom, dateTo, debouncedSearch].filter(Boolean).length
@@ -381,6 +432,13 @@ function AdminNoticesPageContent() {
                             <ExternalLink className="size-3.5" />
                           </a>
                           <button
+                            onClick={() => openEditor(item)}
+                            className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-sky/20 hover:text-vez-sky"
+                            aria-label="Edit category & tags"
+                          >
+                            <Edit className="size-3.5" />
+                          </button>
+                          <button
                             onClick={() => handleDelete(item.id)}
                             className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
                             aria-label="Delete notice"
@@ -422,6 +480,106 @@ function AdminNoticesPageContent() {
             </div>
           )}
         </div>
+
+        {/* Notice Editor Drawer */}
+        {editingItem && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 py-6 sm:px-0" onClick={closeEditor}>
+            <div className="w-full max-w-md bg-white rounded-t-[20px] sm:rounded-[20px] shadow-xl overflow-hidden animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-vez-line px-6 py-4">
+                <h3 className="text-lg font-medium text-vez-ink">Edit notice</h3>
+                <button onClick={closeEditor} className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface" aria-label="Close editor">
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="mb-1 block text-xs text-vez-mute">Title</label>
+                  <p className="text-sm text-vez-ink line-clamp-2">{editingItem.title}</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-vez-mute">Category</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value as ScrapedItemCategory)}
+                    className="w-full rounded-[12px] border border-vez-line bg-white px-4 py-3 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+                  >
+                    <option value="NOTICE">Notice</option>
+                    <option value="NEWS">News</option>
+                    <option value="PRESS_RELEASE">Press Release</option>
+                    <option value="CIRCULAR">Circular</option>
+                    <option value="TENDER">Tender</option>
+                    <option value="VACANCY">Vacancy</option>
+                    <option value="JOB">Job</option>
+                    <option value="INTERNSHIP">Internship</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-vez-mute">Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={editTags}
+                    onChange={(e) => setEditTags(e.target.value)}
+                    placeholder="e.g. Kathmandu University, Ministry of Education, vacancy"
+                    className="w-full rounded-[12px] border border-vez-line bg-white px-4 py-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+                  />
+                  <p className="mt-1 text-xs text-vez-mute">Enter tags separated by commas</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-vez-mute">AI Confidence</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={editConfidence ?? 0}
+                      onChange={(e) => setEditConfidence(e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-24 rounded-[12px] border border-vez-line bg-white px-4 py-3 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+                    />
+                    {editConfidence !== null && (
+                      <BadgeCheck className={`size-5 ${editConfidence >= 0.7 ? "text-emerald-600" : editConfidence >= 0.5 ? "text-amber-600" : "text-red-600"}`} />
+                    )}
+                    <span className="text-xs text-vez-mute">
+                      {editConfidence !== null ? Math.round(editConfidence * 100) + "%" : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={handleReClassify}
+                    disabled={editing}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity disabled:opacity-50"
+                  >
+                    <RotateCcw className="size-4" />
+                    Re-classify with AI
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={editing}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-50"
+                  >
+                    <ShieldCheck className="size-4" />
+                    Save changes
+                  </button>
+                </div>
+
+                <button
+                  onClick={closeEditor}
+                  className="flex w-full items-center justify-center gap-2 text-sm text-vez-mute transition-colors hover:text-vez-navy"
+                >
+                  <X className="size-3.5" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </AdminLayout>
     </div>
   )

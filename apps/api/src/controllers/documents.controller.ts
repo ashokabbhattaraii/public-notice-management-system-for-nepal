@@ -26,6 +26,8 @@ import { CurrentUser } from '../decorators/current-user.decorator';
 import { DocumentsService } from '../services/documents.service';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
 import { ListDocumentsDto } from '../dto/list-documents.dto';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -79,13 +81,31 @@ export class DocumentsController {
       throw new BadRequestException('File is required');
     }
 
+    // Compute SHA-256 hash for deduplication
+    const fileBuffer = fs.readFileSync(file.path);
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+    // Check for existing document with same hash
+    const existing = await this.documentsService.findByHash(fileHash);
+    if (existing) {
+      return {
+        ...existing,
+        deduplicated: true,
+      };
+    }
+
+    // Stable doc_id from content hash (first 32 chars = 128 bits)
+    const docId = fileHash.substring(0, 32);
+
     const document = await this.documentsService.create({
+      id: docId,
       title: dto.title,
       filename: file.originalname,
       mimeType: file.mimetype,
       fileSize: file.size,
       filePath: file.path,
       uploadedBy: user.id,
+      fileHash: fileHash,
     });
 
     return document;
@@ -149,6 +169,57 @@ export class DocumentsController {
   @UseGuards(OptionalJwtAuthGuard)
   async progress(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getProgress(id);
+  }
+
+  @Get(':id/progress/stream')
+  @UseGuards(OptionalJwtAuthGuard)
+  async progressStream(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const sendEvent = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const sendError = (error: string) => {
+      res.write(`event: error\ndata: ${JSON.stringify({ error })}\n\n`);
+    };
+
+    const sendDone = () => {
+      res.write('event: done\ndata: {}\n\n');
+      res.end();
+    };
+
+    const intervalRef = { current: null as NodeJS.Timeout | null };
+
+    const checkProgress = async () => {
+      try {
+        const progress = await this.documentsService.getProgress(id);
+        sendEvent(progress);
+        if (progress.stage === 'done' || progress.stage === 'failed') {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          sendDone();
+        }
+      } catch (error) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        sendError(error.message || 'Failed to get progress');
+        res.end();
+      }
+    };
+
+    // Initial send
+    checkProgress();
+
+    // Poll every second
+    intervalRef.current = setInterval(checkProgress, 1000);
+
+    // Cleanup on disconnect
+    res.on('close', () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    });
   }
 
   @Delete(':id')

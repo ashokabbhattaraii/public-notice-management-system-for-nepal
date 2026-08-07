@@ -13,6 +13,7 @@ export class NoticesController {
     @Query('category') category?: string,
     @Query('sourceId') sourceId?: string,
     @Query('search') search?: string,
+    @Query('tag') tag?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('urgency') urgency?: string,
@@ -25,13 +26,14 @@ export class NoticesController {
       category,
       sourceId,
       search,
+      tag,
       dateFrom,
       dateTo,
       urgency,
       sortBy,
       sortOrder,
       page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 20,
+      limit: limit ? Number(limit) : undefined,
     });
   }
 

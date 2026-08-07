@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
-from app import config
 from app import chunker
+from app import config
 from app import embeddings
 from app import extractor
 from app import llm
@@ -18,8 +18,10 @@ from app import progress
 from app import rag
 from app import scraper
 from app import scrape_progress
+from app import secure_http
 from app import store
-from app.logger import get_logger, setup_logging
+from app import metrics
+from app.logger import get_logger, set_request_id, setup_logging
 
 logger = get_logger(__name__)
 
@@ -35,6 +37,11 @@ async def app(scope, receive, send):
     method = scope["method"]
     path = scope["path"]
 
+    # Correlate this request with the caller's trace (x-request-id header, if
+    # present — the NestJS API forwards it via its AI service client).
+    raw_request_id = _get_header(scope, b"x-request-id")
+    set_request_id(raw_request_id.decode("utf-8", errors="replace") if raw_request_id else None)
+
     if method == "OPTIONS":
         await _cors_preflight(send, scope)
         return
@@ -48,8 +55,112 @@ async def app(scope, receive, send):
 
     status, body = response
     elapsed_ms = (time.perf_counter() - start) * 1000
-    logger.info("%s %s -> %d (%.0fms)", method, path, status, elapsed_ms)
+    logger.info(
+        "%s %s -> %d (%.0fms)",
+        method,
+        path,
+        status,
+        elapsed_ms,
+        extra={"meta": {"status": status, "duration_ms": round(elapsed_ms, 1)}},
+    )
     await _send_json(send, body, status, scope)
+
+
+async def _run_startup_validation() -> None:
+    """Run critical startup validations. Raises RuntimeError on critical failures."""
+    logger.info("Running startup validations...")
+
+    # 1. Validate embedding model dimension matches config
+    try:
+        model = embeddings._load_model()
+        get_dim = getattr(model, "get_embedding_dimension", None) or model.get_sentence_embedding_dimension
+        actual_dim = get_dim()
+        if actual_dim != config.EMBEDDING_DIM:
+            raise RuntimeError(
+                f"EMBEDDING_DIM={config.EMBEDDING_DIM} does not match model dimension {actual_dim}. "
+                f"Update EMBEDDING_DIM in .env and recreate the Qdrant collection."
+            )
+        logger.info("Embedding model validated: %s (dim=%d)", config.EMBEDDING_MODEL, actual_dim)
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Failed to load embedding model: {e}") from e
+
+    # 2. Validate BM25 sparse model availability (if HYBRID_SEARCH enabled)
+    if config.HYBRID_SEARCH:
+        try:
+            sparse_model = embeddings._load_sparse_model()
+            if sparse_model is None:
+                logger.warning("HYBRID_SEARCH=true but sparse model unavailable; falling back to dense-only")
+            else:
+                logger.info("BM25 sparse model loaded: %s", config.SPARSE_MODEL)
+        except Exception as e:
+            logger.warning("Sparse model load failed (hybrid search disabled): %s", e)
+
+    # 3. Validate Qdrant collection schema matches config
+    try:
+        await _validate_qdrant_collection_schema()
+        logger.info("Qdrant collection schema validated")
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Qdrant schema validation failed: {e}") from e
+
+    # 4. Validate LLM model availability (best-effort)
+    try:
+        if config.GROQ_API_KEYS or config.GROQ_API_KEY:
+            logger.info("Groq API keys configured: %d key(s)", len(config.GROQ_API_KEYS) or 1)
+        if config.GEMINI_API_KEY:
+            logger.info("Gemini API key configured")
+        if not (config.GROQ_API_KEYS or config.GROQ_API_KEY or config.GEMINI_API_KEY):
+            logger.warning("No LLM API keys configured — summarization/analysis will use extractive fallback")
+    except Exception as e:
+        logger.warning("LLM config check failed: %s", e)
+
+    logger.info("All startup validations passed")
+
+
+async def _validate_qdrant_collection_schema() -> None:
+    """Validate that the Qdrant collection schema matches current config."""
+    from app import store
+
+    client = store.get_client()
+    try:
+        collections = client.get_collections().collections
+        names = [c.name for c in collections]
+
+        if config.QDRANT_COLLECTION not in names:
+            logger.info("Qdrant collection '%s' does not exist yet; will be created on first indexing", config.QDRANT_COLLECTION)
+            return
+
+        info = client.get_collection(config.QDRANT_COLLECTION)
+        dense = info.config.params.vectors
+        if not isinstance(dense, dict) or store.DENSE_VECTOR not in dense:
+            raise RuntimeError(
+                f"Collection '{config.QDRANT_COLLECTION}' uses an unnamed/legacy vector schema"
+            )
+        if dense[store.DENSE_VECTOR].size != config.EMBEDDING_DIM:
+            raise RuntimeError(
+                f"Collection '{config.QDRANT_COLLECTION}' has dense dim={dense[store.DENSE_VECTOR].size} "
+                f"but EMBEDDING_DIM={config.EMBEDDING_DIM}. "
+                f"Recreate the collection or update EMBEDDING_DIM."
+            )
+
+        sparse = info.config.params.sparse_vectors or {}
+        if config.HYBRID_SEARCH and store.SPARSE_VECTOR not in sparse:
+            logger.warning(
+                "Collection '%s' has no '%s' sparse vector required for hybrid search",
+                config.QDRANT_COLLECTION,
+                store.SPARSE_VECTOR,
+            )
+            # Not a hard failure — hybrid search will fall back to dense-only
+
+        logger.debug("Qdrant collection '%s' schema OK", config.QDRANT_COLLECTION)
+
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Qdrant collection validation failed: {e}") from e
 
 
 async def _handle_lifespan(scope, receive, send):
@@ -64,14 +175,16 @@ async def _handle_lifespan(scope, receive, send):
                 config.QDRANT_COLLECTION,
             )
             config.ensure_upload_dir()
+
+            # --- Startup validation ---
             try:
-                store.ensure_collection()
-                notice_store.ensure_collection()
-            except Exception:
-                logger.exception(
-                    "Could not ensure Qdrant collections at startup; "
-                    "will retry on first request"
-                )
+                await _run_startup_validation()
+            except RuntimeError as e:
+                logger.critical("Startup validation failed: %s", e)
+                # Don't crash — let health endpoint report degraded
+                # but log prominently so operators see it
+                logger.error("SERVICE DEGRADED: %s", e)
+
             await send({"type": "lifespan.startup.complete"})
         elif message["type"] == "lifespan.shutdown":
             logger.info("Shutting down pnm-ai")
@@ -99,6 +212,10 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
         doc_id = doc_progress_match.group(1)
         return _document_progress(doc_id)
 
+    doc_progress_sse_match = re.match(r"^/documents/([^/]+)/progress/stream$", path)
+    if method == "GET" and doc_progress_sse_match:
+        return await _document_progress_sse(scope, send)
+
     if method == "GET" and path == "/progress":
         return _progress_batch(scope)
 
@@ -112,6 +229,15 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
 
     if method == "POST" and path == "/scrape/source":
         return await _scrape_source(receive)
+
+    if method == "POST" and path == "/scrape/sitemap/detect":
+        return await _scrape_sitemap_detect(receive)
+
+    if method == "POST" and path == "/scrape/check":
+        return await _scrape_check(receive)
+
+    if method == "POST" and path == "/scrape/sitemap-crawl":
+        return await _scrape_sitemap_crawl(receive)
 
     scrape_progress_match = re.match(r"^/scrape/progress/([^/]+)$", path)
     if method == "GET" and scrape_progress_match:
@@ -165,6 +291,49 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
     if not file_part:
         return 400, {"error": "No file uploaded. Field name must be 'file'"}
 
+    # --- File validation ---
+    file_data = file_part["data"]
+    filename = file_part.get("filename", "unknown")
+    mime_type = file_part.get("content_type", "application/octet-stream")
+
+    # Size limit: 100 MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+    if len(file_data) > MAX_FILE_SIZE:
+        return 400, {"error": f"File too large: {len(file_data)} bytes (max {MAX_FILE_SIZE})"}
+
+    # MIME allowlist
+    ALLOWED_MIME_TYPES = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-powerpoint",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
+        "image/webp",
+    }
+    if mime_type not in ALLOWED_MIME_TYPES:
+        return 400, {"error": f"Unsupported file type: {mime_type}"}
+
+    # Magic bytes validation (basic)
+    if not _validate_magic_bytes(file_data, mime_type):
+        return 400, {"error": "File content does not match declared MIME type"}
+
+    # --- Deduplication: SHA-256 hash (stable doc_id from content hash) ---
+    file_hash = hashlib.sha256(file_data).hexdigest()
+    doc_id = file_hash[:32]  # Stable 128-bit ID from content hash
+
+    # Allow API to override doc_id (for deduplication on API side)
+    doc_id_part = parts.get("document_id")
+    if doc_id_part and doc_id_part["data"].strip():
+        doc_id = doc_id_part["data"].decode("utf-8").strip()
+
     metadata_raw = parts.get("metadata")
     metadata: dict = {}
     if metadata_raw:
@@ -174,29 +343,34 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
             pass
 
     filename = file_part.get("filename", "unknown")
-    mime_type = file_part.get("content_type", "application/octet-stream")
-    file_data = file_part["data"]
-
-    doc_id_part = parts.get("document_id")
-    if doc_id_part and doc_id_part["data"].strip():
-        doc_id = doc_id_part["data"].decode("utf-8").strip()
-    else:
-        doc_id = str(uuid.uuid4())
-
     title_part = parts.get("title")
     if title_part and title_part["data"].strip():
         metadata["title"] = title_part["data"].decode("utf-8").strip()
+
     upload_dir = config.ensure_upload_dir()
     ext = Path(filename).suffix
     save_path = upload_dir / f"{doc_id}{ext}"
     save_path.write_bytes(file_data)
 
     logger.info(
-        "Upload received: doc_id=%s, filename=%s, size=%d bytes",
+        "Upload received: doc_id=%s, filename=%s, size=%d bytes, hash=%s",
         doc_id,
         filename,
         len(file_data),
+        file_hash[:16],
     )
+
+    metadata["file_hash"] = file_hash
+
+    progress.start(doc_id, filename)
+
+    try:
+        return await asyncio.to_thread(
+            _ingest_document, doc_id, save_path, filename, mime_type, metadata
+        )
+    except Exception as e:
+        progress.fail(doc_id, str(e))
+        raise
 
     progress.start(doc_id, filename)
 
@@ -221,7 +395,10 @@ def _ingest_document(
 ) -> tuple[int, dict]:
     progress.update(doc_id, "extracting", f"Extracting text from {filename}...")
     try:
+        start = time.perf_counter()
         result = extractor.extract_text(str(save_path), mime_type)
+        metrics.histogram("extraction_latency").observe(time.perf_counter() - start)
+        metrics.counter("extractions_total").inc()
     except Exception as e:
         save_path.unlink(missing_ok=True)
         progress.fail(doc_id, f"Text extraction failed: {e}")
@@ -236,7 +413,13 @@ def _ingest_document(
         return 422, {"error": "No text could be extracted from the document"}
 
     progress.update(doc_id, "chunking", f"Chunking {len(text):,} characters...")
+    chunk_start = time.perf_counter()
     chunks = chunker.chunk_text(text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
+    metrics.histogram("chunking_latency").observe(time.perf_counter() - chunk_start)
+    metrics.counter("chunking_total").inc()
+    if chunks:
+        total_chars = sum(len(c["content"]) for c in chunks)
+        metrics.record_chunk_stats(len(chunks), total_chars)
     if not chunks:
         save_path.unlink(missing_ok=True)
         progress.fail(doc_id, "Document produced no indexable chunks")
@@ -248,12 +431,15 @@ def _ingest_document(
     progress.update(doc_id, "embedding", f"Embedding {total} chunks...", 0, total)
 
     try:
+        emb_start = time.perf_counter()
         chunk_embeddings = embeddings.get_embeddings(
             chunk_texts,
             on_progress=lambda done, n: progress.update(
                 doc_id, "embedding", f"Embedding chunk {done}/{n}", done, n
             ),
         )
+        metrics.histogram("embedding_latency").observe(time.perf_counter() - emb_start)
+        metrics.counter("embeddings_total").inc(total)
     except Exception as e:
         save_path.unlink(missing_ok=True)
         progress.fail(doc_id, f"Embedding failed: {e}")
@@ -266,9 +452,10 @@ def _ingest_document(
         **metadata,
     }
 
-    progress.update(doc_id, "indexing", "Writing vectors to Qdrant...", 0, total)
+    progress.update(doc_id, "indexing", "Writing vectors to Qdrant (transactional)...", 0, total)
     try:
-        chunk_count = store.index_document(
+        idx_start = time.perf_counter()
+        chunk_count = store.index_document_transactional(
             doc_id,
             chunks,
             chunk_embeddings,
@@ -277,10 +464,12 @@ def _ingest_document(
                 doc_id, "indexing", f"Indexing chunk {done}/{n}", done, n
             ),
         )
+        metrics.histogram("indexing_latency").observe(time.perf_counter() - idx_start)
+        metrics.counter("indexed_chunks_total").inc(chunk_count)
     except Exception as e:
         save_path.unlink(missing_ok=True)
         progress.fail(doc_id, f"Indexing failed: {e}")
-        logger.exception("Qdrant indexing failed for doc_id=%s", doc_id)
+        logger.exception("Qdrant transactional indexing failed for doc_id=%s", doc_id)
         return 503, {"error": f"Failed to index document: {str(e)}"}
 
     progress.finish(doc_id, chunk_count)
@@ -313,6 +502,51 @@ def _document_progress(doc_id: str) -> tuple[int, dict]:
     if entry is None:
         return 404, {"error": "No progress information for this document"}
     return 200, entry
+
+
+async def _document_progress_sse(scope, send) -> None:
+    """GET /documents/{id}/progress/stream — Server-Sent Events for live progress."""
+    # Extract doc_id from path
+    path = scope["path"]
+    doc_id = path.split("/")[-2]  # /documents/{id}/progress/stream
+    
+    await send({
+        "type": "http.response.start",
+        "status": 200,
+        "headers": [
+            (b"content-type", b"text/event-stream"),
+            (b"cache-control", b"no-cache"),
+            (b"connection", b"keep-alive"),
+            (b"x-accel-buffering", b"no"),
+        ],
+    })
+
+    try:
+        while True:
+            entry = progress.get(doc_id)
+            if entry is None:
+                await send({
+                    "type": "http.response.body",
+                    "body": b"event: error\ndata: {\"error\": \"Not found\"}\n\n",
+                })
+                break
+            
+            data = json.dumps(entry)
+            await send({
+                "type": "http.response.body",
+                "body": f"data: {data}\n\n".encode(),
+            })
+            
+            if entry["stage"] in ("done", "failed"):
+                await send({
+                    "type": "http.response.body",
+                    "body": b"event: done\ndata: {}\n\n",
+                })
+                break
+            
+            await asyncio.sleep(1)  # Poll every second
+    except asyncio.CancelledError:
+        pass
 
 
 async def _document_status(doc_id: str) -> tuple[int, dict]:
@@ -394,6 +628,9 @@ async def _scrape_source(receive) -> tuple[int, dict]:
     known_urls = set(data.get("known_urls") or [])
     max_pages = int(data.get("max_pages", scraper.DEFAULT_MAX_PAGES))
     run_id = data.get("run_id")
+    # Per-run cap on concurrent LLM summarizations, sent by the API from the
+    # admin `scraping.summarizeConcurrency` setting. Absent → scraper default.
+    summarize_concurrency = int(data.get("summarize_concurrency") or 0)
 
     pagination_data = data.get("pagination") or {}
     pagination = scraper.PaginationConfig(
@@ -414,6 +651,7 @@ async def _scrape_source(receive) -> tuple[int, dict]:
             cached_schemas=cached_schemas,
             known_urls=known_urls,
             max_pages=max_pages,
+            summarize_concurrency=summarize_concurrency or None,
             pagination=pagination,
             on_progress=on_progress,
         )
@@ -459,6 +697,161 @@ def _scrape_progress(run_id: str) -> tuple[int, dict]:
     return 200, entry
 
 
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def _scrape_sitemap_detect(receive) -> tuple[int, dict]:
+    """POST /scrape/sitemap/detect — body: {base_url}. One-time sitemap
+    detection (robots.txt -> /sitemap.xml -> best child sitemap). Returns
+    {base_url, sitemap_url, checked_at} — sitemap_url is null when no usable
+    article sitemap exists (the caller caches both verdicts forever)."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    base_url = (data.get("base_url") or "").strip()
+    if not base_url:
+        return 400, {"error": "Field 'base_url' is required"}
+
+    try:
+        sitemap_url = await scraper.detect_sitemap(base_url)
+    except Exception as e:
+        logger.exception("Sitemap detection failed for %s", base_url)
+        return 502, {"error": f"Sitemap detection failed: {str(e)}"}
+
+    return 200, {
+        "base_url": base_url,
+        "sitemap_url": sitemap_url,
+        "checked_at": _now_iso(),
+    }
+
+
+async def _scrape_check(receive) -> tuple[int, dict]:
+    """POST /scrape/check — body: {sitemap_url, known_urls?: [...]} (or
+    {base_url} to re-detect first). The cheap fast-path: one-to-a-few GETs
+    that return only the sitemap's <loc> entries not already known.
+    Returns {sitemap_url, checked_at, new_urls, total_locs}."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    sitemap_url = (data.get("sitemap_url") or "").strip()
+    known_urls = data.get("known_urls") or []
+
+    if not sitemap_url:
+        base_url = (data.get("base_url") or "").strip()
+        if not base_url:
+            return 400, {
+                "error": "Field 'sitemap_url' is required (or 'base_url' to detect first)",
+            }
+        try:
+            sitemap_url = await scraper.detect_sitemap(base_url)
+        except Exception as e:
+            logger.exception("Sitemap detection failed for %s", base_url)
+            return 502, {"error": f"Sitemap detection failed: {str(e)}"}
+        if not sitemap_url:
+            return 200, {
+                "sitemap_url": None,
+                "checked_at": _now_iso(),
+                "new_urls": [],
+                "total_locs": 0,
+            }
+
+    try:
+        new_urls, total_locs = await scraper.check_sitemap(sitemap_url, known_urls)
+    except Exception as e:
+        logger.exception("Sitemap check failed for %s", sitemap_url)
+        return 502, {"error": f"Sitemap check failed: {str(e)}"}
+
+    return 200, {
+        "sitemap_url": sitemap_url,
+        "checked_at": _now_iso(),
+        "new_urls": new_urls,
+        "total_locs": total_locs,
+    }
+
+
+async def _scrape_sitemap_crawl(receive) -> tuple[int, dict]:
+    """POST /scrape/sitemap-crawl — body: {base_url, urls: [...],
+    known_urls?: [...], run_id?}. Fetches each sitemap URL directly as a
+    detail page — the sitemap fast-path's own full crawl. No listing page,
+    no CSS-extraction schema. Returns the same item shape as
+    /scrape/source ({items, schemas}) so the API reuses its full persistence
+    pipeline unchanged."""
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    base_url = (data.get("base_url") or "").strip()
+    urls = data.get("urls") or []
+    if not base_url:
+        return 400, {"error": "Field 'base_url' is required"}
+    if not urls:
+        return 400, {"error": "Field 'urls' must contain at least one URL"}
+
+    known_urls = set(data.get("known_urls") or [])
+    run_id = data.get("run_id")
+    # Per-run cap on concurrent LLM summarizations, sent by the API from the
+    # admin `scraping.summarizeConcurrency` setting. Absent → scraper default.
+    summarize_concurrency = int(data.get("summarize_concurrency") or 0)
+
+    on_progress = None
+    if run_id:
+        scrape_progress.start(run_id)
+        on_progress = lambda msg: scrape_progress.log(run_id, msg)  # noqa: E731
+
+    try:
+        items, _ = await scraper.scrape_sitemap_urls(
+            base_url=base_url,
+            urls=urls,
+            known_urls=known_urls,
+            summarize_concurrency=summarize_concurrency or None,
+            on_progress=on_progress,
+        )
+        if run_id:
+            scrape_progress.finish(run_id, f"Done — {len(items)} item(s) found")
+        return 200, {
+            "items": [
+                {
+                    "category": item.category,
+                    "title": item.title,
+                    "source_url": item.source_url,
+                    "published_at": item.published_at,
+                    "summary": item.summary,
+                    "content_text": item.content_text,
+                    "content_html": item.content_html,
+                    "attachment_url": item.attachment_url,
+                    "source_slug": item.source_slug,
+                    "attachments": [
+                        {"url": a.url, "label": a.label, "mime_type": a.mime_type, "size_bytes": a.size_bytes}
+                        for a in (item.attachments or [])
+                    ],
+                    "ai_summary": item.ai_summary,
+                    "ai_summary_ne": item.ai_summary_ne,
+                    "ai_urgency": item.ai_urgency,
+                    "ai_category_confidence": item.ai_category_confidence,
+                    "metadata": item.metadata,
+                }
+                for item in items
+            ],
+            "schemas": {},
+        }
+    except Exception as e:
+        logger.exception("Sitemap crawl failed for base_url=%s", base_url)
+        if run_id:
+            scrape_progress.fail(run_id, str(e))
+        return 502, {"error": f"Sitemap crawl failed: {str(e)}"}
+
+
 async def _notices_analyze(receive) -> tuple[int, dict]:
     """POST /notices/analyze — body: {title, content}. Returns
     {summary, key_facts, tags} or {analyzed: false} if no content/LLM."""
@@ -486,9 +879,8 @@ async def _notices_analyze(receive) -> tuple[int, dict]:
 
 async def _notices_extract_pdf(receive) -> tuple[int, dict]:
     """POST /notices/extract-pdf — body: {url: string, title?: string}.
-    Downloads a PDF from the URL, extracts text via OCR if needed,
+    Downloads a PDF from the URL with SSRF protection, extracts text via OCR if needed,
     then runs AI analysis. Returns {content_text, is_ocr, summary, summary_ne, key_facts, tags}."""
-    import httpx
     import tempfile
 
     body = await _read_body(receive)
@@ -502,11 +894,17 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
     if not url:
         return 400, {"error": "Field 'url' is required"}
 
+    # Secure PDF download with SSRF protection
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            pdf_bytes = resp.content
+        pdf_bytes = await secure_http.secure_download_pdf(
+            url,
+            connect_timeout=5.0,
+            read_timeout=30.0,
+            max_size_bytes=50 * 1024 * 1024,  # 50 MB
+        )
+    except ValueError as e:
+        logger.warning("Secure PDF download failed for %s: %s", url, e)
+        return 400, {"error": str(e)}
     except Exception as e:
         logger.warning("PDF download failed for %s: %s", url, e)
         return 502, {"error": f"Could not download PDF: {str(e)}"}
@@ -663,6 +1061,45 @@ def _get_header(scope: dict, name: bytes) -> Optional[bytes]:
     return None
 
 
+def _validate_magic_bytes(data: bytes, declared_mime: str) -> bool:
+    """Basic magic bytes validation for common document types."""
+    if len(data) < 8:
+        return False
+
+    # PDF: %PDF
+    if declared_mime == "application/pdf":
+        return data[:4] == b"%PDF"
+
+    # DOCX/ZIP-based: PK\x03\x04
+    if declared_mime in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }:
+        return data[:4] == b"PK\x03\x04"
+
+    # Legacy DOC: D0 CF 11 E0
+    if declared_mime == "application/msword":
+        return data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+    # Images
+    if declared_mime == "image/png":
+        return data[:8] == b"\x89PNG\r\n\x1a\n"
+    if declared_mime == "image/jpeg":
+        return data[:3] == b"\xff\xd8\xff"
+    if declared_mime == "image/tiff":
+        return data[:4] in (b"II\x2a\x00", b"MM\x00\x2a")
+    if declared_mime == "image/webp":
+        return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+    # Text types - no magic bytes, allow
+    if declared_mime.startswith("text/"):
+        return True
+
+    # Default allow for unlisted types (CSV, etc.)
+    return True
+
+
 def _extract_boundary(content_type: bytes) -> Optional[bytes]:
     parts = content_type.split(b";")
     for part in parts:
@@ -730,23 +1167,29 @@ def _parse_multipart(body: bytes, boundary: bytes) -> dict:
 
 def _get_cors_headers(scope: dict) -> list[list[bytes]]:
     origin = _get_header(scope, b"origin")
-    allowed_origin = b"*"
+    if not origin:
+        # No Origin header (curl, server-to-server): nothing to restrict.
+        return []
 
-    if origin:
-        origin_str = origin.decode("utf-8", errors="replace")
-        if origin_str in config.CORS_ORIGINS:
-            allowed_origin = origin
-        elif "*" in config.CORS_ORIGINS:
-            allowed_origin = b"*"
-        else:
-            allowed_origin = origin
+    origin_str = origin.decode("utf-8", errors="replace")
+    if origin_str in config.CORS_ORIGINS:
+        return [
+            [b"access-control-allow-origin", origin],
+            [b"vary", b"origin"],
+            [b"access-control-allow-methods", b"GET, POST, DELETE, OPTIONS"],
+            [b"access-control-allow-headers", b"content-type, authorization"],
+            [b"access-control-max-age", b"86400"],
+        ]
+    if "*" in config.CORS_ORIGINS:
+        return [
+            [b"access-control-allow-origin", b"*"],
+            [b"access-control-allow-methods", b"GET, POST, DELETE, OPTIONS"],
+            [b"access-control-allow-headers", b"content-type, authorization"],
+            [b"access-control-max-age", b"86400"],
+        ]
 
-    return [
-        [b"access-control-allow-origin", allowed_origin],
-        [b"access-control-allow-methods", b"GET, POST, DELETE, OPTIONS"],
-        [b"access-control-allow-headers", b"content-type, authorization"],
-        [b"access-control-max-age", b"86400"],
-    ]
+    # Origin not allowlisted: emit no CORS headers so the browser blocks it.
+    return []
 
 
 async def _cors_preflight(send, scope: dict):

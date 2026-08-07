@@ -22,6 +22,8 @@ def _env_int(key: str, default: int = 0) -> int:
 PORT: int = _env_int("PORT", 8000)
 ENVIRONMENT: str = _env("ENVIRONMENT", "development")
 LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
+# "json" (default) for one JSON record per line; "pretty" for human-readable dev output.
+LOG_FORMAT: str = _env("LOG_FORMAT", "json")
 
 EMBEDDING_MODEL: str = _env(
     "EMBEDDING_MODEL",
@@ -60,11 +62,16 @@ RAG_SCORE_THRESHOLD: float = float(_env("RAG_SCORE_THRESHOLD", "0.78"))
 
 TESSERACT_LANG: str = _env("TESSERACT_LANG", "nep+eng")
 
+# Fallback default for max concurrent LLM summarization calls during a scrape
+# run. The live value is the admin `scraping.summarizeConcurrency` setting,
+# sent per-run by the API; this only applies when the API passes no value.
+SUMMARIZE_CONCURRENCY: int = _env_int("SUMMARIZE_CONCURRENCY", 2)
+
 UPLOAD_DIR: str = _env("UPLOAD_DIR", "./data/uploads")
 
 CORS_ORIGINS: list[str] = [
     o.strip()
-    for o in _env("CORS_ORIGINS", "http://localhost:3000,http://localhost:5005").split(",")
+    for o in _env("CORS_ORIGINS", "http://localhost:3535,http://localhost:5005").split(",")
     if o.strip()
 ]
 

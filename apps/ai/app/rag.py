@@ -138,7 +138,9 @@ async def _detect_chat_intent(question: str, query_embedding: list[float]) -> bo
 
 
 def _select_context(results: list[dict], top_k: int) -> list[dict]:
-    """Filter candidates: drop low-score hits and near-duplicate chunks."""
+    """Filter candidates: drop low-score hits and near-duplicate chunks.
+    Then merge adjacent chunks from the same document/page/section for
+    coherent citations with page-range output."""
     selected: list[dict] = []
     seen_keys: set[str] = set()
 
@@ -155,7 +157,50 @@ def _select_context(results: list[dict], top_k: int) -> list[dict]:
         if len(selected) >= top_k:
             break
 
-    return selected
+    # Merge adjacent chunks from same document/page/section
+    return _merge_adjacent_chunks(selected)
+
+
+def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
+    """Merge adjacent chunks from the same document/page/section.
+    Returns merged chunks with page_range metadata for citations."""
+    if not chunks:
+        return chunks
+
+    merged: list[dict] = []
+    current = chunks[0].copy()
+
+    for next_chunk in chunks[1:]:
+        # Check if chunks are from same doc and adjacent (chunk_index diff <= 1)
+        same_doc = current["doc_id"] == next_chunk["doc_id"]
+        adjacent = next_chunk["chunk_index"] - current["chunk_index"] <= 1
+        same_section = current.get("metadata", {}).get("section_path") == next_chunk.get("metadata", {}).get("section_path")
+
+        if same_doc and adjacent and same_section:
+            # Merge: concatenate content, update ranges
+            current["content"] += "\n\n" + next_chunk["content"]
+            current["char_end"] = next_chunk.get("char_end", current["char_end"])
+            current["chunk_index"] = current["chunk_index"]  # keep first index
+            # Track page range
+            if "page_range" not in current:
+                current["page_range"] = [current.get("page_num"), current.get("page_num")]
+            next_page = next_chunk.get("page_num")
+            if next_page is not None:
+                if current["page_range"][1] != next_page:
+                    current["page_range"][1] = next_page
+        else:
+            # Finalize current, start new
+            if "page_range" not in current:
+                current["page_range"] = [current.get("page_num"), current.get("page_num")]
+            merged.append(current)
+            current = next_chunk.copy()
+
+    # Don't forget the last chunk
+    if "page_range" not in current:
+        current["page_range"] = [current.get("page_num"), current.get("page_num")]
+    merged.append(current)
+
+    return merged
 
 
 async def query(
@@ -192,6 +237,7 @@ async def query(
         logger.info("Small talk detected (semantic); skipping retrieval")
         return await _chat_reply()
 
+    search_start = time.perf_counter()
     candidates = store.search(
         query_embedding=query_embedding,
         query_text=question,
@@ -199,12 +245,16 @@ async def query(
         filter_doc_id=doc_id,
         filter_doc_ids=doc_ids,
     )
+    metrics.histogram("search_latency").observe(time.perf_counter() - search_start)
+    metrics.counter("searches_total").inc()
 
-    results = _select_context(candidates, top_k)
+    results = _select_context(candidates["results"], top_k)
+    search_mode = candidates["mode"]
     logger.info(
-        "Retrieved %d candidates, kept %d after threshold/dedup",
-        len(candidates),
+        "Retrieved %d candidates, kept %d after threshold/dedup (mode=%s)",
+        len(candidates["results"]),
         len(results),
+        search_mode,
     )
 
     if not results:
@@ -241,4 +291,5 @@ async def query(
         "answer": answer,
         "sources": sources,
         "model_used": model_used,
+        "search_mode": search_mode,
     }

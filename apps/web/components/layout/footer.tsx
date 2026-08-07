@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import Image from "next/image"
+import { useEffect, useState } from "react"
 import { Github } from "lucide-react"
+import { fetchPublicSettings } from "@/lib/api"
 
 const footerLinks = {
   Platform: [
@@ -26,6 +28,22 @@ const footerLinks = {
 }
 
 export function Footer() {
+  const [site, setSite] = useState<{ title: string; description: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPublicSettings()
+      .then((d) => {
+        if (!cancelled) setSite(d.site)
+      })
+      .catch(() => {
+        // keep the built-in fallback copy when the API is unreachable
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <footer className="bg-vez-navy">
       <div className="mx-auto max-w-[1480px] px-6 py-16 md:px-8 md:py-20 lg:px-12">
@@ -35,16 +53,15 @@ export function Footer() {
             <Link href="/" className="inline-block">
               <Image
                 src="/images/logo.png"
-                alt="Suchana AI"
+                alt={site?.title ?? "Suchana AI"}
                 width={200}
                 height={200}
                 className="h-16 w-auto brightness-0 invert"
               />
             </Link>
             <p className="mt-5 max-w-xs text-base leading-6 text-white/60">
-              An AI-powered, cloud-based platform aggregating Nepal&apos;s public
-              government notices into a single searchable, accessible repository -
-              classified and summarized by machine learning.
+              {site?.description ??
+                "An AI-powered, cloud-based platform aggregating Nepal's public government notices into a single searchable, accessible repository - classified and summarized by machine learning."}
             </p>
             <div className="mt-6 flex items-center gap-3">
               <a
@@ -83,7 +100,8 @@ export function Footer() {
 
         <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-8 md:flex-row">
           <p className="text-sm text-white/50">
-            &copy; 2025 Suchana AI - AI-Powered Public Notice Management System for Nepal.
+            &copy; 2026 {site?.title ?? "Suchana AI"} - AI-Powered Public Notice Management System
+            for Nepal.
           </p>
           <p className="text-sm text-white/50">
             B.Sc. (Hons) IT Cloud Engineering - Asia Pacific University

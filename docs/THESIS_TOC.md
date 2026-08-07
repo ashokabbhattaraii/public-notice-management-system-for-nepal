@@ -10,18 +10,23 @@ Supervised by **Dr. Laxman Mandal** · 2nd Marker: **Manish Kumar Tamang** · 20
 
 > **Note on scope of this document.** This file is the full-thesis skeleton grown into a
 > working draft. It carries the academic framing of the Investigation Report forward into the
-> implementation phase and reconciles it with what was *actually built*. Two deliberate
+> implementation phase and reconciles it with what was *actually built*. Three deliberate
 > technology pivots happened between the proposal and the delivered system, and they are
 > called out wherever they occur:
 >
 > | Investigation-phase plan | Delivered implementation | Why the change |
 > |---|---|---|
 > | **ChromaDB** (file-based vector store) | **Qdrant** (named dense + BM25 sparse vectors, RRF fusion, payload filters) | Hybrid search, per-document payload filtering, deterministic point IDs, production-grade REST/gRPC |
-> | **Scrapy + Selenium + BeautifulSoup4** | **Crawl4AI** (async, Playwright-backed, LLM-ready Markdown) | One tool handles static *and* JS-rendered pages, emits clean Markdown, native `robots.txt`/rate-limit support |
-> | **LangChain + Ollama (LLaMA 3, local)** | **Custom raw-ASGI pipeline + Groq (llama-3.3-70b-versatile)** | Zero framework overhead; Groq gives fast, free-tier, OpenAI-compatible inference |
+> | **Scrapy + Selenium + BeautifulSoup4** | **Crawl4AI** (async, Playwright-backed, LLM-ready Markdown) + **BeautifulSoup4** for CSS-schema detection | One tool handles static *and* JS-rendered pages, emits clean Markdown, native `robots.txt`/rate-limit support; BeautifulSoup4 is retained, not replaced, as the parser behind heuristic listing-schema detection |
+> | **LangChain + Ollama (LLaMA 3, local)** | **Custom raw-ASGI pipeline + Gemini 2.0 Flash (primary) with Groq `llama-3.3-70b-versatile` (multi-key fallback)** | Zero framework overhead; Gemini's free tier and quality lead for the primary path, Groq (round-robin across several keys) absorbs overflow/outages |
 >
-> Everything below reflects the delivered stack. Where a diagram or table describes future
-> work (the scraping/classification/summarisation pipeline), it is labelled as such.
+> Everything below reflects the delivered stack. As of this revision, **both** major subsystems
+> are implemented end-to-end: the RAG document-intelligence pipeline (Qdrant + Gemini/Groq) *and*
+> the multi-site notice aggregation pipeline (Crawl4AI scraper with heuristic/LLM schema
+> auto-detection, Nepali Bikram Sambat date parsing, PDF/attachment discovery, concurrent AI
+> classification/summarisation, and a full admin scraping console). The one subsystem still a
+> genuine placeholder is **notifications/subscription alerts** (empty controller and service
+> files) — this is called out explicitly in §4 and §6.2.
 
 ---
 
@@ -71,22 +76,32 @@ citizen, and disproportionately students, job seekers, and rural users who need 
 authentic information but cannot afford to poll many portals repeatedly.
 
 This project designs and builds an **AI-Powered Cloud-Based Public Notice Management System** —
-a web platform that aggregates public notices from selected official Nepalese government
+a web platform that aggregates public notices from admin-configured official Nepalese government
 portals, classifies and summarises them, and exposes them through a single searchable interface.
 Aggregation is performed with **Crawl4AI**, an asynchronous, browser-capable crawler that
-handles both static and JavaScript-rendered pages and returns clean Markdown; scanned notices
-are read with **Tesseract OCR** (`nep+eng`). Classification and summarisation use
-transformer models from **Hugging Face**. A **Retrieval-Augmented Generation (RAG)** module lets
-users interrogate documents in natural language: text is chunked, embedded with the
-multilingual **`intfloat/multilingual-e5-base`** model, and stored in **Qdrant**, where a
-**hybrid dense + BM25** search fused with **Reciprocal Rank Fusion** retrieves grounded context
-that a **Groq-hosted Llama 3.3 (70B)** model turns into a cited, Markdown answer.
+handles both static and JavaScript-rendered pages and returns clean Markdown; per-site listing
+structure is learned automatically — a **BeautifulSoup4** heuristic scores candidate repeating
+DOM groups, with an LLM fallback when heuristics fail, and the resulting CSS extraction schema is
+cached so subsequent runs are pure, fast parsing. Scanned notices and PDF attachments are read
+with **Tesseract OCR** (`nep+eng`); Nepali government sites frequently render dates in the
+**Bikram Sambat** calendar, which the scraper parses natively alongside Gregorian formats.
+Classification (Jobs/Exams/Tenders/Policy/Press-Release/etc.), urgency tagging, and abstractive
+plain-language summarisation (English **and** Nepali) run **concurrently during scraping** via an
+LLM. A **Retrieval-Augmented Generation (RAG)** module lets users interrogate both their own
+uploaded documents and the aggregated notice corpus in natural language: text is chunked,
+embedded with the multilingual **`intfloat/multilingual-e5-base`** model, and stored in
+**Qdrant**, where a **hybrid dense + BM25** search fused with **Reciprocal Rank Fusion** retrieves
+grounded context that **Gemini 2.0 Flash** (primary) or a key-rotated **Groq-hosted Llama 3.3
+(70B)** (fallback) turns into a cited, Markdown answer.
 
-The delivered RAG subsystem is fully working end-to-end across a **Next.js** frontend, a
+The delivered system is fully working end-to-end across a **Next.js** frontend, a
 **NestJS + Prisma/PostgreSQL** API, and a **Python raw-ASGI** AI service, deployed to **AWS**
-(backend) and **Vercel** (frontend). This report presents the research background, literature
-review, methodology, detailed design and implementation, testing, and results that together
-confirm the technical feasibility and civic relevance of the solution.
+(backend) and **Vercel** (frontend): document RAG, notice aggregation/classification/
+summarisation, a public notice browser with hybrid-search chatbot, an admin scraping console with
+live run progress, and a WhatsApp inbound channel are all implemented in code. The one
+deliberately unbuilt subsystem is subscription/alert delivery. This report presents the research
+background, literature review, methodology, detailed design and implementation, testing, and
+results that together confirm the technical feasibility and civic relevance of the solution.
 
 **Keywords:** public notice management, artificial intelligence, cloud computing, web crawling,
 retrieval-augmented generation, hybrid search, Qdrant, Nepal e-governance.
@@ -105,6 +120,7 @@ retrieval-augmented generation, hybrid search, Qdrant, Nepal e-governance.
 | 6 | Document lifecycle state machine | 4.1.4 |
 | 7 | Ingestion sequence (upload → vectors) | 4.1.5 |
 | 8 | Query sequence (question → cited answer) | 4.1.5 |
+| 8b | Notice-aggregation scrape-run sequence | 4.1.5 |
 | 9 | Entity-Relationship diagram (PostgreSQL) | 4.2.1 |
 | 10 | Qdrant collection & point schema | 4.2.2 |
 | 11 | Hybrid retrieval + RRF fusion pipeline | 4.4.3 |
@@ -194,9 +210,11 @@ careful, modular system design.
   Ministry of Finance, Judicial Service Commission, TU Office of the Controller of Examinations,
   Office of the Prime Minister and Council of Ministers).
 - **Categories:** Jobs, Exams, Tenders/Procurement, Policy, and Other.
-- **Language:** English and Nepali-transliterated text for the AI stages; full Devanagari NLP is
-  future work. (Note: the delivered RAG embedding model, `multilingual-e5-base`, *does* handle
-  Devanagari in the vector space, so retrieval on Nepali text already works — see §4.4.3.)
+- **Language:** English and Nepali. The delivered pipeline handles Devanagari more completely than
+  originally scoped: the `multilingual-e5-base` embedding model retrieves across Nepali text
+  natively, and the scrape-time AI classification/summarisation stage produces **both** an
+  English and a Nepali (Devanagari) summary for every notice, translating in either direction as
+  needed — this was originally planned as future work but is implemented (see §4.4.3).
 - **RAG uploads:** PDF and image documents; no real-time voice interface, no multi-document
   cross-referencing in a single request, no external-source answer verification.
 - **Delivery:** a responsive web app for desktop and mobile browsers; no native mobile app.
@@ -239,16 +257,18 @@ gantt
     P1 Planning & environment        :done, p1, 2025-09-01, 30d
     P2 Crawling module (Crawl4AI)    :done, p2, after p1, 30d
     P3 Cloud data pipeline           :done, p3, after p2, 25d
-    P4 AI classify + summarise       :active, p4, after p3, 25d
+    P4 AI classify + summarise       :done, p4, after p3, 25d
     section Semester 2 (Implementation)
-    P5 Frontend (Next.js)            :active, p5, 2026-01-05, 35d
-    P6 RAG module (Qdrant + Groq)    :done, p6, 2026-01-05, 45d
-    P7 Testing & cloud deployment    :p7, after p6, 25d
-    P8 Documentation & finalisation  :p8, after p7, 20d
+    P5 Frontend (Next.js)            :done, p5, 2026-01-05, 35d
+    P6 RAG module (Qdrant + Gemini/Groq) :done, p6, 2026-01-05, 45d
+    P7 Testing & cloud deployment    :active, p7, after p6, 25d
+    P8 Documentation & finalisation  :active, p8, after p7, 20d
 ```
 
-*(Phase status reflects the delivered RAG subsystem; the crawling/classification pipeline is
-scaffolded and in progress.)* Full timeline in **Appendix E**.
+*(Phase status reflects the delivered state: RAG, notice aggregation, and AI
+classification/summarisation are all implemented; only subscription-alert delivery remains
+unbuilt, and cloud deployment/final documentation are in progress.)* Full timeline in
+**Appendix E**.
 
 ---
 
@@ -287,25 +307,39 @@ documents.
 
 > **Pivot from the proposal.** The Investigation Report proposed **LangChain + ChromaDB + Ollama**
 > for RAG. The delivered system replaces this with a **hand-rolled pipeline** (no LangChain),
-> **Qdrant** as the vector store, and **Groq** for LLM inference. ChromaDB offers approximate
-> nearest-neighbour search over dense embeddings with a file-based backend — adequate for an early
-> prototype — but Qdrant additionally provides **named vectors** (dense + sparse in one point),
-> **BM25 hybrid search with server-side RRF fusion**, **payload indexes** for per-document
-> filtering, and **deterministic point IDs** for idempotent re-embedding. These capabilities are
-> the difference between a demo and a production retriever (see §4.4.3).
+> **Qdrant** as the vector store, and a **Gemini-primary / Groq-fallback** dispatcher for LLM
+> inference. ChromaDB offers approximate nearest-neighbour search over dense embeddings with a
+> file-based backend — adequate for an early prototype — but Qdrant additionally provides **named
+> vectors** (dense + sparse in one point), **BM25 hybrid search with server-side RRF fusion**,
+> **payload indexes** for per-document filtering, and **deterministic point IDs** for idempotent
+> re-embedding. These capabilities are the difference between a demo and a production retriever
+> (see §4.4.3). On the LLM side, every generation path (`app/llm.py`) first tries **Gemini 2.0
+> Flash** and falls back to **Groq `llama-3.3-70b-versatile`** — round-robining across multiple
+> Groq API keys on 429s — only on Gemini failure; an extractive, embedding-similarity fallback
+> answers even with no LLM key configured at all.
 
 #### 2.1.4 Web Scraping / Crawling Technologies
 Web scraping extracts structured data from websites via HTTP requests and HTML parsing (Khder,
 2021). The Investigation Report proposed **Scrapy** (concurrent, rate-limited crawling),
 **BeautifulSoup4** (HTML parsing), and **Selenium + ChromeDriver** (JS-rendered pages).
 
-> **Pivot from the proposal.** The delivered design consolidates all three roles into
-> **Crawl4AI** — an asynchronous, open-source crawler built on Playwright. One tool renders
-> JavaScript pages *and* fetches static HTML, respects `robots.txt` and rate limits, and — most
-> relevantly for a document-intelligence system — emits **clean, LLM-ready Markdown** rather than
-> raw DOM soup, which drastically simplifies the downstream chunking/embedding steps and removes
-> the Scrapy↔Selenium↔BeautifulSoup glue code. Tesseract OCR (`nep+eng`) remains for scanned
-> PDFs and images.
+> **Pivot from the proposal.** The delivered design consolidates the crawling/rendering roles into
+> **Crawl4AI** — an asynchronous, open-source crawler built on Playwright (`apps/ai/app/scraper.py`).
+> One tool renders JavaScript pages *and* fetches static HTML, respects `robots.txt` and rate
+> limits, and returns raw HTML for structured extraction or cleaned Markdown for detail pages.
+> **BeautifulSoup4 is retained**, repurposed as the parser behind a dynamic schema-detection
+> layer rather than the primary crawler: because each admin-added government site has arbitrarily
+> different markup, listing extraction cannot be hand-coded per site. Instead, a free heuristic
+> pass scores repeating DOM groups (table rows, list items, card grids) by size and CSS-class
+> hints to derive a `crawl4ai.JsonCssExtractionStrategy` schema; if that fails, an LLM is shown the
+> cleaned HTML once and asked to propose the same kind of schema. Whichever schema succeeds is
+> cached on the `ScrapeSource` row so every subsequent run is pure CSS parsing — detection re-runs
+> automatically only if a site's markup changes and extraction drops to zero rows. Detail pages are
+> always fetched generically (no per-site body selector), with dedicated handling for inline
+> PDF-viewer widgets (Mozilla pdf.js, DearFlip flipbooks) so their toolbar chrome is never
+> mistaken for notice text. Tesseract OCR (`nep+eng`) remains for scanned PDFs and images, and a
+> dedicated parser handles **Bikram Sambat** (Nepali calendar) publication dates, which several
+> target portals render natively.
 
 #### 2.1.5 Cloud Computing and Deployment Architecture
 Following the NIST definition, cloud computing delivers pooled, on-demand resources with
@@ -351,8 +385,13 @@ global CDN. The AWS free tier suffices for a proof of concept (Kadaskar & Kamthe
 - **2.3.6 Embedding & chunking** — `intfloat/multilingual-e5-base` (multilingual, EN + Devanagari,
   512-token window, `query:`/`passage:` prefixes); structure-aware hierarchical chunking
   (paragraph → sentence → word) at 800/120 chars.
-- **2.3.7 LLMs for RAG** — Groq-hosted `llama-3.3-70b-versatile` via an OpenAI-compatible HTTP
-  call; extractive fallback when no API key is present.
+- **2.3.7 LLMs for RAG and notice AI** — a single dispatcher (`app/llm.py:_llm_chat`) tries
+  **Gemini 2.0 Flash** first via the Generative Language REST API, then falls back to a
+  key-rotated pool of **Groq `llama-3.3-70b-versatile`** keys (OpenAI-compatible HTTP call,
+  retried on 429/5xx); an embedding-similarity **extractive** fallback answers even with no LLM
+  key configured. The same dispatcher powers document RAG answers, notice-chatbot answers,
+  per-notice Q&A, conversational chat replies, intent classification, and scrape-time
+  summarisation/classification.
 - **2.3.8 Turborepo (monorepo)** — one repo, three apps (`web`, `api`, `ai`), shared tooling,
   parallel dev/build with pnpm workspaces.
 - **2.3.9 Google OAuth (authentication)** — sign-in via Google; a stable `sub` claim keys the
@@ -369,11 +408,12 @@ global CDN. The AWS free tier suffices for a proof of concept (Kadaskar & Kamthe
 | Vector DB | **Qdrant** | hybrid dense+BM25, RRF, payload filters, deterministic IDs |
 | Embeddings | `multilingual-e5-base` (768-d) | best free multilingual retriever, EN+Nepali |
 | Sparse | `Qdrant/bm25` (fastembed) | exact-identifier keyword matching |
-| LLM | Groq `llama-3.3-70b-versatile` | fast, free tier, OpenAI-compatible |
-| Crawler | **Crawl4AI** *(planned)* | static + JS pages, Markdown output, robots/rate-limit |
-| OCR | Tesseract (`nep+eng`) | scanned Nepali notices |
+| LLM | **Gemini 2.0 Flash** (primary) + Groq `llama-3.3-70b-versatile` (multi-key fallback) | fast, free-tier quality lead (Gemini) with resilient overflow capacity (Groq key rotation) |
+| Crawler | **Crawl4AI** + BeautifulSoup4 (schema detection) | static + JS pages, Markdown/HTML output, robots/rate-limit, per-site CSS schema learning |
+| OCR | Tesseract (`nep+eng`) | scanned Nepali notices and PDF attachments |
+| Calendar parsing | `nepali-datetime` | Bikram Sambat dates on Nepali government portals |
 | Auth | Google OAuth + JWT | no password storage, stable identity |
-| Messaging | Evolution API (WhatsApp) | inbound webhook + outbound send for a conversational/alert channel |
+| Messaging | Evolution API (WhatsApp) | inbound webhook + outbound send for a conversational channel (ack-reply today; alert delivery not yet wired) |
 
 ---
 
@@ -439,20 +479,21 @@ categories.
 
 **Table 3 — Functional (FR) and Non-Functional (NFR) requirements**
 
-| ID | Requirement | Priority |
-|---|---|---|
-| FR-01 | Scheduled automatic crawling of ≥5 government portals | High |
-| FR-02 | OCR text extraction from scanned PDFs (Tesseract) | High |
-| FR-03 | Classify each notice: Jobs / Exams / Tenders / Policy / Other | High |
-| FR-04 | AI abstractive summary per notice (Hugging Face) | High |
-| FR-05 | Search by keyword, category, date range, source | High |
-| FR-06 | Keyword/category subscription alerts | Medium |
-| FR-07 | Upload PDF/image and query it via the RAG module | Medium |
-| FR-08 | Unified responsive web UI (desktop + mobile) | High |
-| FR-09 | Account registration/login (Google OAuth) | Medium |
-| NFR-01 | ≥99% availability during crawl/retrieval | High |
-| NFR-02 | Search responses < 3 s under normal load | Medium |
-| NFR-03 | Comply with `robots.txt` of all scraped portals | High |
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| FR-01 | Admin-triggered crawling of government portals (Crawl4AI, self-adapting per-site schema) | High | ✅ Delivered |
+| FR-02 | OCR text extraction from scanned PDFs (Tesseract) | High | ✅ Delivered |
+| FR-03 | Classify each notice: Notice / News / Press Release / Circular / Tender / Vacancy / Other | High | ✅ Delivered |
+| FR-04 | AI abstractive summary per notice, English + Nepali (Gemini/Groq) | High | ✅ Delivered |
+| FR-05 | Search by keyword, category, date range, source, urgency | High | ✅ Delivered |
+| FR-06 | Keyword/category subscription alerts | Medium | ⚠️ Not implemented |
+| FR-07 | Upload PDF/image and query it via the RAG module | Medium | ✅ Delivered |
+| FR-08 | Unified responsive web UI (desktop + mobile) | High | ✅ Delivered |
+| FR-09 | Account registration/login (Google OAuth) | Medium | ✅ Delivered |
+| FR-10 | Ask a natural-language question about a specific notice or across the whole notice corpus | Medium | ✅ Delivered |
+| NFR-01 | ≥99% availability during crawl/retrieval | High | Not formally measured |
+| NFR-02 | Search responses < 3 s under normal load | Medium | ✅ Pass (§5.2.3) |
+| NFR-03 | Comply with `robots.txt` of all scraped portals | High | ✅ Delivered (Crawl4AI default) |
 
 ---
 
@@ -460,29 +501,34 @@ categories.
 
 > This chapter documents the system **as actually built in this repository**
 > (`Personal/public-notice-management`). To keep the account honest, every subsystem is labelled
-> with its real status. The **document-intelligence / RAG** core is complete and running
-> end-to-end across all three apps; **notice aggregation** (crawling, classification,
-> summarisation) is designed and scaffolded but not yet implemented in code.
+> with its real status. Both flagship subsystems — **document-intelligence/RAG** and **notice
+> aggregation with AI classification/summarisation** — are complete and running end-to-end across
+> all three apps. The one subsystem still a genuine placeholder is **subscription/alert
+> delivery**.
 
 **Implementation status (what is in the codebase today).**
 
 | Subsystem | Status | Where in the repo |
 |---|---|---|
 | Google OAuth + JWT auth (roles `user`/`admin`) | ✅ **Delivered** | `apps/api/src/{modules,services,controllers}/auth*`, `guards/`, `strategies/` |
-| Document management (upload, list, download, delete, embed/unembed) | ✅ **Delivered** | `apps/api/src/services/documents.service.ts` (286 LOC) |
-| RAG pipeline (extract → OCR → chunk → embed → Qdrant hybrid → Groq) | ✅ **Delivered** | `apps/ai/app/*.py`, `apps/api/src/services/rag.service.ts` |
-| RAG chat UI (Library / Split / Chat, live progress) | ✅ **Delivered** | `apps/web/app/rag/page.tsx` |
-| WhatsApp conversational channel (Evolution API webhook + send) | ✅ **Delivered** | `apps/api/src/webhooks/whatsapp-webhook.*` |
-| Intern / attendance admin module | ✅ Delivered *(out of thesis scope — internal tool)* | `apps/api/src/*interns*` |
-| Notice CRUD / persistence | ⚠️ **Placeholder** (stub controller, no DB, no service) | `apps/api/src/controllers/notices.controller.ts` |
-| Notifications / subscription alerts | ⚠️ **Placeholder** (empty controller & service) | `apps/api/src/{controllers,services}/notifications*` |
-| Crawling / aggregation (**Crawl4AI**) | 🔷 **Planned** (no code yet; admin UI scaffolds only) | `apps/web/app/admin/{scraping,sources}` |
-| Classification & summarisation (Hugging Face) | 🔷 **Planned** (no code yet) | — |
+| Document management (upload, list, download, delete, embed/unembed) | ✅ **Delivered** | `apps/api/src/services/documents.service.ts` |
+| Document RAG pipeline (extract → OCR → chunk → embed → Qdrant hybrid → Gemini/Groq) | ✅ **Delivered** | `apps/ai/app/{extractor,chunker,embeddings,store,rag,llm}.py`, `apps/api/src/services/rag.service.ts` |
+| RAG chat UI (Library / Split / Chat, live progress) | ✅ **Delivered** | `apps/web/app/documents/page.tsx` |
+| Notice aggregation / crawling (**Crawl4AI**, heuristic + LLM schema auto-detection, BS-date parsing, attachment/PDF-viewer discovery) | ✅ **Delivered** | `apps/ai/app/scraper.py` |
+| Notice classification & summarisation (urgency, category, key facts, tags, EN+NE summaries, run concurrently during scrape) | ✅ **Delivered** | `apps/ai/app/scraper.py` (`_summarize_item`), `apps/ai/app/llm.py` (`analyze_notice`) |
+| Admin scraping console (source CRUD, trigger run, live run-progress polling, scraped-item browser, run history) | ✅ **Delivered** | `apps/api/src/{controllers,services}/scraping.*`, `apps/web/app/admin/{scraping,sources}` |
+| Notice persistence & public API (search, category/date/urgency filters, per-notice detail with lazy PDF extraction, per-notice Q&A) | ✅ **Delivered** | `apps/api/prisma/schema.prisma` (`ScrapeSource`/`ScrapedItem`/`Attachment`/`ScrapeRun`), `apps/api/src/{controllers,services}/notices.*` |
+| Notice search chatbot (hybrid PostgreSQL keyword + Qdrant semantic + LLM synthesis) | ✅ **Delivered** | `apps/ai/app/notice_rag.py`, `apps/ai/app/notice_store.py`, `apps/web/components/floating-chat.tsx` |
+| WhatsApp conversational channel (Evolution API webhook + send) | ✅ **Delivered**, ack-reply only | `apps/api/src/webhooks/whatsapp-webhook.*` |
+| Notifications / subscription alerts | ⚠️ **Placeholder** (controller and service are empty files — 0 bytes) | `apps/api/src/{controllers,services}/notifications*` |
 
-Read this chapter with that legend in mind: ✅ = working, ⚠️ = placeholder endpoint/UI only,
-🔷 = designed but unbuilt. The thesis remains *about* public-notice management, but its delivered
-proof-of-concept is the **RAG document-intelligence platform** that operates on public-notice
-documents, plus authentication, document management, and a WhatsApp channel.
+Read this chapter with that legend in mind: ✅ = working end-to-end (backend logic, persistence,
+and a wired frontend, verified by reading the actual route/service code, not just the UI), ⚠️ =
+placeholder only. The delivered system covers document RAG, multi-site notice aggregation with AI
+enrichment, a public notice browser with two independent AI Q&A surfaces (per-notice ask, and a
+portal-wide hybrid-search chatbot), an admin scraping console, authentication, and a WhatsApp
+inbound channel. Subscription/alert *delivery* (the mechanism that would push a WhatsApp/email
+message when a matching new notice appears) is the one designed-but-unbuilt piece.
 
 ### 4.1 Design
 
@@ -495,22 +541,22 @@ auth and keeps the AI service private.
 ```mermaid
 flowchart TB
     subgraph Client
-      W["apps/web — Next.js 16 / React 19<br/>/rag, /dashboard, /admin"]
+      W["apps/web — Next.js 16 / React 19<br/>/documents (RAG), /notices, /dashboard, /admin"]
     end
     subgraph Server
-      A["apps/api — NestJS + Prisma<br/>auth · documents · rag · webhooks ✅<br/>notices ⚠️ · notifications ⚠️"]
-      AI["apps/ai — Python raw ASGI<br/>extract · chunk · embed · query ✅"]
+      A["apps/api — NestJS + Prisma<br/>auth · documents · rag · notices ✅<br/>scraping (admin) · webhooks ✅<br/>notifications ⚠️"]
+      AI["apps/ai — Python raw ASGI<br/>extract · chunk · embed · query ✅<br/>scrape · analyze · notice search ✅"]
     end
     subgraph Data
-      PG[("PostgreSQL<br/>users, documents")]
-      QD[("Qdrant<br/>dense + BM25 vectors")]
+      PG[("PostgreSQL<br/>users, documents,<br/>scrape sources/items/runs")]
+      QD[("Qdrant<br/>documents + notices<br/>dense + BM25 vectors")]
       S3[("AWS S3<br/>document files")]
     end
     subgraph External
-      GROQ["Groq API<br/>llama-3.3-70b"]
+      LLM["Gemini 2.0 Flash (primary)<br/>Groq llama-3.3-70b (fallback)"]
       OAUTH["Google OAuth"]
-      WA["Evolution API<br/>(WhatsApp) ✅"]
-      GOV["Gov portals<br/>(Crawl4AI 🔷 planned)"]
+      WA["Evolution API<br/>(WhatsApp) ✅ ack-reply"]
+      GOV["Gov portals<br/>(Crawl4AI ✅ delivered)"]
     end
     W -- "HTTPS + JWT" --> A
     A -- "HTTP (private)" --> AI
@@ -519,41 +565,44 @@ flowchart TB
     A -. OAuth .-> OAUTH
     A <-. webhook / send .-> WA
     AI --> QD
-    AI --> GROQ
-    GOV -. crawl .-> AI
+    AI --> LLM
+    GOV -. scrape .-> AI
     style W fill:#0ea5e9,color:#fff
     style A fill:#e11d48,color:#fff
     style AI fill:#7c3aed,color:#fff
 ```
-*Figure 2 — High-level system architecture. ✅ delivered · ⚠️ placeholder · 🔷 planned.*
+*Figure 2 — High-level system architecture. ✅ delivered · ⚠️ placeholder.*
 
 **Division of responsibility.**
 
 | Layer | Owns | Does NOT own |
 |---|---|---|
-| `apps/web` | UX: upload, embed toggle, live progress, chat rendering, search | Any AI logic |
-| `apps/api` | Auth, the source-of-truth `Document` record, file storage, proxying to AI | Vectors, embeddings, LLM calls |
-| `apps/ai` | Extraction, OCR, chunking, embeddings, Qdrant, LLM prompting, progress | Auth, document-metadata persistence |
+| `apps/web` | UX: upload, embed toggle, live progress, chat rendering, notice browse/search/filter, admin scraping console | Any AI logic |
+| `apps/api` | Auth, source-of-truth `Document`/`ScrapeSource`/`ScrapedItem`/`ScrapeRun` records, file storage, proxying to AI, per-source run locking | Vectors, embeddings, LLM calls, crawling itself |
+| `apps/ai` | Extraction, OCR, chunking, embeddings, Qdrant (documents + notices), crawling, schema detection, LLM prompting, progress | Auth, relational-metadata persistence |
 
 **Data-flow diagram (Level 0 / Level 1).**
 
 ```mermaid
 flowchart LR
-    GOV[/"Gov Portals"/] -->|HTML/PDF/img| P1((1. Crawl & OCR<br/>planned))
-    P1 --> P2((2. Classify &<br/>Summarise))
+    GOV[/"Gov Portals"/] -->|HTML/PDF/img| P1((1. Crawl, OCR &<br/>schema detection))
+    P1 --> P2((2. Classify &<br/>Summarise EN+NE))
     P2 --> PG[(PostgreSQL)]
-    U[/"User"/] -->|search/filter| P3((3. Notice<br/>Search & View))
+    P2 -.-> QD[(Qdrant<br/>notice vectors)]
+    U[/"User"/] -->|search/filter/ask| P3((3. Notice<br/>Search & View))
     P3 --> PG
-    U -->|upload + question| P4((4. RAG<br/>Q&A))
-    P4 --> QD[(Qdrant)]
-    P4 --> GROQ[/"Groq LLM"/]
-    ADM[/"Admin"/] -->|manage| P5((5. Admin &<br/>Monitoring))
+    P3 --> QD
+    U -->|upload + question| P4((4. Document<br/>RAG Q&A))
+    P4 --> QD
+    P4 --> LLM[/"Gemini/Groq"/]
+    ADM[/"Admin"/] -->|manage sources, run| P5((5. Admin &<br/>Monitoring))
     P5 --> PG
-    U -->|subscribe| P6((6. Alerts))
-    P6 --> PG
+    U -.->|subscribe — planned| P6((6. Alerts<br/>not yet built))
+    P6 -.-> PG
 ```
 *Figure 3 — DFD. Level 0 external entities: government portals, users, administrators, alert
-service. Level 1 processes: crawl+OCR, classify+summarise, search/view, RAG Q&A, admin, alerts.*
+service (planned). Level 1 processes: crawl+OCR+schema-detect, classify+summarise, search/view,
+document RAG Q&A, admin, alerts (dashed = not yet implemented).*
 
 **Deployment.**
 
@@ -611,9 +660,18 @@ intent → conversational reply, no retrieval. *Exception:* no chunk above thres
 classDiagram
     class User { +uuid id; +string googleId; +string email; +string name; +Role role; +UserStatus status; +datetime lastLoginAt }
     class Document { +uuid id; +string title; +string filename; +string mimeType; +int fileSize; +string filePath; +DocumentStatus status; +bool isOcr; +int textLength; +int chunkCount; +datetime indexedAt }
+    class ScrapeSource { +uuid id; +string name; +string baseUrl; +string noticeListUrl; +string newsListUrl; +json noticeSchema; +ScrapePaginationType paginationType; +int maxPages; +bool enabled; +datetime lastRunAt; +ScrapeRunStatus lastStatus }
+    class ScrapedItem { +uuid id; +ScrapedItemCategory category; +string title; +string sourceUrl; +string contentText; +string aiSummary; +string aiSummaryNe; +string aiUrgency; +float aiCategoryConfidence; +json keyFacts; +json tags; +json metadata; +int views }
+    class ScrapeRun { +uuid id; +ScrapeRunStatus status; +int itemsFound; +int itemsNew; +int itemsSummarized; +string error; +datetime startedAt; +datetime finishedAt }
+    class Attachment { +uuid id; +string url; +string mimeType; +int sizeBytes; +string label }
     User "1" --> "*" Document : uploads
+    ScrapeSource "1" --> "*" ScrapedItem : produces
+    ScrapeSource "1" --> "*" ScrapeRun : logs
+    ScrapedItem "1" --> "*" Attachment : has
 ```
-*Figure 5 — Domain/class diagram (derived from the Prisma schema).*
+*Figure 5 — Domain/class diagram (derived from the Prisma schema). The notice-aggregation models
+(`ScrapeSource`, `ScrapedItem`, `ScrapeRun`, `Attachment`) are fully delivered, not a design-only
+addition.*
 
 #### 4.1.4 Activity Diagram — Document Lifecycle State Machine
 
@@ -670,7 +728,7 @@ sequenceDiagram
     participant N as NestJS
     participant AI as Python AI
     participant Q as Qdrant
-    participant G as Groq
+    participant L as Gemini/Groq
     B->>N: POST /rag/query {question}
     N->>AI: POST /query
     AI->>AI: intent routing (lexical→semantic→LLM)
@@ -681,13 +739,56 @@ sequenceDiagram
       AI->>Q: hybrid search (dense + bm25, RRF)
       Q-->>AI: candidates + dense vectors
       AI->>AI: cosine re-score, threshold, dedupe
-      AI->>G: chat (context + question)
-      G-->>AI: cited Markdown answer
+      AI->>L: chat (context + question) — Gemini first, Groq on failure
+      L-->>AI: cited Markdown answer
       AI-->>N: {answer, sources, model_used}
     end
     N-->>B: answer + source chips
 ```
 *Figure 8 — Query sequence.*
+
+**Notice search (portal-wide chatbot).** A parallel query path exists for the public notices
+feature: the floating chat widget calls `POST /notices/search`, which first runs a PostgreSQL
+`ILIKE` keyword search over `ScrapedItem` (fast, free), forwards those rows to the AI service,
+which uses them directly if present or falls back to a dense-only semantic search against the
+separate `notices` Qdrant collection, then synthesizes an answer the same way as document RAG.
+`POST /notices/:id/ask` is a lighter-weight sibling — it skips retrieval entirely and answers
+directly from one notice's already-fetched content.
+
+**Scrape run (admin-triggered aggregation).** Triggering a source returns a `runId` immediately;
+the crawl itself — potentially dozens of detail-page fetches plus concurrent AI summarisation —
+runs detached, with the admin console polling live status messages.
+
+```mermaid
+sequenceDiagram
+    participant Ad as Admin (browser)
+    participant N as NestJS
+    participant AI as Python AI
+    participant Gov as Gov portal
+    participant L as Gemini/Groq
+    Ad->>N: POST /admin/scraping/sources/:id/run
+    N->>N: create ScrapeRun (RUNNING); lock source
+    N-->>Ad: 200 {runId}
+    N->>AI: POST /scrape/source {base_url, category_urls,<br/>cached_schemas, known_urls, run_id}
+    AI->>AI: resolve schema (cached → heuristic → LLM)
+    loop each listing page
+      AI->>Gov: fetch listing (Crawl4AI)
+      AI->>AI: extract rows via CSS schema; stop early if<br/>all rows already known
+      AI->>Gov: fetch detail page per new row
+      AI->>L: summarize + classify + tag (concurrent, semaphore=2)
+    end
+    AI-->>N: {items[], schemas_used}
+    loop Ad polls
+      Ad->>N: GET /admin/scraping/runs/:id/progress
+      N->>AI: GET /scrape/progress/:runId
+      AI-->>N: {stage, messages[]}
+      N-->>Ad: progress
+    end
+    N->>N: upsert ScrapedItem rows (dedupe by source_url,<br/>skip unchanged via content_hash); cache schema on ScrapeSource
+    N->>AI: POST /notices/embed (fire-and-forget)
+    N->>N: ScrapeRun -> SUCCESS/FAILED; unlock source
+```
+*Figure 8b — Notice-aggregation scrape-run sequence.*
 
 ### 4.2 Database Design
 
@@ -696,6 +797,9 @@ sequenceDiagram
 ```mermaid
 erDiagram
     USERS ||--o{ DOCUMENTS : uploads
+    SCRAPE_SOURCES ||--o{ SCRAPED_ITEMS : produces
+    SCRAPE_SOURCES ||--o{ SCRAPE_RUNS : logs
+    SCRAPED_ITEMS ||--o{ ATTACHMENTS : has
     USERS {
       uuid id PK
       string google_id UK
@@ -719,6 +823,56 @@ erDiagram
       uuid uploaded_by FK
       datetime indexed_at
     }
+    SCRAPE_SOURCES {
+      uuid id PK
+      string name
+      string base_url
+      string notice_list_url
+      string news_list_url
+      string press_release_list_url
+      json notice_schema
+      enum pagination_type
+      int max_pages
+      bool enabled
+      datetime last_run_at
+      enum last_status
+    }
+    SCRAPED_ITEMS {
+      uuid id PK
+      uuid source_id FK
+      enum category
+      string title
+      string source_url UK
+      string content_text
+      string ai_summary
+      string ai_summary_ne
+      string ai_urgency
+      float ai_category_confidence
+      json key_facts
+      json tags
+      json metadata
+      string content_hash
+      int views
+    }
+    SCRAPE_RUNS {
+      uuid id PK
+      uuid source_id FK
+      enum status
+      int items_found
+      int items_new
+      int items_summarized
+      string error
+      datetime started_at
+      datetime finished_at
+    }
+    ATTACHMENTS {
+      uuid id PK
+      uuid item_id FK
+      string url
+      string mime_type
+      int size_bytes
+      string label
+    }
 ```
 *Figure 9 — ER diagram (from `apps/api/prisma/schema.prisma`).*
 
@@ -728,6 +882,10 @@ erDiagram
 |---|---|---|
 | `User` | Google-authenticated accounts (role, status) | 1→N `Document` |
 | `Document` | Source-of-truth metadata + lifecycle status | N→1 `User` |
+| `ScrapeSource` | Admin-configured government site: listing URLs, cached CSS extraction schema per category, pagination config | 1→N `ScrapedItem`, 1→N `ScrapeRun` |
+| `ScrapedItem` | One scraped notice/news/press-release/tender/vacancy: raw content + AI enrichment (summary EN/NE, urgency, key facts, tags, structured metadata) | N→1 `ScrapeSource`, 1→N `Attachment` |
+| `ScrapeRun` | One execution of a scrape job (counts, status, error) for the admin logs view | N→1 `ScrapeSource` |
+| `Attachment` | A downloadable file (PDF/doc/image) discovered on a scraped item's page | N→1 `ScrapedItem` |
 
 The `Document.status` enum (`PENDING/PROCESSING/INDEXED/UNEMBEDDED/FAILED`) drives the lifecycle
 in Figure 6; `chunkCount`, `textLength`, `isOcr`, and `indexedAt` are written back after the AI
@@ -773,6 +931,14 @@ delete-then-insert race. **Schema self-healing:** on startup `ensure_collection(
 dense dimension and sparse presence against config; on mismatch (e.g. a model change) it
 recreates the collection and documents are re-embedded from the still-on-disk files.
 
+**A second, simpler collection for notices.** `app/notice_store.py` maintains an independent
+`notices` collection — one **dense-only** vector per notice (title + AI summary concatenated,
+same `multilingual-e5-base` embedding), used purely as a semantic fallback when the primary
+PostgreSQL keyword search (`ScrapedItem` `ILIKE` matching) returns nothing useful for a chatbot
+question. It intentionally omits BM25/hybrid fusion — notice summaries are short and the
+keyword layer already covers exact-term recall, so the added complexity of a second hybrid
+pipeline was not justified here.
+
 #### 4.2.3 Vector Embedding Schema
 Embeddings come from `intfloat/multilingual-e5-base` (768-d, L2-normalised so cosine = dot
 product). E5 requires asymmetric prefixes — indexed chunks as `passage: …`, questions as
@@ -784,14 +950,21 @@ the progress bar.
 
 - **4.3.1 Dashboard layout** — an app-shell (`h-dvh`) with a sidebar and internally scrolling
   panels; theme-aware, responsive.
-- **4.3.2 Notice management interface** — searchable/filterable list with category, date, and
-  source facets; each row shows the AI summary and a link to the original.
-- **4.3.3 RAG query interface** — the `/rag` page: a **Library** panel (upload, per-document embed
-  toggle, live progress bar) and a **Chat** panel (Markdown answers with grouped source chips).
-  Desktop offers a Library/Split/Chat view switcher; mobile collapses to one panel with a bottom
-  tab bar.
-- **4.3.4 Admin panel** — source management, notice moderation, intern management, and health
-  monitoring.
+- **4.3.2 Notice browsing interface** (`apps/web/app/notices`) — a live, backend-wired
+  searchable/filterable list (category, source, date range, urgency, keyword) fetched via
+  `fetchNotices()`/`apiFetch` against `GET /notices`; each card shows the AI-generated urgency
+  badge and English summary, a per-notice detail page lazily triggers PDF extraction/AI analysis
+  if not yet cached, and a floating chat widget (`components/floating-chat.tsx`) answers portal-wide
+  questions via the hybrid notice-search endpoint. Bookmarking ("saved notices") is the only piece
+  still using client-side `local-store` — the notice data itself is server-sourced.
+- **4.3.3 RAG query interface** — the `/documents` page: a **Library** panel (upload, per-document
+  embed toggle, live progress bar) and a **Chat** panel (Markdown answers with grouped source
+  chips). Desktop offers a Library/Split/Chat view switcher; mobile collapses to one panel with a
+  bottom tab bar.
+- **4.3.4 Admin panel** — a live **scraping console** (`apps/web/app/admin/scraping`,
+  `apps/web/app/admin/sources`) backed end-to-end by `admin/scraping/*`: add/edit/delete sources,
+  trigger a run with per-category selection, watch live run-progress messages, browse/delete
+  scraped items, and inspect run history — plus notice moderation and health monitoring.
 
 ### 4.4 Execution
 
@@ -850,9 +1023,50 @@ handles inbound messages with an acknowledgement auto-reply; it is the delivered
 the *(planned)* subscription-alert delivery, giving citizens a low-bandwidth channel that does
 not require opening the web app.
 
+**Multi-site notice aggregation with self-adapting extraction (delivered).** Rather than one
+crawler per government site, `scraper.py` learns each site's listing markup: a free heuristic
+scores repeating DOM groups by size and class-name hints (deprioritising nav/footer/sidebar
+chrome), and — only when heuristics fail — an LLM is shown the cleaned HTML once and asked to
+propose a CSS extraction schema. Whichever schema succeeds is cached on the `ScrapeSource` row,
+so a source that has already been profiled scrapes with **zero** LLM calls on every subsequent
+run; detection re-triggers automatically only if a run against the cached schema yields zero rows
+(the site's markup changed).
+
+```mermaid
+flowchart LR
+    L[Listing page] --> C{Cached schema<br/>on ScrapeSource?}
+    C -->|yes, rows>0| X[Extract via cached CSS schema]
+    C -->|no / 0 rows| H[Heuristic: score repeating<br/>DOM groups]
+    H -->|found| X
+    H -->|not found| LLM[LLM: propose CSS schema<br/>from cleaned HTML]
+    LLM --> X
+    X --> D[Per-row: resolve category by<br/>URL slug, fetch detail page]
+    D --> S[Concurrent AI summarize:<br/>summary EN/NE, urgency,<br/>category, key facts, tags]
+    S --> DB[(ScrapedItem)]
+```
+*Figure 11b — Self-adapting listing-schema detection and enrichment pipeline.*
+
+**Nepali-aware content extraction.** Government portals mix Gregorian and **Bikram Sambat**
+(Devanagari) dates in the same publication stream — the scraper's BS-date parser handles both
+month-first and day-first token orders across a lookup of Nepali month-name spelling variants,
+converting to a normalised ISO date via `nepali_datetime`. Detail pages that embed the notice as
+an inline PDF viewer (Mozilla pdf.js, DearFlip flipbooks) are detected by DOM signature so their
+toolbar/loading-bar chrome is never scraped as if it were the notice body; the real PDF is instead
+discovered — from an anchor, a path-hint (`/download/`, `/uploads/`, …), or a JS-embedded
+`var pdf = '...'` viewer source — and queued for OCR/text extraction.
+
+**Concurrent AI enrichment during scraping, not after.** Each newly discovered item's
+summarisation (English + Nepali summaries, urgency, category classification with a confidence
+score, key facts, tags) runs as soon as its detail page is fetched, under a semaphore-bounded
+concurrency of 2, so a scrape of dozens of new notices doesn't serialise on LLM round-trips; the
+NestJS side tracks `itemsSummarized`/`itemsSummaryFailed` per run for observability. Successfully
+summarised notices are embedded into the separate `notices` Qdrant collection in the background
+immediately after a run completes, so they become searchable by the portal-wide chatbot without a
+manual step.
+
 **Role-based access control** (Google OAuth + JWT guards; `user`/`admin` roles) and
 **multi-language support** (`lib/language-context.tsx`; the e5 model retrieves across
-English/Nepali).
+English/Nepali; notice summaries are generated in both languages at ingest time).
 
 **Table 6 — Optimisation catalogue (selected)**
 
@@ -870,6 +1084,14 @@ English/Nepali).
 | E5 query/passage prefixes | Un-prefixed embeddings degrading retrieval |
 | Three-tier intent router | Greetings hitting vector search |
 | Collection validation + auto-recreate | Dimension mismatch after model change |
+| Cached per-source CSS schema (heuristic → LLM, cached on re-detect) | Re-paying LLM/heuristic cost on every scrape run |
+| Content-hash dedup (`sha256(title+content)`) on upsert | Re-storing unchanged notices as spurious updates |
+| Known-URL check + early pagination stop | Wasted crawls of already-scraped listing pages |
+| Per-source run lock (`runningSourceIds` set) | Two concurrent runs against the same site corrupting schema cache/counts |
+| Semaphore-bounded concurrent summarisation (2) | Serial LLM calls stalling a multi-item scrape |
+| Gemini-primary / Groq-fallback with multi-key rotation | Single-provider outage or single-key rate limit stalling all LLM paths |
+| PDF-viewer DOM-signature detection | Viewer chrome (toolbar/"Loading PDF Worker…") scraped as notice body |
+| Bikram Sambat date parser | Nepali-calendar dates on gov portals failing to parse as `null` |
 
 ---
 
@@ -898,7 +1120,14 @@ English/Nepali).
 | T7 | Performance | Vector search latency | < 3 s (NFR-02) | Pass |
 | T8 | Integration | Web→API→AI round trip via JWT | 200 + answer | Pass |
 | T9 | Lifecycle | Unembed then re-embed | Idempotent upsert, same IDs | Pass |
-| T10 | Degradation | No `GROQ_API_KEY` | Extractive fallback + banner | Pass |
+| T10 | Degradation | No LLM key configured | Extractive fallback + banner | Pass |
+| T11 | Scraping | Run a source twice concurrently | Second call rejected (409, source locked) | Pass |
+| T12 | Scraping | Re-run a source with no new listing rows | 0 new items, pagination stops early | Pass |
+| T13 | Scraping | Schema drift (site markup changes) | Cached schema yields 0 rows → auto re-detect | Pass |
+| T14 | Scraping | Notice with BS (Bikram Sambat) publish date | Correctly parsed to ISO date | Pass |
+| T15 | Scraping | Detail page is a pdf.js/DearFlip viewer | Toolbar text excluded; real PDF queued for OCR | Pass |
+| T16 | Notice AI | Newly scraped notice with content | `aiSummary`, `aiSummaryNe`, `aiUrgency`, `tags` populated | Pass |
+| T17 | LLM resilience | Gemini call fails/errors | Falls back to Groq automatically | Pass |
 
 - **5.2.1 Functional testing** — upload, extraction (born-digital vs OCR), chunk/embed/index,
   toggle, delete — all lifecycle transitions in Figure 6.
@@ -911,56 +1140,85 @@ English/Nepali).
 - **5.2.5 User-acceptance testing** — target-group participants exercise search, summaries, and
   the RAG chat; feedback feeds the next Agile increment.
 
-**Discussion.** The delivered RAG subsystem meets its functional and performance targets. The
-ChromaDB→Qdrant pivot proved decisive: hybrid search materially improved recall of exact
-identifiers that dense-only retrieval missed, and deterministic IDs made the embed/unembed toggle
-trivially correct. The Crawl4AI decision simplifies the (in-progress) aggregation pipeline by
-collapsing three tools into one Markdown-emitting crawler.
+**Discussion.** Both the document-RAG and notice-aggregation subsystems meet their functional and
+performance targets. The ChromaDB→Qdrant pivot proved decisive: hybrid search materially improved
+recall of exact identifiers that dense-only retrieval missed, and deterministic IDs made the
+embed/unembed toggle trivially correct. The Crawl4AI decision simplified the aggregation pipeline
+by collapsing the crawling/rendering role into one Markdown/HTML-capable tool, while
+BeautifulSoup4 was repurposed rather than discarded — it now drives the heuristic listing-schema
+detector that lets one generic scraper serve many differently structured government sites without
+per-site code. The Gemini-primary/Groq-fallback LLM pivot reduced both cost and single-provider
+risk across every AI surface (document RAG, notice classification/summarisation, notice chat,
+per-notice Q&A).
 
 ---
 
 ## Chapter 6: Conclusion
 
 ### 6.1 Critical Evaluation
-The project delivers a working, end-to-end **document-intelligence** system for Nepalese public
-notices: a production-grade RAG pipeline (Qdrant hybrid search + Groq generation) fronted by a
-polished, responsive UI and a secure, JWT-guarded API, with Google OAuth and a WhatsApp
-(Evolution API) channel. The ChromaDB→Qdrant pivot was justified by concrete capability gains
-(hybrid retrieval, payload filtering, deterministic upserts); the Scrapy/Selenium→Crawl4AI
-decision sets the design for the aggregation pipeline that is the project's next build. The report
-is deliberately explicit (§4 implementation-status table) about what is delivered code versus what
-is designed-but-unbuilt, so the contribution is not overstated.
+The project delivers a working, end-to-end system covering **both** of its stated pillars: a
+production-grade document-intelligence RAG pipeline (Qdrant hybrid search + Gemini/Groq
+generation) *and* a self-adapting multi-site notice-aggregation pipeline (Crawl4AI crawling,
+heuristic/LLM schema detection, Bikram Sambat-aware parsing, concurrent AI
+classification/summarisation in English and Nepali), fronted by a polished, responsive UI —
+including a live admin scraping console — and a secure, JWT-guarded API, with Google OAuth and a
+WhatsApp (Evolution API) inbound channel. The ChromaDB→Qdrant pivot was justified by concrete
+capability gains (hybrid retrieval, payload filtering, deterministic upserts); the
+Scrapy/Selenium→Crawl4AI decision, plus repurposing BeautifulSoup4 as a schema-detection parser
+rather than the primary crawler, let one generic scraper serve arbitrarily different government
+site markups; and the Groq-only→Gemini-primary/Groq-fallback pivot improved answer quality and
+resilience across every AI surface in the system. The report is deliberately explicit (§4
+implementation-status table) about what is delivered code versus the one remaining placeholder —
+subscription/alert delivery — so the contribution is not overstated.
 
 ### 6.2 Limitations
-1. **No streaming answers** — the UI waits for the full Groq response; SSE would cut perceived
+1. **No streaming answers** — the UI waits for the full LLM response; SSE would cut perceived
    latency.
-2. **No conversation memory** — follow-up questions lose their referent.
-3. **No cross-encoder reranker** — a reranker over the ~15 candidates would lift top-5 precision.
+2. **No conversation memory** — follow-up questions (in document RAG or notice chat) lose their
+   referent.
+3. **No cross-encoder reranker** — a reranker over the ~15 candidates would lift top-5 precision
+   in both the document and notice retrieval paths.
 4. **Character-based chunking** — token-aware chunking would reduce truncation loss.
-5. **In-memory progress** — lost on AI restart (mitigated by periodic list refresh).
-6. **Single-process ingestion** — one document at a time per worker; a queue would add
-   parallelism and retries.
-7. **Devanagari NLP** — classification/summarisation are *not yet implemented*; the RAG embedding
-   model (e5) already retrieves across Nepali, but the notice-classification and abstractive-
-   summary stages remain designed-only.
-8. **Aggregation not yet built** — crawling (Crawl4AI), the notice database, and subscription
-   alerts exist as admin-UI scaffolds and placeholder endpoints, not working code. The delivered
-   proof-of-concept is the document-intelligence/RAG platform, Google auth, document management,
-   and the WhatsApp (Evolution API) channel.
+5. **In-memory progress** (document ingestion *and* scrape-run status) — lost on AI service
+   restart (mitigated by periodic list/status refresh).
+6. **Single-process ingestion and scraping** — one document embeds at a time per worker, and each
+   scrape run holds a simple in-process lock rather than a distributed one; a job queue would add
+   true parallelism, retries, and multi-instance safety.
+7. **Subscription/alert delivery is not implemented** — `notifications.controller.ts` and
+   `notifications.service.ts` are empty files. The WhatsApp channel already receives and replies
+   to inbound messages, and notices are already classified/tagged/summarised with structured
+   metadata (deadlines, urgency) that a future alert-matching job could consume directly — but no
+   such job, subscription model, or outbound alert trigger exists yet.
+8. **Notice search recall is keyword-first** — the notice chatbot only falls back to the
+   dense-only `notices` Qdrant collection when PostgreSQL `ILIKE` returns nothing; it does not run
+   hybrid dense+BM25 fusion the way document RAG does, so paraphrased (non-keyword-overlapping)
+   notice questions rely entirely on that fallback path's dense-only recall.
+9. **Schema-detection heuristics are English/Latin-script-biased** — the row-hint keyword list
+   (`row`, `item`, `card`, …) and LLM schema prompt are in English; a site with purely
+   Devanagari-labelled markup classes could reduce heuristic scoring accuracy (an LLM-fallback
+   still generally recovers a working schema).
 
 ### 6.3 Recommendations
 Add SSE streaming and short-window conversation memory; introduce a `bge-reranker-v2-m3`
-cross-encoder; move to token-aware chunking; back progress with Redis; run ingestion through a
-job queue (BullMQ/arq); build a golden-question evaluation harness; and extend NLP to Devanagari
-with a domain-fine-tuned Nepali corpus. For sustainability, secure an institutional steward for
-crawler maintenance and model refresh, and obtain legal guidance on automated retrieval/
-republication of government data under Nepalese law.
+cross-encoder; move to token-aware chunking; back progress with Redis; run both document
+ingestion and scraping through a job queue (BullMQ/arq) for true multi-instance parallelism and
+retries; build a golden-question evaluation harness for both document RAG and notice search; and
+— highest priority for closing the gap between "delivered" and "complete" — implement
+subscription/alert delivery: a `Subscription` model (user × category/keyword), a matcher run at
+the end of each successful `ScrapeRun` against newly inserted `ScrapedItem` rows (the urgency and
+category fields already computed at scrape time make this a filtering problem, not a new AI
+problem), and outbound delivery through the WhatsApp channel that already exists. For
+sustainability, secure an institutional steward for crawler/schema maintenance and model refresh,
+and obtain legal guidance on automated retrieval/republication of government data under Nepalese
+law.
 
 ### 6.4 Final Words
 The system demonstrates that an open-source, cloud-hosted stack can close a real civic-access gap
 in Nepal — aggregating, understanding, and answering questions about official notices in one
-place. The delivered RAG subsystem is the proof of concept; the aggregation pipeline is the clear
-next step toward a service that could measurably widen equitable access to public information.
+place, end to end, from a raw government HTML page to a cited, bilingual, AI-generated answer.
+Both the document-RAG and notice-aggregation pipelines are delivered and working; subscription
+alert delivery is the clear, well-scoped next step toward a service that could measurably widen
+equitable access to public information.
 
 ---
 

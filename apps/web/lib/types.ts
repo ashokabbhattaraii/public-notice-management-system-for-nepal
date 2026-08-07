@@ -126,7 +126,19 @@ export interface ScrapingSource {
 
 // ─── Live scraping (crawl4ai pipeline, dynamic multi-source) ─────────────────
 
-export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE" | "CIRCULAR" | "TENDER" | "VACANCY" | "OTHER"
+export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE" | "CIRCULAR" | "TENDER" | "VACANCY" | "JOB" | "INTERNSHIP" | "OTHER"
+
+export const CATEGORY_ORDER: ScrapedItemCategory[] = [
+  "NOTICE",
+  "JOB",
+  "INTERNSHIP",
+  "VACANCY",
+  "CIRCULAR",
+  "TENDER",
+  "NEWS",
+  "PRESS_RELEASE",
+  "OTHER",
+]
 
 const CATEGORY_LABELS: Record<ScrapedItemCategory, string> = {
   NOTICE: "Notice",
@@ -135,10 +147,88 @@ const CATEGORY_LABELS: Record<ScrapedItemCategory, string> = {
   CIRCULAR: "Circular",
   TENDER: "Tender",
   VACANCY: "Vacancy",
+  JOB: "Job",
+  INTERNSHIP: "Internship",
   OTHER: "Other",
 }
 export function categoryLabel(cat: ScrapedItemCategory): string {
   return CATEGORY_LABELS[cat] ?? cat.replace(/_/g, " ").toLowerCase()
+}
+
+// Canonical tags — the controlled vocabulary LLM should prefer. Used for
+// UI filter chips and prompt guidance. Update when new themes emerge.
+export const CANONICAL_TAGS: string[] = [
+  "education",
+  "health",
+  "employment",
+  "procurement",
+  "infrastructure",
+  "environment",
+  "finance",
+  "legal",
+  "transport",
+  "technology",
+  "agriculture",
+  "tourism",
+  "culture",
+  "disaster",
+  "governance",
+  "social welfare",
+  "youth",
+  "women",
+  "senior citizens",
+  "disability",
+  "migration",
+  "foreign affairs",
+  "defense",
+  "energy",
+  "water",
+  "sanitation",
+  "housing",
+  "urban development",
+  "rural development",
+  "local government",
+  "federal affairs",
+  "constitution",
+  "election",
+  "budget",
+  "taxation",
+  "trade",
+  "industry",
+  "science",
+  "research",
+  "innovation",
+  "digital",
+  "cybersecurity",
+  "climate",
+  "biodiversity",
+  "forestry",
+  "mining",
+  "labor",
+  "skill development",
+  "vocational training",
+  "scholarship",
+  "exam",
+  "result",
+  "admission",
+  "recruitment",
+  "promotion",
+  "transfer",
+  "retirement",
+  "pension",
+  "insurance",
+  "banking",
+  "microfinance",
+  "cooperatives",
+  "ngo",
+  "civil society",
+  "human rights",
+  "gender",
+  "child protection",
+]
+
+export function normalizeTag(tag: string): string {
+  return tag.toLowerCase().trim().replace(/[^\w\s-]/g, "")
 }
 
 export interface ScrapedItem {
@@ -199,6 +289,7 @@ export interface ScrapeRun {
   itemsNew: number
   itemsUpdated: number
   itemsSkipped: number
+  itemsSummarized: number
   error: string | null
   startedAt: string
   finishedAt: string | null
@@ -217,6 +308,12 @@ export interface ScrapeSource {
   paginationParam: string
   startPage: number
   maxPages: number
+  // Automatic polling: seconds between scheduler probes of this source.
+  pollIntervalSeconds: number
+  // Cached sitemap fast-path URL (null = no usable sitemap, HTML-poll only).
+  sitemapUrl: string | null
+  // When sitemap detection was last attempted (attempted once, cached forever).
+  sitemapCheckedAt: string | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -225,11 +322,92 @@ export interface ScrapeSource {
   itemCount: number
 }
 
+/** Result of a cheap sitemap check (POST /admin/scraping/sources/:id/check). */
+export interface SitemapCheckResult {
+  sitemap_url: string | null
+  checked_at: string
+  new_urls: string[]
+  total_locs: number
+}
+
+/** Effective scheduler configuration + last tick (GET /admin/scraping/scheduler). */
+export interface SchedulerStatus {
+  cron: string
+  concurrency: number
+  staleRunTimeoutSeconds: number
+  minPollIntervalSeconds: number
+  ticking: boolean
+  // Global automatic-scraping on/off switch (persisted; manual runs unaffected).
+  autoScraping: boolean
+  lastTickAt: string | null
+  lastDueCount: number
+}
+
+/** Result of a bulk "run all sources" trigger. */
+export interface RunAllResult {
+  scheduled: number
+  skipped: number
+  results: {
+    sourceId: string
+    sourceName: string
+    runId: string | null
+    status: "scheduled" | "already-running" | "disabled"
+  }[]
+}
+
 export interface ScrapeRunProgress {
   run_id: string
   stage: "running" | "done" | "failed" | null
   messages: { at: number; text: string }[]
   error: string | null
+}
+
+// ── Admin settings ─────────────────────────────────────────────────────
+
+export type SettingType = "boolean" | "number" | "cron" | "text" | "textarea" | "select"
+
+export interface SettingOption {
+  value: string
+  label: string
+}
+
+export interface SettingField {
+  key: string
+  group: string
+  label: string
+  description: string
+  type: SettingType
+  value: string
+  default: string
+  overridden: boolean
+  unit?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: SettingOption[]
+  placeholder?: string
+}
+
+export interface SettingGroup {
+  id: string
+  label: string
+  description: string
+  changed: number
+}
+
+export interface SettingsView {
+  groups: SettingGroup[]
+  settings: SettingField[]
+}
+
+export interface SettingApplyResult extends SettingsView {
+  applied: { key: string; value: string }[]
+  errors: { key: string; message: string }[]
+  runtime?: { scheduler: SchedulerStatus }
+}
+
+export interface PublicSiteSettings {
+  site: { title: string; description: string }
 }
 
 export interface Activity {

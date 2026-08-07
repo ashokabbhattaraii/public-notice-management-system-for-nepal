@@ -66,6 +66,13 @@ Each app has a `.env.example` showing required variables:
 - `apps/api/.env`
 - `apps/ai/.env`
 
+### Observability & performance knobs (documented in each `.env.example`)
+
+- **Logging**: both apps emit structured JSON by default. API: `LOG_LEVEL`, `LOG_FORMAT` (json|pretty), `DB_LOG_QUERIES`, `DB_SLOW_QUERY_MS`. AI: `LOG_FORMAT` (json|pretty). Correlation IDs flow end-to-end via `x-request-id` (NestJS `CorrelationMiddleware` → axios interceptor → AI service's `set_request_id`).
+- **DB tuning (API)**: `DATABASE_POOL_SIZE`, `DATABASE_POOL_TIMEOUT_MS` — applied to the DATABASE_URL at startup; a UTC-session param is forced so raw timezone-aware queries don't drift by the server offset.
+- **Read-path caching (API)**: `NOTICES_LIST_CACHE_MS` (public notices list, default 10s), `NOTICES_META_CACHE_MS` (category counts / source dropdowns, default 60s) via `TtlCache` in `apps/api/src/common/cache/ttl-cache.ts`.
+- **Scraping (API)**: `SCRAPING_CONCURRENCY`, `SCRAPING_INTERVAL_CRON`, `SCRAPING_STALE_TIMEOUT_SECONDS`, `SCRAPING_MIN_POLL_INTERVAL_SECONDS` — see `docs/scraping-pipeline-crawl4ai.md` §6.6 for the sitemap direct-URL crawl path.
+
 ## Key Patterns
 
 - Package manager: **pnpm** (v10.18+) with workspace protocol

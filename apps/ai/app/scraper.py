@@ -27,6 +27,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urljoin, urlparse
+from xml.etree import ElementTree as ET
 
 import httpx
 import nepali_datetime
@@ -728,8 +729,11 @@ _CATEGORY_SLUG_MAP = {
     "bid": "TENDER",
     "boli": "TENDER",
     "vacancy": "VACANCY",
-    "job": "VACANCY",
-    "career": "VACANCY",
+    "job": "JOB",
+    "career": "JOB",
+    "intern": "INTERNSHIP",
+    "internship": "INTERNSHIP",
+    "trainee": "INTERNSHIP",
 }
 
 
@@ -749,6 +753,28 @@ def _infer_category_from_slug(url: str) -> tuple[str | None, str | None]:
             if key in clean and len(clean) < 30:
                 return cat, segment
     return None, None
+
+
+def _sitemap_section(urls: list[str]) -> str:
+    """The most common leading path segment across sitemap URLs (e.g.
+    /content/), used as a category-inference fallback when individual URLs
+    carry no category slug. Returns "" when URLs disagree or are empty."""
+    from collections import Counter
+
+    counters: dict[int, Counter] = {}
+    for url in urls:
+        try:
+            segments = [s for s in urlparse(url).path.lower().split("/") if s]
+        except Exception:
+            continue
+        if not segments:
+            continue
+        depth = 1 if len(segments) == 1 else 2
+        counters.setdefault(depth, Counter()).update(["/".join(segments[:depth])])
+    for depth in sorted(counters, reverse=True):
+        section, _ = counters[depth].most_common(1)[0]
+        return f"https://x/{section}/"
+    return ""
 
 
 # --- metadata extraction ---
@@ -796,7 +822,7 @@ _SUMMARIZE_PROMPT = """You analyze a Nepalese government notice/news item and pr
   "summary": "<2-3 sentence plain-language summary in English>",
   "summary_ne": "<2-3 sentence summary in Nepali (Devanagari script)>",
   "urgency": "<LOW|MEDIUM|HIGH — HIGH for exam deadlines, visa deadlines, tenders with close dates, vacancy deadlines; MEDIUM for important policy/regulatory changes; LOW for routine press releases, general news>",
-  "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, OTHER — classify based on content>",
+  "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, JOB, INTERNSHIP, OTHER — JOB for job openings/career postings; INTERNSHIP for internship/trainee programs; VACANCY for generic openings with no clear job-vs-intern nature; classify based on content>",
   "category_confidence": <0.0-1.0 float>,
   "key_facts": ["<fact 1>", "<fact 2>", ...],
   "tags": ["<tag1>", "<tag2>", ...]
@@ -915,40 +941,340 @@ def _paginated_url(listing_url: str, page_index: int, config: PaginationConfig) 
     return f"{listing_url}{separator}{config.param}={page_number}"
 
 
-_SUMMARIZE_SEMAPHORE: asyncio.Semaphore | None = None
-_SUMMARIZE_CONCURRENCY = 2
+_SUMMARIZE_CONCURRENCY = config.SUMMARIZE_CONCURRENCY
 _GROQ_KEY_INDEX = 0
 
 
-def _get_summarize_semaphore() -> asyncio.Semaphore:
-    global _SUMMARIZE_SEMAPHORE
-    if _SUMMARIZE_SEMAPHORE is None:
-        _SUMMARIZE_SEMAPHORE = asyncio.Semaphore(_SUMMARIZE_CONCURRENCY)
-    return _SUMMARIZE_SEMAPHORE
+# --- sitemap fast-path ---
+#
+# Sites that expose a real XML sitemap can be polled with a single cheap GET
+# (no crawl4ai/Playwright) instead of a full listing crawl every cycle. The
+# winning sitemap URL is detected once and cached by the API (mirroring how
+# noticeSchema/newsSchema cache CSS extraction patterns), so every check after
+# the first is pure HTTP.
+
+# A usable sitemap must expose at least this many per-article URLs. This is
+# the guard against "fake" 2-URL sitemaps (observed on ku.edu.np) — a real
+# articles sitemap has dozens or hundreds of entries.
+_MIN_SITEMAP_LOCS = 10
+
+# ...and at least this fraction of same-origin entries must look like article
+# detail pages (numeric id segments or content/notice/news/... path hints).
+# KU's sitemap.xml passes the count check but is ~93% subdomain landing
+# pages, which would trigger a full crawl on every poll — a fast-path that
+# never saves anything isn't a fast-path.
+_MIN_SITEMAP_ARTICLE_RATIO = 0.5
+
+# Substrings that mark a sitemap as article-bearing vs taxonomy/navigation.
+# When a <sitemapindex> (or several robots.txt Sitemap: directives) lists
+# multiple children, the highest-scoring article sitemap wins.
+_SITEMAP_PREFERRED_HINTS = ("news", "post", "content", "article", "notice", "press")
+_SITEMAP_SKIPPED_HINTS = (
+    "page",
+    "category",
+    "tag",
+    "gallery",
+    "image",
+    "media",
+    "author",
+    "archive",
+    "product",
+    "video",
+    "attachment",
+)
+
+# Bounds on one detection/check session — keeps an adversarial giant
+# sitemapindex from triggering unbounded fan-out.
+_MAX_SITEMAP_CANDIDATES = 15
+_MAX_SITEMAP_INDEX_FETCHES = 20
+
+_SITEMAP_USER_AGENT = "PublicNoticeManagementBot/1.0 (+sitemap checker)"
+_SITEMAP_TIMEOUT = 20.0
+
+# Numeric-id or content-ish path segments mark a URL as an article detail
+# page rather than a landing/section page (used by the article-ratio check).
+_ARTICLE_PATH_HINTS = ("content", "article", "post", "news", "notice", "press", "detail", "item")
+_ARTICLE_ID_RE = re.compile(r"\d{3,}")
 
 
-async def _summarize_with_semaphore(item: ScrapedItem, category_hint: str, report) -> bool:
-    """Run summarization for an item under a concurrency-limiting semaphore.
-    Returns True if summarization succeeded, False otherwise."""
+def _local_name(tag: str) -> str:
+    """Strip an XML namespace from an element tag ('{ns}loc' -> 'loc')."""
+    if "}" in tag:
+        return tag.rsplit("}", 1)[1]
+    return tag
+
+
+def _normalized_host(url: str) -> str:
+    """Lowercased host with a leading 'www.' stripped, so www/non-www
+    variants compare equal."""
+    host = (urlparse(url).netloc or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _is_same_origin(url: str, base_url: str) -> bool:
+    """True when `url` is on the same site as `base_url` (exact host, or a
+    subdomain of it after stripping a leading www.). Rejects KU-style fake
+    sitemaps whose <loc>s are entirely other institutions' subdomains."""
+    host = _normalized_host(url)
+    base = _normalized_host(base_url)
+    if not host or not base:
+        return False
+    return host == base or host.endswith(f".{base}")
+
+
+def _article_like_ratio(urls: list[str]) -> float:
+    """Fraction of URLs whose path looks like an article detail page (has a
+    numeric id run or a content-ish segment) rather than a section/landing
+    page. Real articles sitemaps score ~1.0; landing-page dumps score ~0.05."""
+    if not urls:
+        return 0.0
+    article_like = 0
+    for url in urls:
+        path = urlparse(url).path.lower()
+        if _ARTICLE_ID_RE.search(path) or any(hint in path for hint in _ARTICLE_PATH_HINTS):
+            article_like += 1
+    return article_like / len(urls)
+
+
+def _iter_sitemap_locs(root) -> list[str]:
+    """Collect <loc> values that are direct children of <url> or <sitemap>
+    elements. Extension namespace locs (image:, video:) are deliberately
+    ignored — they are media, not pages."""
+    locs: list[str] = []
+    for parent in root:
+        if not ET.iselement(parent) or _local_name(parent.tag) not in ("url", "sitemap"):
+            continue
+        for child in parent:
+            if _local_name(child.tag) == "loc" and child.text:
+                locs.append(child.text.strip())
+    return locs
+
+
+async def _fetch_text(url: str) -> str | None:
+    """One polite GET. Plain httpx — no Playwright, no crawl4ai."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=_SITEMAP_TIMEOUT, follow_redirects=True
+        ) as client:
+            response = await client.get(
+                url,
+                headers={"User-Agent": _SITEMAP_USER_AGENT, "Accept": "*/*"},
+            )
+        if response.status_code != 200:
+            logger.info("Sitemap fetch %s -> HTTP %d", url, response.status_code)
+            return None
+        return response.text
+    except Exception:
+        logger.warning("Sitemap fetch failed for %s", url, exc_info=True)
+        return None
+
+
+async def _fetch_sitemap(url: str) -> tuple[str, list[str]] | None:
+    """Fetch + parse one sitemap file. Returns (kind, locs) where kind is
+    'urlset' (leaf article URLs) or 'sitemapindex' (child sitemap URLs), or
+    None on any failure (HTTP error, non-XML, empty)."""
+    text = await _fetch_text(url)
+    if not text:
+        return None
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        logger.info("Sitemap %s is not valid XML", url)
+        return None
+    return _local_name(root.tag), _iter_sitemap_locs(root)
+
+
+def _score_sitemap_child(url: str) -> int:
+    path = urlparse(url).path.lower()
+    score = 0
+    for hint in _SITEMAP_PREFERRED_HINTS:
+        if hint in path:
+            score += 3
+    for hint in _SITEMAP_SKIPPED_HINTS:
+        if hint in path:
+            score -= 5
+    return score
+
+
+async def detect_sitemap(base_url: str) -> str | None:
+    """Detect the article-bearing XML sitemap for a site, or None if nothing
+    usable exists. Detection order mirrors the tiered schema detection: check
+    robots.txt for a Sitemap: directive, else probe /sitemap.xml directly;
+    follow a <sitemapindex> to the child most likely to hold articles (name
+    matches news/post/content, skip page/category/tag/gallery); verify it
+    returns genuinely per-article <loc> entries (guards against 2-URL fakes).
+    The caller caches the winner (or null) so this runs once, not per tick."""
+    base = base_url.rstrip("/")
+
+    candidates: list[str] = []
+    robots = await _fetch_text(f"{base}/robots.txt")
+    if robots:
+        for line in robots.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("sitemap:"):
+                declared = stripped.split(":", 1)[1].strip()
+                if declared:
+                    candidates.append(urljoin(f"{base}/", declared))
+
+    if not candidates:
+        root_sitemap = f"{base}/sitemap.xml"
+        if "Sitemap: " in (robots or ""):
+            pass  # covered above
+        fetched = await _fetch_sitemap(root_sitemap)
+        if fetched is not None:
+            candidates.append(root_sitemap)
+    if not candidates:
+        logger.info("No sitemap advertised in robots.txt nor at /sitemap.xml for %s", base)
+        return None
+
+    # Flatten <sitemapindex> candidates into their leaf children, then rank
+    # every leaf by how article-like its filename is.
+    leaves: list[str] = []
+    for candidate in candidates[:_MAX_SITEMAP_CANDIDATES]:
+        fetched = await _fetch_sitemap(candidate)
+        if fetched is None:
+            continue
+        kind, locs = fetched
+        if kind == "sitemapindex":
+            for child in locs:
+                leaves.append(urljoin(f"{base}/", child))
+        else:
+            leaves.append(candidate)
+
+    ranked = sorted(set(leaves), key=_score_sitemap_child, reverse=True)
+
+    # Verify the best leaves in order: a leaf is only "usable" if it actually
+    # returns >= _MIN_SITEMAP_LOCS same-origin per-article <loc> entries.
+    for url in ranked[:_MAX_SITEMAP_INDEX_FETCHES]:
+        fetched = await _fetch_sitemap(url)
+        if fetched is None:
+            continue
+        kind, locs = fetched
+        if kind == "sitemapindex":
+            continue  # defensive; already flattened above
+        # Only URLs on the same site count — KU's sitemap.xml famously lists
+        # other universities' subdomains rather than its own articles — and
+        # they must be article pages, not landing-page dumps.
+        same_origin = [loc for loc in locs if _is_same_origin(loc, base)]
+        if len(same_origin) >= _MIN_SITEMAP_LOCS and (
+            _article_like_ratio(same_origin) >= _MIN_SITEMAP_ARTICLE_RATIO
+        ):
+            logger.info(
+                "Sitemap detected for %s: %s (%d same-origin URLs)",
+                base,
+                url,
+                len(same_origin),
+            )
+            return url
+
+    logger.info("Sitemap detection for %s found no usable article sitemap", base)
+    return None
+
+
+async def check_sitemap(sitemap_url: str, known_urls: set[str] | list[str]) -> tuple[list[str], int]:
+    """Cheap fast-path poll: fetch the sitemap (flattening an index if the
+    cached URL still points at one) and return only the <loc> entries not
+    already in known_urls, plus the total number of <loc>s seen. One-to-a-few
+    GETs, no rendering — safe to run every 1–3 minutes."""
+    known = {u for u in (known_urls or []) if u}
+    base = sitemap_url
+    all_locs: list[str] = []
+    seen_files: set[str] = set()
+    queue: list[str] = [sitemap_url]
+    fetches = 0
+
+    while queue and fetches < _MAX_SITEMAP_INDEX_FETCHES:
+        current = queue.pop(0)
+        if current in seen_files:
+            continue
+        seen_files.add(current)
+        fetched = await _fetch_sitemap(current)
+        if fetched is None:
+            continue
+        kind, locs = fetched
+        fetches += 1
+        if kind == "sitemapindex":
+            queue.extend(locs)
+        else:
+            for loc in locs:
+                absolute = urljoin(current, loc)
+                # Same-origin guard mirrors detection: URLs on other hosts
+                # (other ministries' subdomains) can never be this source's
+                # items, so they shouldn't trigger wasted full crawls.
+                if _is_same_origin(absolute, base):
+                    all_locs.append(absolute)
+
+    # Preserve first-seen order while dropping duplicates.
+    unique_locs = list(dict.fromkeys(all_locs))
+    new_urls = [u for u in unique_locs if u not in known]
+    return new_urls, len(unique_locs)
+
+
+def _summarize_semaphore(summarize_concurrency: int | None) -> asyncio.Semaphore:
+    """Build a per-run semaphore for concurrent LLM summarization.
+
+    The concurrency cap comes from the API per-run (`summarize_concurrency`,
+    driven by the admin `scraping.summarizeConcurrency` setting); a missing or
+    non-positive value falls back to the env-driven default. A fresh semaphore
+    per run means admin changes apply on the next run with no restart, and
+    runs never share/leak a global cap across concurrent scrapes.
+    """
+    concurrency = summarize_concurrency or _SUMMARIZE_CONCURRENCY
+    return asyncio.Semaphore(max(1, concurrency))
+
+
+async def _summarize_with_semaphore(
+    item: ScrapedItem,
+    category_hint: str,
+    report,
+    semaphore: asyncio.Semaphore,
+) -> bool:
+    """Run summarization + classification for an item under a concurrency-limiting
+    semaphore. Returns True if summarization succeeded, False otherwise.
+    Always persists the final chosen category + confidence, plus LLM tags/facts."""
     if not item.content_text:
         return False
-    sem = _get_summarize_semaphore()
-    async with sem:
+    async with semaphore:
         report(f"Summarizing: {item.title[:60]}")
         result = await _summarize_item(item.title, item.content_text, category_hint)
-        if result:
-            item.ai_summary = result.get("summary")
-            item.ai_summary_ne = result.get("summary_ne")
-            item.ai_urgency = result.get("urgency", "LOW")
-            # If slug didn't confidently assign a category, use LLM's classification
-            if item.ai_category_confidence is None or item.ai_category_confidence < 0.7:
-                llm_cat = result.get("category")
-                llm_conf = result.get("category_confidence", 0.0)
-                if llm_cat and llm_conf > 0.6:
-                    item.category = llm_cat
-                    item.ai_category_confidence = llm_conf
-            return True
-        return False
+        if not result:
+            return False
+
+        # Always persist LLM summary/urgency
+        item.ai_summary = result.get("summary")
+        item.ai_summary_ne = result.get("summary_ne")
+        item.ai_urgency = result.get("urgency", "LOW")
+
+        # Always persist LLM classification artifacts
+        llm_category = result.get("category")
+        llm_confidence = float(result.get("category_confidence", 0.0))
+        if llm_category:
+            item.tags = result.get("tags") or []
+            item.key_facts = result.get("key_facts") or []
+
+        # --- Final category decision ---
+        # item.category currently holds: listing category (if no slug override)
+        # or slug-overridden category (confidence 0.8). We now have LLM's
+        # independent classification. Decide:
+        #   1. LLM high confidence (> 0.6) → trust LLM
+        #   2. Slug override present (confidence 0.8) → trust slug
+        #   3. Fallback → listing category with modest confidence
+        slug_conf = item.ai_category_confidence if item.ai_category_confidence is not None else 0.0
+
+        if llm_category and llm_confidence > 0.6:
+            # LLM wins with high confidence
+            item.category = llm_category
+            item.ai_category_confidence = llm_confidence
+        elif slug_conf >= 0.8:
+            # Slug override is strong; keep it
+            item.ai_category_confidence = slug_conf
+        else:
+            # Fallback: listing category with modest confidence
+            item.ai_category_confidence = max(slug_conf, 0.4)
+
+        return True
 
 
 async def scrape_source(
@@ -958,11 +1284,14 @@ async def scrape_source(
     known_urls: set[str] | None = None,
     max_pages: int = DEFAULT_MAX_PAGES,
     fetch_detail: bool = True,
+    summarize_concurrency: int | None = None,
     pagination: PaginationConfig | None = None,
     on_progress=None,
 ) -> tuple[list[ScrapedItem], dict[str, dict]]:
     """Scrape an admin-configured source's notice/news listings with concurrent
-    AI summarization. Returns (items, schemas_used)."""
+    AI summarization. `summarize_concurrency` caps in-flight LLM calls (from
+    the admin `scraping.summarizeConcurrency` setting); None → env default.
+    Returns (items, schemas_used)."""
     cached_schemas = cached_schemas or {}
     known_urls = known_urls or set()
     pagination = pagination or PaginationConfig()
@@ -971,6 +1300,7 @@ async def scrape_source(
     schemas_used: dict[str, dict] = {}
     seen_urls: set[str] = set()
     summarize_tasks: list[asyncio.Task] = []
+    semaphore = _summarize_semaphore(summarize_concurrency)
 
     browser_config = BrowserConfig(headless=True, verbose=False)
 
@@ -1074,7 +1404,7 @@ async def scrape_source(
                     # Fire concurrent summarization task (non-blocking)
                     if content_text and source_url not in known_urls:
                         task = asyncio.create_task(
-                            _summarize_with_semaphore(item, category, report)
+                            _summarize_with_semaphore(item, category, report, semaphore)
                         )
                         summarize_tasks.append(task)
 
@@ -1110,3 +1440,114 @@ async def scrape_source(
         list(category_urls.keys()),
     )
     return items, schemas_used
+
+
+async def scrape_sitemap_urls(
+    base_url: str,
+    urls: list[str],
+    known_urls: set[str] | None = None,
+    summarize_concurrency: int | None = None,
+    on_progress=None,
+) -> tuple[list[ScrapedItem], dict[str, dict]]:
+    """Scrape an explicit list of article URLs directly — the sitemap
+    fast-path's own full crawl. The sitemap already tells us exactly which
+    detail pages exist, so there is no listing page to parse and no
+    CSS-extraction schema needed: each URL is fetched through the same
+    generic detail-page pipeline (`_crawl_detail_generic`) used by the
+    listing crawl, then summarized concurrently.
+
+    This is the fallback that keeps data flowing for sites whose category
+    listing URLs 404 or are otherwise unusable (mohp.gov.np serves only an
+    SVG error page at /category/* — not anti-bot, just 404), yet expose a
+    healthy articles sitemap. Returns (items, schemas_used) with an empty
+    schemas dict for API compatibility.
+    """
+    known_urls = known_urls or set()
+    report = on_progress or (lambda _msg: None)
+    items: list[ScrapedItem] = []
+    summarize_tasks: list[asyncio.Task] = []
+    seen_urls: set[str] = set()
+    semaphore = _summarize_semaphore(summarize_concurrency)
+
+    # Sitemap URLs often share a "section" path segment (e.g. /content/, or a
+    # category slug like /notice/) that our slug map keys off — infer it once
+    # from the first URL so a per-item fallback is rarely needed.
+    default_category, default_slug = _infer_category_from_slug(_sitemap_section(urls))
+
+    browser_config = BrowserConfig(headless=True, verbose=False)
+    async with AsyncWebCrawler(config=browser_config) as crawler:
+        for index, source_url in enumerate(urls):
+            if not source_url or source_url in seen_urls:
+                continue
+            if source_url in known_urls:
+                report(f"Skipping already-scraped: {source_url[:80]}")
+                continue
+            seen_urls.add(source_url)
+
+            title = "(untitled)"
+            published_at = None
+            attachment_url = None
+            content_text = None
+            content_html = None
+            attachments: list[AttachmentInfo] = []
+            meta = None
+
+            report(f"Fetching detail ({index + 1}/{len(urls)}): {source_url[:90]}")
+            detail = await _crawl_detail_generic(crawler, source_url, base_url)
+            if detail:
+                title = detail.get("title") or title
+                published_at = _parse_published(detail.get("published_raw"))
+                content_text = detail.get("content_text")
+                content_html = detail.get("content_html")
+                attachment_url = detail.get("attachment_url")
+                seen_att_urls: set[str] = set()
+                if attachment_url:
+                    attachments.append(AttachmentInfo(url=attachment_url))
+                    seen_att_urls.add(attachment_url)
+                for att in detail.get("attachments") or []:
+                    if att["url"] not in seen_att_urls:
+                        attachments.append(AttachmentInfo(url=att["url"], label=att.get("label")))
+                        seen_att_urls.add(att["url"])
+                meta = _extract_metadata(title, content_text)
+                if meta:
+                    meta["sitemapUrl"] = source_url
+
+            slug_category, source_slug = _infer_category_from_slug(source_url)
+            resolved_category = slug_category or default_category or "OTHER"
+            source_slug = source_slug or default_slug
+
+            item = ScrapedItem(
+                category=resolved_category,
+                title=title,
+                source_url=source_url,
+                published_at=published_at,
+                summary=(content_text or title)[:500],
+                content_text=content_text,
+                content_html=content_html,
+                attachment_url=attachment_url,
+                source_slug=source_slug,
+                attachments=attachments if attachments else None,
+                ai_category_confidence=0.8 if slug_category else None,
+                metadata=meta,
+            )
+            items.append(item)
+
+            if content_text:
+                task = asyncio.create_task(_summarize_with_semaphore(item, resolved_category, report, semaphore))
+                summarize_tasks.append(task)
+
+    if summarize_tasks:
+        report(f"Waiting for {len(summarize_tasks)} summarization task(s) to complete…")
+        results = await asyncio.gather(*summarize_tasks, return_exceptions=True)
+        succeeded = sum(1 for r in results if r is True)
+        failed = len(results) - succeeded
+        report(f"Summarization complete: {succeeded} succeeded, {failed} failed/skipped")
+
+    report(f"Sitemap scrape complete — {len(items)} item(s) total")
+    logger.info(
+        "Sitemap scrape produced %d item(s) from %d URL(s) for base_url=%s",
+        len(items),
+        len(urls),
+        base_url,
+    )
+    return items, {}

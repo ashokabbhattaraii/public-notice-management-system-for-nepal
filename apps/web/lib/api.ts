@@ -8,21 +8,50 @@ import {
   ScrapedItem,
   ScrapedItemCategory,
   ScrapeRun,
+  ScrapeRunStatus,
   ScrapeRunProgress,
   ScrapeSource,
   ScrapePaginationType,
+  SitemapCheckResult,
+  SchedulerStatus,
+  RunAllResult,
   PublicNoticeDetail,
   PublicNoticeSource,
+  SettingsView,
+  SettingApplyResult,
+  PublicSiteSettings,
 } from "./types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
 const TOKEN_KEY = "pnm_token"
+const TOKEN_COOKIE = "pnm_token"
+const SESSION_DAYS = 7
+
+/**
+ * Fired on `window` whenever a request comes back 401 while a token was sent.
+ * AuthProvider listens and force-logs-out so guards can bounce to /login.
+ */
+export const AUTH_EXPIRED_EVENT = "pnm:unauthorized"
 
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY)),
-  set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  set: (token: string) => {
+    if (typeof window === "undefined") return
+    localStorage.setItem(TOKEN_KEY, token)
+    // Mirror to a cookie so the edge middleware can gate protected routes
+    // without a round-trip to the API. SameSite=Lax keeps it usable for the
+    // browser navigation; the API still authorizes via the Authorization
+    // header (the cookie is a UX gate, never a security boundary).
+    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${
+      60 * 60 * 24 * SESSION_DAYS
+    }; SameSite=Lax`
+  },
+  clear: () => {
+    if (typeof window === "undefined") return
+    localStorage.removeItem(TOKEN_KEY)
+    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`
+  },
 }
 
 // Shape returned by the API for a user.
@@ -63,7 +92,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       ...init.headers,
     },
   })
-  if (!res.ok) throw new Error((await res.text()) || `Request failed: ${res.status}`)
+  if (!res.ok) {
+    // A 401 while we believed we were signed in means the session died
+    // (expired token, revoked account, storage wiped mid-session). Clear it
+    // and tell AuthProvider so protected pages bounce to /login.
+    if (res.status === 401 && token && typeof window !== "undefined") {
+      tokenStore.clear()
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+    }
+    throw new Error((await res.text()) || `Request failed: ${res.status}`)
+  }
   return res.json() as Promise<T>
 }
 
@@ -85,6 +123,18 @@ export async function fetchMe(): Promise<User | null> {
   } catch {
     tokenStore.clear()
     return null
+  }
+}
+
+/**
+ * Tell the backend to revoke the session (best-effort — the client clears
+ * local state regardless, and the token dies on expiry anyway).
+ */
+export async function apiLogout(): Promise<void> {
+  try {
+    await apiFetch("/auth/logout", { method: "POST" })
+  } catch {
+    // network hiccup — the server token is short-lived; nothing to do
   }
 }
 
@@ -179,6 +229,8 @@ export interface ScrapeSourceInput {
   paginationParam?: string
   startPage?: number
   maxPages?: number
+  pollIntervalSeconds?: number
+  sitemapUrl?: string | null
 }
 
 export async function createScrapeSource(input: ScrapeSourceInput): Promise<ScrapeSource> {
@@ -218,6 +270,72 @@ export async function fetchScrapeRunProgress(runId: string): Promise<ScrapeRunPr
   return apiFetch(`/admin/scraping/runs/${runId}/progress`)
 }
 
+/**
+ * One-time sitemap detection (robots.txt → /sitemap.xml → best child).
+ * Persists the cached sitemap URL on the source; safe to call again.
+ */
+export async function detectScrapeSitemap(id: string): Promise<ScrapeSource> {
+  return apiFetch(`/admin/scraping/sources/${id}/detect-sitemap`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/**
+ * Cheap sitemap poll — sitemap URLs not yet known to this source, without
+ * triggering a full crawl. Requires a sitemapUrl on the source.
+ */
+export async function checkScrapeSitemap(id: string): Promise<SitemapCheckResult> {
+  return apiFetch(`/admin/scraping/sources/${id}/check`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/** Effective scheduler configuration + last tick. */
+export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {
+  return apiFetch("/admin/scraping/scheduler")
+}
+
+/** Flip the global auto-scraping switch. Returns the updated scheduler status. */
+export async function setAutoScraping(enabled: boolean): Promise<SchedulerStatus> {
+  return apiFetch("/admin/scraping/scheduler/auto-scraping", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** Triggers a run of every enabled source that isn't already scraping. */
+export async function runAllScrapeSources(): Promise<RunAllResult> {
+  return apiFetch("/admin/scraping/sources/run-all", {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/** Admin settings: schema + effective values for the settings UI. */
+export async function fetchSettings(): Promise<SettingsView> {
+  return apiFetch("/admin/settings")
+}
+
+/** Batch-apply settings; returns fresh state + per-key validation errors. */
+export async function updateSettings(values: Record<string, string>): Promise<SettingApplyResult> {
+  return apiFetch("/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify({ values }),
+  })
+}
+
+/** Revert one setting to its schema default. */
+export async function resetSetting(key: string): Promise<{ key: string; reset: boolean }> {
+  return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, { method: "DELETE" })
+}
+
+/** Public subset (site.title/description) for the footer. */
+export async function fetchPublicSettings(): Promise<PublicSiteSettings> {
+  return apiFetch("/public/settings")
+}
+
 export interface ScrapedItemFilters {
   sourceId?: string
   category?: ScrapedItemCategory
@@ -245,9 +363,21 @@ export async function deleteScrapedItem(id: string): Promise<void> {
   await apiFetch(`/admin/scraping/items/${id}`, { method: "DELETE" })
 }
 
-export async function fetchScrapeRuns(sourceId?: string, limit = 20): Promise<ScrapeRun[]> {
-  const params = new URLSearchParams({ limit: String(limit) })
-  if (sourceId) params.set("sourceId", sourceId)
+export interface ScrapeRunFilters {
+  sourceId?: string
+  status?: ScrapeRunStatus
+  page?: number
+  limit?: number
+}
+
+export async function fetchScrapeRuns(
+  filters: ScrapeRunFilters = {},
+): Promise<{ data: ScrapeRun[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
+  const { page = 1, limit = 20, ...rest } = filters
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  for (const [key, value] of Object.entries(rest)) {
+    if (value) params.set(key, String(value))
+  }
   return apiFetch(`/admin/scraping/runs?${params}`)
 }
 
@@ -257,6 +387,7 @@ export interface PublicNoticeFilters {
   category?: ScrapedItemCategory
   sourceId?: string
   search?: string
+  tag?: string
   dateFrom?: string
   dateTo?: string
   urgency?: string
@@ -311,4 +442,14 @@ export async function fetchNoticeCategoryCounts(): Promise<Record<string, number
 
 export async function fetchNoticeSources(): Promise<PublicNoticeSource[]> {
   return apiFetch("/notices/meta/sources")
+}
+
+export async function correctScrapedItem(
+  id: string,
+  body: { category?: string; tags?: string[]; aiCategoryConfidence?: number; reClassify?: boolean }
+): Promise<{ reClassified?: boolean; category?: string; tags?: string[]; aiCategoryConfidence?: number }> {
+  return apiFetch(`/admin/scraping/items/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
 }

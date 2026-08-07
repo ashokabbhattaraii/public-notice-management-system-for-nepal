@@ -407,13 +407,15 @@ def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
 _ANALYZE_PROMPT = """You analyze a single Nepalese government/public notice or news item and produce a JSON summary for display on a notice detail page.
 
 Return ONLY a JSON object (no markdown fences, no commentary) with this exact shape:
-{"summary": "2-3 sentence plain-language summary in English", "summary_ne": "Same summary translated to Nepali (देवनागरी script)", "key_facts": ["short fact 1", "short fact 2", "..."], "tags": ["topic1", "topic2", "..."]}
+{"summary": "2-3 sentence plain-language summary in English", "summary_ne": "Same summary translated to Nepali (देवनागरी script)", "key_facts": ["short fact 1", "short fact 2", "..."], "tags": ["topic1", "topic2", "..."], "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, JOB, INTERNSHIP, OTHER>", "category_confidence": <0.0-1.0 float>}
 
 Rules:
 - summary: plain language English, no jargon, captures what the notice actually says and who it affects. If the content is in Nepali, translate and summarize in English.
 - summary_ne: the same summary written in Nepali (देवनागरी). If the content is already in Nepali, summarize directly. If in English, translate to Nepali.
 - key_facts: 3-6 short, concrete, standalone facts (dates, eligibility, amounts, deadlines, affected wards/groups, procedures) — each under ~12 words. Omit facts not actually stated in the content.
 - tags: 2-5 short topical keywords (organization name, subject area, affected group) useful for filtering — not generic words like "notice" or "government".
+- category: classify the notice type. JOB for job openings/career postings; INTERNSHIP for internship/trainee programs; VACANCY for generic openings with no clear job-vs-intern nature; CIRCULAR for internal directives; TENDER for procurement; PRESS_RELEASE for official statements; NEWS for general news; NOTICE for general public notices.
+- category_confidence: how confident you are in the classification (0.0-1.0).
 - Ground everything in the provided content. Never invent facts."""
 
 _ASK_PROMPT = """You are Suchana AI, answering a question about ONE specific Nepalese public notice/news item using ONLY its content below.
@@ -452,11 +454,23 @@ async def analyze_notice(title: str, content: str) -> dict | None:
     if not summary:
         return None
 
+    # Validate category if present
+    valid_categories = {
+        "NOTICE", "NEWS", "PRESS_RELEASE", "CIRCULAR", "TENDER", "VACANCY",
+        "JOB", "INTERNSHIP", "OTHER"
+    }
+    llm_category = data.get("category")
+    if llm_category and llm_category not in valid_categories:
+        llm_category = None
+    llm_confidence = float(data.get("category_confidence", 0.0)) if data.get("category_confidence") is not None else 0.0
+
     return {
         "summary": str(summary).strip(),
         "summary_ne": str(data.get("summary_ne") or "").strip() or None,
         "key_facts": [str(f).strip() for f in (data.get("key_facts") or []) if str(f).strip()][:6],
         "tags": [str(t).strip() for t in (data.get("tags") or []) if str(t).strip()][:5],
+        "category": llm_category,
+        "category_confidence": llm_confidence,
     }
 
 

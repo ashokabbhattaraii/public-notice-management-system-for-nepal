@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useAlerts } from "@/lib/alerts-context"
+import { RequireAuth } from "@/components/auth/require-auth"
 
 const navGroups = [
   {
@@ -122,7 +123,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
+    <RequireAuth>
+      <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
       {/* Mobile sidebar toggle */}
       <div className="fixed bottom-4 left-4 z-50 md:hidden">
         <button
@@ -163,6 +165,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </div>
+      </div>
+    </RequireAuth>
   )
 }

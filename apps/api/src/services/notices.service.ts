@@ -4,16 +4,21 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { ScrapedItemCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { TtlCache } from '../common/cache/ttl-cache';
+import { SingleFlight, SingleFlightCooldownError } from '../common/cache/single-flight';
+import { SettingsService } from './settings.service';
+import { withTraceAsync } from '../common/logger';
 
 export interface PublicNoticeFilters {
   category?: string;
   sourceId?: string;
   search?: string;
+  tag?: string;
   dateFrom?: string;
   dateTo?: string;
   urgency?: string;
-  sortBy?: 'publishedAt' | 'views';
-  sortOrder?: 'asc' | 'desc';
+  sortBy?: "publishedAt" | "views";
+  sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
 }
@@ -26,72 +31,108 @@ export class NoticesService {
   private readonly logger = new Logger(NoticesService.name);
   private readonly aiServiceUrl: string;
 
+  // Hot public read paths are cheap to recompute and change slowly, so serve
+  // them from a single-flight TTL cache instead of hitting Postgres on every
+  // page load.
+  private readonly listCache = new TtlCache<unknown>(
+    Number(process.env.NOTICES_LIST_CACHE_MS ?? 10_000),
+  );
+  private readonly metaCache = new TtlCache<unknown>(
+    Number(process.env.NOTICES_META_CACHE_MS ?? 60_000),
+  );
+
+  // Single-flight guard around view-triggered AI enrichment (PDF OCR, LLM
+  // summarization). Without it, N users opening the same unanalyzed notice
+  // fire N identical AI calls in the same window. Failure backoff (default
+  // 60s) additionally stops a flaky AI service from being retried by every
+  // viewer at once.
+  private readonly aiSingleFlight = new SingleFlight(
+    Number(process.env.AI_RETRY_COOLDOWN_MS ?? 60_000),
+  );
+
+  // Cheap answer memo for the notice Q&A + global chatbot: identical
+  // questions (same notice, same prompt) share the LLM call, so a popular
+  // question asked by many users isn't re-generated each time.
+  private readonly qaCache = new TtlCache<unknown>(Number(process.env.QA_CACHE_MS ?? 5 * 60_000));
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
+    private readonly settings: SettingsService,
   ) {
     this.aiServiceUrl = this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
   }
 
   async findAll(filters: PublicNoticeFilters) {
     const page = filters.page ?? 1;
-    const limit = Math.min(filters.limit ?? 20, 100);
+    const defaultLimit = await this.settings.getNumber('notices.perPage', 20);
+    const limit = Math.min(filters.limit ?? defaultLimit, 100);
     const sortBy = filters.sortBy ?? 'publishedAt';
     const sortOrder = filters.sortOrder ?? 'desc';
 
-    const publishedAtFilter: Prisma.DateTimeFilter = {};
-    if (filters.dateFrom) publishedAtFilter.gte = new Date(filters.dateFrom);
-    if (filters.dateTo) publishedAtFilter.lte = new Date(filters.dateTo);
+    const cacheKey = `list:${JSON.stringify({ ...filters, page, limit })}`;
+    return this.listCache.remember(cacheKey, async () => {
+      const publishedAtFilter: Prisma.DateTimeFilter = {};
+      if (filters.dateFrom) publishedAtFilter.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) publishedAtFilter.lte = new Date(filters.dateTo);
 
-    const where: Prisma.ScrapedItemWhereInput = {
-      ...(filters.category ? { category: filters.category as ScrapedItemCategory } : {}),
-      ...(filters.sourceId ? { sourceId: filters.sourceId } : {}),
-      ...(filters.urgency ? { aiUrgency: filters.urgency } : {}),
-      ...(Object.keys(publishedAtFilter).length ? { publishedAt: publishedAtFilter } : {}),
-      ...(filters.search
-        ? {
-            OR: [
-              { title: { contains: filters.search, mode: 'insensitive' } },
-              { summary: { contains: filters.search, mode: 'insensitive' } },
-              { contentText: { contains: filters.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-    const skip = (page - 1) * limit;
+      const where: Prisma.ScrapedItemWhereInput = {
+        ...(filters.category ? { category: filters.category as ScrapedItemCategory } : {}),
+        ...(filters.sourceId ? { sourceId: filters.sourceId } : {}),
+        ...(filters.urgency ? { aiUrgency: filters.urgency } : {}),
+        ...(Object.keys(publishedAtFilter).length ? { publishedAt: publishedAtFilter } : {}),
+        ...(filters.search
+          ? {
+              OR: [
+                { title: { contains: filters.search, mode: 'insensitive' } },
+                { summary: { contains: filters.search, mode: 'insensitive' } },
+                { contentText: { contains: filters.search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+        ...(filters.tag
+          ? {
+              tags: {
+                array_contains: filters.tag,
+              },
+            }
+          : {}),
+      };
+      const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
-      this.prisma.scrapedItem.findMany({
-        where,
-        orderBy: { [sortBy]: sortOrder },
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          sourceId: true,
-          sourceLabel: true,
-          category: true,
-          title: true,
-          sourceUrl: true,
-          summary: true,
-          attachmentUrl: true,
-          publishedAt: true,
-          scrapedAt: true,
-          views: true,
-          aiSummary: true,
-          aiSummaryNe: true,
-          aiUrgency: true,
-        },
-      }),
-      this.prisma.scrapedItem.count({ where }),
-    ]);
+      const [data, total] = await Promise.all([
+        this.prisma.scrapedItem.findMany({
+          where,
+          orderBy: { [sortBy]: sortOrder },
+          skip,
+          take: limit,
+          select: {
+            id: true,
+            sourceId: true,
+            sourceLabel: true,
+            category: true,
+            title: true,
+            sourceUrl: true,
+            summary: true,
+            attachmentUrl: true,
+            publishedAt: true,
+            scrapedAt: true,
+            views: true,
+            aiSummary: true,
+            aiSummaryNe: true,
+            aiUrgency: true,
+          },
+        }),
+        this.prisma.scrapedItem.count({ where }),
+      ]);
 
-    return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+      return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    });
   }
 
   async findOne(id: string) {
-    let notice = await this.prisma.scrapedItem.findUnique({
+    const notice = await this.prisma.scrapedItem.findUnique({
       where: { id },
       include: { attachments: true },
     });
@@ -101,13 +142,20 @@ export class NoticesService {
       .update({ where: { id }, data: { views: { increment: 1 } } })
       .catch(() => undefined);
 
-    // If no content text but has a PDF attachment, trigger extraction in the
-    // background (for legacy notices scraped before PDF extraction was added to
-    // the pipeline). The page loads immediately; frontend polls for updated data.
-    if (!notice.contentText) {
+    // PDF-only notice: contentText comes from OCR, so trigger extraction in
+    // the background (legacy notices scraped before extraction was added to
+    // the pipeline). The page loads immediately; the frontend polls for
+    // updated data. Single-flight ensures N concurrent viewers trigger ONE
+    // extraction, and `pdfExtractAt` stamps a completion sentinel so a
+    // successful notice isn't re-extracted on every subsequent view either.
+    if (!notice.contentText && !notice.aiAnalyzedAt) {
       const pdfUrl = this.findPdfUrl(notice);
       if (pdfUrl) {
-        this.extractPdfAndCache(notice.id, notice.title, pdfUrl).catch(() => {});
+        this.extractPdfAndCache(notice.id, notice.title, pdfUrl)
+          .catch((err: any) => {
+            if (err instanceof SingleFlightCooldownError) return; // retry later
+            this.logger.warn(`PDF extraction failed for notice ${notice.id}: ${err.message}`);
+          });
       }
     }
 
@@ -115,11 +163,20 @@ export class NoticesService {
       notice.contentText &&
       (!notice.aiAnalyzedAt || notice.aiAnalyzedAt < notice.updatedAt);
 
+    // Run the AI enrichment in the background (it can take up to 30s) and
+    // return the cached row immediately — the frontend polls for updated data,
+    // exactly like the PDF-extraction path below. Keeps first-paint fast.
     if (needsAnalysis) {
-      const analyzed = await this.analyzeAndCache(notice.id, notice.title, notice.contentText!);
-      if (analyzed) {
-        return { ...analyzed, attachments: notice.attachments };
-      }
+      void withTraceAsync(() =>
+        this.analyzeAndCache(notice.id, notice.title, notice.contentText!)
+          .then((analyzed) => {
+            if (analyzed) this.logger.debug(`Notice ${notice.id} analyzed and cached`);
+          })
+          .catch((err: any) => {
+            if (err instanceof SingleFlightCooldownError) return; // another run in cooldown
+            this.logger.warn(`Notice analysis failed for ${notice.id}: ${err.message}`);
+          }),
+      );
     }
 
     return notice;
@@ -138,15 +195,34 @@ export class NoticesService {
   }
 
   private async extractPdfAndCache(id: string, title: string, pdfUrl: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.aiServiceUrl}/notices/extract-pdf`,
-          { url: pdfUrl, title },
-          { timeout: 90000 },
-        ),
-      );
-      if (!response.data?.content_text) return null;
+    // Single-flight per notice: N concurrent viewers share one in-flight OCR
+    // run, and a failure rejection triggers the single-flight backoff so the
+    // AI service isn't pounded by every viewer retrying at once. Note: errors
+    // are logged then re-thrown so the backoff kicks in (callers `.catch()`).
+    return this.aiSingleFlight.run(`pdf:${id}`, async () => {
+      let response;
+      try {
+        response = await firstValueFrom(
+          this.httpService.post(
+            `${this.aiServiceUrl}/notices/extract-pdf`,
+            { url: pdfUrl, title },
+            { timeout: 90000 },
+          ),
+        );
+      } catch (err: any) {
+        this.logger.warn(`PDF extraction failed for notice ${id}: ${err.message}`);
+        throw err;
+      }
+      if (!response.data?.content_text) {
+        // Stamp the sentinel anyway so a PDF with genuinely no extractable
+        // text (e.g. image-only scan with no OCR output) isn't re-extracted
+        // on every single view. Real failures (timeout/5xx) reject above and
+        // go through the single-flight backoff instead.
+        return this.prisma.scrapedItem.update({
+          where: { id },
+          data: { aiAnalyzedAt: new Date() },
+        });
+      }
 
       const data: any = {
         contentText: response.data.content_text,
@@ -157,24 +233,32 @@ export class NoticesService {
         if (response.data.summary_ne) data.aiSummaryNe = response.data.summary_ne;
         if (response.data.key_facts) data.keyFacts = response.data.key_facts;
         if (response.data.tags) data.tags = response.data.tags;
+        if (response.data.category) data.category = response.data.category;
+        if (response.data.category_confidence !== undefined) data.aiCategoryConfidence = response.data.category_confidence;
       }
 
       return this.prisma.scrapedItem.update({ where: { id }, data });
-    } catch (err: any) {
-      this.logger.warn(`PDF extraction failed for notice ${id}: ${err.message}`);
-      return null;
-    }
+    });
   }
 
   private async analyzeAndCache(id: string, title: string, content: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.aiServiceUrl}/notices/analyze`,
-          { title, content },
-          { timeout: 30000 },
-        ),
-      );
+    // Single-flight per notice: N concurrent viewers opening the same
+    // unanalyzed notice share ONE summarization call. Errors are re-thrown so
+    // the single-flight backoff applies (callers `.catch()`).
+    return this.aiSingleFlight.run(`analyze:${id}`, async () => {
+      let response;
+      try {
+        response = await firstValueFrom(
+          this.httpService.post(
+            `${this.aiServiceUrl}/notices/analyze`,
+            { title, content },
+            { timeout: 30000 },
+          ),
+        );
+      } catch (err: any) {
+        this.logger.warn(`Notice analysis failed for ${id}: ${err.message}`);
+        throw err;
+      }
       if (!response.data?.analyzed) {
         // Still stamp aiAnalyzedAt so we don't retry every single view when
         // there's genuinely nothing to summarize (e.g. no LLM configured).
@@ -190,18 +274,24 @@ export class NoticesService {
           aiSummaryNe: response.data.summary_ne ?? null,
           keyFacts: response.data.key_facts ?? [],
           tags: response.data.tags ?? [],
+          aiCategoryConfidence: response.data.category_confidence ?? null,
+          category: response.data.category ?? undefined,
           aiAnalyzedAt: new Date(),
         },
       });
-    } catch (err: any) {
-      this.logger.warn(`Notice analysis failed for ${id}: ${err.message}`);
-      return null;
-    }
+    });
   }
 
   async askQuestion(id: string, question: string): Promise<{ answer: string }> {
     const notice = await this.prisma.scrapedItem.findUnique({ where: { id } });
     if (!notice) throw new NotFoundException(`Notice ${id} not found`);
+
+    // Identical questions on the same notice share one LLM call (memoized in
+    // qaCache). Fallback/error answers are never cached — only real AI
+    // answers, so a transient failure isn't served stale for 5 minutes.
+    const cacheKey = `qa:${id}:${question}`;
+    const cached = this.qaCache.get(cacheKey);
+    if (cached) return cached as { answer: string };
 
     try {
       const response = await firstValueFrom(
@@ -211,7 +301,9 @@ export class NoticesService {
           { timeout: 30000 },
         ),
       );
-      return { answer: response.data.answer };
+      const answer = { answer: String(response.data?.answer ?? '') };
+      this.qaCache.set(cacheKey, answer);
+      return answer;
     } catch (err: any) {
       this.logger.warn(`Notice Q&A failed for ${id}: ${err.message}`);
       return { answer: 'Sorry, I could not process this question right now — please try again shortly.' };
@@ -225,6 +317,13 @@ export class NoticesService {
    * 3. LLM generates an answer from the retrieved context
    */
   async search(question: string, category?: string, language?: string) {
+    // Identical chatbot queries (same question + filters) share the LLM call
+    // within the TTL window — a popular question asked by many visitors
+    // doesn't re-hit the AI service (and possibly Qdrant) each time.
+    const cacheKey = `search:${question}:${category ?? ''}:${language ?? ''}`;
+    const cached = this.qaCache.get(cacheKey);
+    if (cached) return cached;
+
     // Step 1: PostgreSQL keyword search via ILIKE (simple but effective for keyword queries)
     const pgResults = await this.prisma.scrapedItem.findMany({
       where: {
@@ -268,9 +367,10 @@ export class NoticesService {
             language: language || 'en',
             top_k: 5,
           },
-          { timeout: 45000 },
+{ timeout: 45000 },
         ),
       );
+      this.qaCache.set(cacheKey, response.data);
       return response.data;
     } catch (err: any) {
       this.logger.warn(`Notice search failed: ${err.message}`);
@@ -299,19 +399,23 @@ export class NoticesService {
   }
 
   async categoryCounts() {
-    const counts = await this.prisma.scrapedItem.groupBy({
-      by: ['category'],
-      _count: { _all: true },
+    return this.metaCache.remember('category-counts', async () => {
+      const counts = await this.prisma.scrapedItem.groupBy({
+        by: ['category'],
+        _count: { _all: true },
+      });
+      return Object.fromEntries(counts.map((c) => [c.category, c._count._all]));
     });
-    return Object.fromEntries(counts.map((c) => [c.category, c._count._all]));
   }
 
   /** Lightweight source list for the public filter dropdown — name/id only. */
   async listSources() {
-    return this.prisma.scrapeSource.findMany({
-      where: { enabled: true },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+    return this.metaCache.remember('sources', async () => {
+      return this.prisma.scrapeSource.findMany({
+        where: { enabled: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
     });
   }
 }

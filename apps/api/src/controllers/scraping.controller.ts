@@ -9,19 +9,49 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, ScrapeRunStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 import { ScrapingService } from '../services/scraping.service';
+import { ScrapingSchedulerService } from '../services/scraping-scheduler.service';
 import { CreateScrapeSourceDto, UpdateScrapeSourceDto } from '../dto/scrape-source.dto';
+import { ScrapedItemCategory } from '@prisma/client';
 
 @Controller('admin/scraping')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.admin)
 export class ScrapingController {
-  constructor(private readonly scrapingService: ScrapingService) {}
+  constructor(
+    private readonly scrapingService: ScrapingService,
+    private readonly scheduler: ScrapingSchedulerService,
+  ) {}
+
+  /** Effective scheduler configuration + last tick, for the admin UI. */
+  @Get('scheduler')
+  async schedulerStatus() {
+    return this.scheduler.getSchedulerStatus();
+  }
+
+  /** Global on/off switch for automatic scraping. Manual runs are unaffected. */
+  @Patch('scheduler/auto-scraping')
+  async setAutoScraping(@Body('enabled') enabled?: boolean) {
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException('enabled must be a boolean');
+    }
+    await this.scheduler.setAutoScraping(enabled);
+    return this.scheduler.getSchedulerStatus();
+  }
+
+  /** Bulk trigger: runs every enabled source that isn't already scraping. */
+  @Post('sources/run-all')
+  async runAllSources(
+    @Body('categories') categories?: ('NOTICE' | 'NEWS' | 'PRESS_RELEASE')[],
+  ) {
+    return this.scrapingService.runAllSources(categories);
+  }
 
   @Get('sources')
   async listSources() {
@@ -52,6 +82,20 @@ export class ScrapingController {
     @Body('categories') categories?: ('NOTICE' | 'NEWS')[],
   ) {
     return this.scrapingService.runSource(id, categories);
+  }
+
+  /** One-time sitemap detection (robots.txt → sitemap.xml → best child).
+   * Persists the cached sitemap URL on the source; safe to call again. */
+  @Post('sources/:id/detect-sitemap')
+  async detectSitemap(@Param('id', ParseUUIDPipe) id: string) {
+    return this.scrapingService.detectSitemap(id);
+  }
+
+  /** Cheap sitemap poll — returns the sitemap's URLs not yet known to this
+   * source, without triggering a full crawl. */
+  @Post('sources/:id/check')
+  async checkSitemap(@Param('id', ParseUUIDPipe) id: string) {
+    return this.scrapingService.checkSitemap(id);
   }
 
   @Get('items')
@@ -85,12 +129,44 @@ export class ScrapingController {
   }
 
   @Get('runs')
-  async listRuns(@Query('sourceId') sourceId?: string, @Query('limit') limit?: string) {
-    return this.scrapingService.listRuns(sourceId, limit ? Number(limit) : 20);
+  async listRuns(
+    @Query('sourceId') sourceId?: string,
+    @Query('status') status?: ScrapeRunStatus,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.scrapingService.listRuns({
+      sourceId,
+      status,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get('runs/:id/progress')
   async runProgress(@Param('id', ParseUUIDPipe) id: string) {
     return this.scrapingService.getRunProgress(id);
+  }
+
+  /** Admin correction: update category, tags, and trigger re-classification. */
+  @Patch('items/:id')
+  async correctNotice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: {
+      category?: ScrapedItemCategory;
+      tags?: string[];
+      aiCategoryConfidence?: number;
+      reClassify?: boolean;
+    },
+  ) {
+    if (body.reClassify) {
+      // Re-run full AI analysis on the existing content
+      return this.scrapingService.reClassifyNotice(id);
+    }
+    const data: any = {};
+    if (body.category) data.category = body.category;
+    if (body.tags !== undefined) data.tags = body.tags;
+    if (body.aiCategoryConfidence !== undefined) data.aiCategoryConfidence = body.aiCategoryConfidence;
+    return this.scrapingService.updateNotice(id, data);
   }
 }

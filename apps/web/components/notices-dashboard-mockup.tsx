@@ -16,6 +16,11 @@ import {
 import Link from "next/link"
 import gsap from "gsap"
 import { mockNotices } from "@/lib/mock-data"
+import type { ScrapedItem } from "@/lib/types"
+
+function generateSlug(title: string, id: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + id
+}
 
 const recentNotices = mockNotices.slice(0, 6)
 
@@ -33,11 +38,33 @@ const categoryLabels: Record<string, string> = {
   tenders: "Tenders",
   policy: "Policy",
   announcements: "Announcements",
+  NOTICE: "Notice",
+  NEWS: "News",
+  PRESS_RELEASE: "Press Release",
+  CIRCULAR: "Circular",
+  TENDER: "Tender",
+  VACANCY: "Vacancy",
+  JOB: "Job",
+  INTERNSHIP: "Internship",
+  OTHER: "Other",
 }
 
-export function NoticesDashboardMockup() {
+export function NoticesDashboardMockup({ notices }: { notices?: ScrapedItem[] }) {
   const windowRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef<HTMLDivElement>(null)
+  const rows =
+    notices && notices.length > 0
+      ? notices.slice(0, 6).map((n) => ({
+          id: n.id,
+          category: n.category,
+          priority: n.aiUrgency === "HIGH" ? "high" : undefined,
+          organization: n.sourceLabel,
+          title: n.title,
+          views: n.views ?? 0,
+          publishedAt: n.publishedAt ?? n.scrapedAt,
+        }))
+      : recentNotices
+  const totalCount = notices?.length ? notices.length : mockNotices.length
 
   useEffect(() => {
     if (!windowRef.current) return
@@ -154,7 +181,7 @@ export function NoticesDashboardMockup() {
                 Live
               </span>
               <span className="rounded-full bg-vez-surface px-3 py-1 text-[11px] text-vez-mute">
-                {mockNotices.length} total
+                {totalCount} total
               </span>
             </div>
           </div>
@@ -177,8 +204,8 @@ export function NoticesDashboardMockup() {
 
           {/* Notices list */}
           <div ref={rowsRef} className="flex-1 divide-y divide-vez-line overflow-y-auto">
-            {recentNotices.map((notice, i) => (
-              <Link key={notice.id} href="/notices" className="group block">
+            {rows.map((notice, i) => (
+              <Link key={notice.id} href={`/notices/${generateSlug(notice.title, notice.id)}`} className="group block">
                 <div className="flex items-center gap-3 px-6 py-3.5 transition-colors hover:bg-vez-surface/60">
                   {/* Row number */}
                   <span className="w-5 shrink-0 text-[11px] tabular-nums text-vez-mute">
@@ -229,7 +256,7 @@ export function NoticesDashboardMockup() {
           {/* Status bar */}
           <div className="flex shrink-0 items-center justify-between border-t border-vez-line px-6 py-2.5">
             <span className="text-[10px] text-vez-mute">
-              Showing {recentNotices.length} of {mockNotices.length} notices
+              Showing {rows.length} of {totalCount} notices
             </span>
             <Link href="/notices">
               <span className="cursor-pointer text-[10px] text-vez-navy hover:underline">

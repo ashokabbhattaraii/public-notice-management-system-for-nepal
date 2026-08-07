@@ -303,8 +303,7 @@ time, so items/runs still render sensibly if a source is later deleted
 
 > This schema was applied with `prisma db push` rather than
 > `prisma migrate dev`, because the existing migration history in this repo
-> had already drifted from the live database (the `Intern`/`Attendance`
-> models were added the same way). Do not run `migrate dev` /
+> had already drifted from the live database. Do not run `migrate dev` /
 > `migrate reset` against this database — it will attempt to drop and
 > recreate the schema. Use `db push` for further schema changes here until
 > the migration history is reconciled.
@@ -507,6 +506,49 @@ crawl4ai-doctor        # sanity-checks the install
 Without this step, `AsyncWebCrawler` will fail at runtime with a Playwright
 "executable doesn't exist" error — this is separate from `pip install`
 succeeding.
+
+### 6.6 Sitemap fast-path & direct-URL crawl
+
+Some sources (e.g. `mohp.gov.np`) expose a healthy XML sitemap but have
+listing category URLs that 404 — `/category/notice/` returns an SVG-only
+error page, which crawl4ai's content heuristics mislabel as
+"Blocked by anti-bot protection: Structural: minimal_text". Two mechanisms
+keep data flowing for such sources without per-site code:
+
+1. **Sitemap poll (`/scrape/sitemap/detect`, `/scrape/check`)** — one-time
+   detection of the winning article sitemap (robots.txt → `/sitemap.xml` →
+   best `sitemapindex` child, verified for same-origin article-like `<loc>`s),
+   cached on the `ScrapeSource` row; each poll is a cheap GET returning only
+   `<loc>` entries not yet in the DB (`new_urls`).
+2. **Direct-URL crawl (`/scrape/sitemap-crawl`)** — when the sitemap poll
+   reports new URLs, the scheduler (or a manual run's zero-items fallback)
+   fetches those exact detail pages via `scraper.scrape_sitemap_urls()`,
+   reusing the same generic detail-page pipeline, attachment scanning, and
+   concurrent AI summarization as a listing crawl. No listing page, no CSS
+   schema, no `JsonCssExtractionStrategy` — the sitemap already enumerated
+   the content.
+
+**Route: `POST /scrape/sitemap-crawl`**
+
+```json
+{
+  "base_url": "https://mohp.gov.np",
+  "urls": ["https://mohp.gov.np/content/474/.../", "..."],
+  "known_urls": ["..."],
+  "run_id": "a3f1...-uuid-of-the-ScrapeRun-row"
+}
+```
+
+Returns the same `{items, schemas}` shape as `/scrape/source` (schemas is
+always empty), so the NestJS side persists through the identical
+dedup/attachment/summarize pipeline (`persistItems`).
+
+**API wiring:** `ScrapingService.runSourceFromUrls(id, urls)` +
+`executeRunFromUrls()` (used by the scheduler's `pollSitemap` →
+`enqueueUrlScrape` path) and `executeRun`'s fallback — a manual "Run now"
+whose listing crawl yields 0 items but whose source has a `sitemapUrl`
+falls back to crawling the sitemap's new URLs. Both paths share
+`persistItems()` with the listing crawl.
 
 ---
 

@@ -1,24 +1,32 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, Suspense } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { GoogleLogin } from "@react-oauth/google"
 import { ArrowLeft, ArrowUpRight } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
-export default function LoginPage() {
+function LoginForm() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const { loginWithGoogle } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect = searchParams.get("redirect")
+
+  const safeRedirect = (() => {
+    if (!redirect || !redirect.startsWith("/") || redirect.startsWith("//")) return null
+    return redirect
+  })()
 
   const handleGoogleSuccess = async (credential?: string) => {
     setError("")
     setLoading(true)
     const u = credential ? await loginWithGoogle(credential) : null
     if (u) {
-      router.push(u.role === "admin" ? "/admin" : "/dashboard")
+      if (safeRedirect) router.replace(safeRedirect)
+      else router.push(u.role === "admin" ? "/admin" : "/dashboard")
     } else {
       setError("Google sign-in failed. Please try again.")
     }
@@ -116,5 +124,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
