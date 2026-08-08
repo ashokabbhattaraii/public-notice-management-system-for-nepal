@@ -1,0 +1,15 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+
+    ports:
+      - "3535:3535"
+
+    environment:
+      NODE_ENV: production
+      PORT: 3535
+      HOSTNAME: 0.0.0.0
+
+    restart: unless-stopped
