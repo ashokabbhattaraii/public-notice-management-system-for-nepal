@@ -11,7 +11,7 @@ const problems = [
     stat: "50+",
     statLabel: "NODES_DISCONNECTED",
     refCode: "INFRA_01",
-    body: "Nepal's notices are spread across independent ministry and commission websites — each with its own format, schedule, and URL. Citizens must visit all of them manually.",
+    body: "Nepal's notices are spread across independent ministry and commission websites - each with its own format, schedule, and URL. Citizens must visit all of them manually.",
     severity: "critical",
   },
   {

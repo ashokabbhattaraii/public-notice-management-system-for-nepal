@@ -1,4 +1,9 @@
-import { Notice, User, RagDocument, ScrapingSource, AlertRule, Activity } from "./types"
+import { Notice, User, ScrapingSource, AlertRule, Activity } from "./types"
+
+interface MockRagDocument {
+  id: string; title: string; category: string; uploadedAt: string
+  fileSize: string; viewCount: number; summary: string; format: string
+}
 
 export const mockUsers: User[] = [
   {
@@ -59,7 +64,7 @@ export const mockNotices: Notice[] = [
     isOcr: true,
     ocrConfidence: 94,
     scrapedAt: "2026-05-28T10:12:00Z",
-    aiSummary: "NPSC is recruiting Section Officers (Non-Technical) for 2082. Applicants need a Master's degree and must clear a two-phase process — written exam followed by interview. The application window closes on Shrawan 15, 2082.",
+    aiSummary: "NPSC is recruiting Section Officers (Non-Technical) for 2082. Applicants need a Master's degree and must clear a two-phase process - written exam followed by interview. The application window closes on Shrawan 15, 2082.",
     keyFacts: [
       "Post: Section Officer (Non-Technical)",
       "Qualification: Master's degree from a recognized university",
@@ -196,10 +201,10 @@ export const mockNotices: Notice[] = [
     sourcePortal: "immigration.gov.np",
     isOcr: false,
     scrapedAt: "2026-05-30T11:10:00Z",
-    aiSummary: "Nepal's Department of Immigration has fully digitized the passport renewal process — no in-person visit required. Citizens whose passports expire within 6 months can apply online by uploading citizenship certificate, passport scan, and a photo. Processing takes 7–10 working days.",
+    aiSummary: "Nepal's Department of Immigration has fully digitized the passport renewal process - no in-person visit required. Citizens whose passports expire within 6 months can apply online by uploading citizenship certificate, passport scan, and a photo. Processing takes 7–10 working days.",
     keyFacts: [
       "Eligibility: Passports expiring within 6 months",
-      "Process: Fully online — no in-person visit",
+      "Process: Fully online - no in-person visit",
       "Documents: Citizenship scan, passport scan, recent photo",
       "Processing time: 7–10 working days",
     ],
@@ -322,7 +327,7 @@ export const mockNotices: Notice[] = [
   },
 ]
 
-export const mockDocuments: RagDocument[] = [
+export const mockDocuments: MockRagDocument[] = [
   {
     id: "d1",
     title: "Nepal Constitution 2072 (Full Text)",

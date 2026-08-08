@@ -2,15 +2,34 @@
   "name": "public-notice-management",
   "private": true,
   "scripts": {
+    "predev": "pnpm kill",
     "dev": "turbo dev",
+    "predev:web": "pnpm kill:web",
+    "dev:web": "turbo dev --filter=@pnm/web",
+    "predev:api": "pnpm kill:api",
+    "dev:api": "turbo dev --filter=@pnm/api",
+    "dev:ai": "turbo dev --filter=@pnm/ai",
     "build": "turbo build",
     "lint": "turbo lint",
-    "dev:web": "turbo dev --filter=@pnm/web",
-    "dev:api": "turbo dev --filter=@pnm/api",
-    "dev:ai": "turbo dev --filter=@pnm/ai"
+    "kill": "lsof -ti:3000,3001,8000 | xargs kill -9 2>/dev/null || true",
+    "kill:web": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true",
+    "kill:api": "lsof -ti:3001 | xargs kill -9 2>/dev/null || true",
+    "db:start": "brew services start postgresql@15",
+    "db:stop": "brew services stop postgresql@15",
+    "db:setup": "bash scripts/setup-db.sh",
+    "db:migrate": "pnpm --filter @pnm/api prisma:migrate",
+    "db:studio": "pnpm --filter @pnm/api prisma:studio",
+    "db:push": "pnpm --filter @pnm/api prisma:push",
+    "db:seed": "pnpm --filter @pnm/api db:seed",
+    "db:reset": "pnpm --filter @pnm/api prisma:reset",
+    "setup": "pnpm install && pnpm db:start && pnpm db:setup && pnpm db:migrate"
   },
   "devDependencies": {
     "turbo": "^2.5.0"
   },
-  "packageManager": "pnpm@10.18.0"
+  "packageManager": "pnpm@10.18.0",
+  "dependencies": {
+    "@nestjs/swagger": "^11.4.4",
+    "swagger-ui-express": "^5.0.1"
+  }
 }

@@ -1,0 +1,227 @@
+// Prisma schema for the public-notice-management API.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+model User {
+  id          String     @id @default(uuid()) @db.Uuid
+  // Google account subject id ("sub" claim) — stable, unique per Google account.
+  googleId    String     @unique @map("google_id")
+  email       String     @unique
+  name        String
+  avatarUrl   String?    @map("avatar_url")
+  role        Role       @default(user)
+  status      UserStatus @default(active)
+  lastLoginAt DateTime?  @map("last_login_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  documents   Document[]
+
+  @@map("users")
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  UNEMBEDDED
+  FAILED
+}
+
+model Document {
+  id          String         @id @default(uuid()) @db.Uuid
+  title       String
+  filename    String
+  mimeType    String         @map("mime_type")
+  fileSize    Int            @map("file_size")
+  filePath    String         @map("file_path")
+  fileHash    String?        @unique @map("file_hash")  // SHA-256 for deduplication
+  status      DocumentStatus @default(PENDING)
+  isOcr       Boolean        @default(false) @map("is_ocr")
+  isSystem    Boolean        @default(false) @map("is_system")
+  textLength  Int?           @map("text_length")
+  chunkCount  Int?           @map("chunk_count")
+  uploadedBy  String?        @map("uploaded_by") @db.Uuid
+  user        User?          @relation(fields: [uploadedBy], references: [id])
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  indexedAt   DateTime?      @map("indexed_at")
+
+  @@map("documents")
+}
+
+enum ScrapedItemCategory {
+  NOTICE
+  NEWS
+  PRESS_RELEASE
+  CIRCULAR
+  TENDER
+  VACANCY
+  JOB
+  INTERNSHIP
+  OTHER
+}
+
+enum ScrapeRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum ScrapePaginationType {
+  QUERY_PARAM    // append ?<paginationParam>=<n> (or & if the URL already has a query string)
+  PATH_TEMPLATE  // substitute a literal "{page}" token anywhere in the listing URL
+  NONE           // single page only, regardless of maxPages
+}
+
+// An admin-configured website to scrape for notices/news. CSS extraction
+// schemas are auto-detected (heuristics, with an LLM fallback) on first run
+// and cached here so subsequent runs are pure, fast CSS parsing.
+model ScrapeSource {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  baseUrl           String    @map("base_url")
+  // Listing page URLs; at least one must be set.
+  noticeListUrl         String?   @map("notice_list_url")
+  newsListUrl           String?   @map("news_list_url")
+  pressReleaseListUrl   String?   @map("press_release_list_url")
+  // Cached JsonCssExtractionStrategy schemas (crawl4ai format), keyed implicitly
+  // by category via these columns. Null until the first successful run.
+  noticeSchema          Json?     @map("notice_schema")
+  newsSchema            Json?     @map("news_schema")
+  pressReleaseSchema    Json?     @map("press_release_schema")
+  // Pagination behavior — sites vary wildly (?page=N, ?start=N, /page/N/, or
+  // no pagination at all), so this is admin-configurable per source rather
+  // than assumed.
+  paginationType    ScrapePaginationType @default(QUERY_PARAM) @map("pagination_type")
+  paginationParam   String    @default("page") @map("pagination_param")
+  startPage         Int       @default(1) @map("start_page")
+  maxPages          Int       @default(3) @map("max_pages")
+  // How often the automatic scheduler probes this source. HTML-only sources
+  // need a full crawl per poll, so they default to a slow 15-min cadence;
+  // sources with a usable sitemap fast-path can poll much more aggressively
+  // (3 min or less). Admin-editable per source because posting frequency
+  // varies wildly across ministries.
+  pollIntervalSeconds Int @default(900) @map("poll_interval_seconds")
+  // Cached sitemap URL for the cheap "new URLs only" fast-path. Null means
+  // "no usable sitemap — HTML-poll only". Detection is attempted exactly once
+  // (see sitemapCheckedAt) and the winner cached here, mirroring how
+  // noticeSchema/newsSchema cache CSS extraction patterns.
+  sitemapUrl         String?   @map("sitemap_url")
+  // When sitemap detection was last attempted. Non-null means "tried once,
+  // don't re-detect every tick" (null result is cached as a null sitemapUrl).
+  sitemapCheckedAt   DateTime? @map("sitemap_checked_at")
+  enabled           Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastRunAt         DateTime? @map("last_run_at")
+  lastStatus        ScrapeRunStatus? @map("last_status")
+
+  items ScrapedItem[]
+  runs  ScrapeRun[]
+
+  @@map("scrape_sources")
+}
+
+// A single notice or news item scraped from a government portal.
+model ScrapedItem {
+  id            String              @id @default(uuid()) @db.Uuid
+  sourceId      String?             @map("source_id") @db.Uuid
+  source        ScrapeSource?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceLabel   String              @default("mofa.gov.np") @map("source_label")
+  category      ScrapedItemCategory
+  // Raw URL slug segment from which the category was inferred (e.g. "press-release").
+  sourceSlug    String?             @map("source_slug")
+  title         String
+  // Canonical absolute URL of the detail page — used as the dedup key across scrape runs.
+  sourceUrl     String              @unique @map("source_url")
+  summary       String?
+  contentText   String?             @map("content_text")
+  contentHtml   String?             @map("content_html")
+  attachmentUrl String?             @map("attachment_url")
+  publishedAt   DateTime?           @map("published_at")
+  contentHash   String              @map("content_hash")
+  views         Int                 @default(0)
+  // AI enrichment — computed concurrently during scraping, not lazily.
+  aiSummary     String?             @map("ai_summary")
+  aiSummaryNe   String?             @map("ai_summary_ne")
+  aiUrgency     String?             @map("ai_urgency")
+  aiCategoryConfidence Float?       @map("ai_category_confidence")
+  keyFacts      Json?               @map("key_facts")
+  tags          Json?
+  // Structured metadata: reference number, issuing office, deadline, etc.
+  metadata      Json?
+  aiAnalyzedAt  DateTime?           @map("ai_analyzed_at")
+  scrapedAt     DateTime            @default(now()) @map("scraped_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  attachments   Attachment[]
+
+  @@index([category])
+  @@index([publishedAt])
+  @@index([sourceId])
+  @@map("scraped_items")
+}
+
+model Attachment {
+  id            String    @id @default(uuid()) @db.Uuid
+  itemId        String    @map("item_id") @db.Uuid
+  item          ScrapedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  url           String
+  mimeType      String?   @map("mime_type")
+  sizeBytes     Int?      @map("size_bytes")
+  storageKey    String?   @map("storage_key")
+  downloadedAt  DateTime? @map("downloaded_at")
+  label         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([itemId])
+  @@map("attachments")
+}
+
+// One execution of a scraping job, for the admin dashboard's logs view.
+model ScrapeRun {
+  id               String          @id @default(uuid()) @db.Uuid
+  sourceId         String?         @map("source_id") @db.Uuid
+  source           ScrapeSource?   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceLabel      String          @default("mofa.gov.np") @map("source_label")
+  status           ScrapeRunStatus @default(RUNNING)
+  itemsFound       Int             @default(0) @map("items_found")
+  itemsNew         Int             @default(0) @map("items_new")
+  itemsUpdated     Int             @default(0) @map("items_updated")
+  itemsSkipped     Int             @default(0) @map("items_skipped")
+  itemsSummarized  Int             @default(0) @map("items_summarized")
+  itemsSummaryFailed Int           @default(0) @map("items_summary_failed")
+  error            String?
+  startedAt        DateTime        @default(now()) @map("started_at")
+  finishedAt       DateTime?       @map("finished_at")
+
+  @@index([sourceId])
+  @@map("scrape_runs")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}

@@ -2,7 +2,6 @@
 
 import React, { useState } from "react"
 import {
-  Bell,
   Mail,
   MessageCircle,
   Phone,
@@ -13,10 +12,6 @@ import {
   EyeOff,
   Save,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
 
@@ -29,6 +24,9 @@ interface AlertChannel {
   lastTested: string | null
   fields: { key: string; label: string; value: string; placeholder: string }[]
 }
+
+const fieldClass =
+  "h-11 w-full rounded-full border border-vez-line bg-white px-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
 
 export default function AdminAlertChannelsPage() {
   const [channels, setChannels] = useState<AlertChannel[]>([
@@ -117,23 +115,35 @@ export default function AdminAlertChannelsPage() {
   const statusBadge = (status: AlertChannel["status"]) => {
     switch (status) {
       case "connected":
-        return <Badge variant="secondary" className="text-green-600 bg-green-500/10 gap-1"><CheckCircle className="size-3" /> Connected</Badge>
+        return (
+          <span className="flex items-center gap-1 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
+            <CheckCircle className="size-3" /> Connected
+          </span>
+        )
       case "error":
-        return <Badge variant="destructive" className="gap-1"><XCircle className="size-3" /> Error</Badge>
+        return (
+          <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs text-red-600">
+            <XCircle className="size-3" /> Error
+          </span>
+        )
       default:
-        return <Badge variant="outline" className="gap-1 text-muted-foreground">Not Configured</Badge>
+        return (
+          <span className="rounded-full border border-vez-line px-3 py-1 text-xs text-vez-mute">
+            Not configured
+          </span>
+        )
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
       <AdminLayout>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Bell className="size-5 text-primary" /> Alert Channels
+        <div className="mb-8">
+          <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+            Alert channels.
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="mt-2 text-sm text-vez-mute">
             Configure system-wide notification delivery methods for user alerts
           </p>
         </div>
@@ -142,90 +152,85 @@ export default function AdminAlertChannelsPage() {
           {channels.map((channel) => {
             const Icon = channel.icon
             return (
-              <Card key={channel.id} className={channel.enabled ? "border-primary/20" : ""}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`size-10 rounded-lg flex items-center justify-center ${
-                        channel.enabled ? "bg-primary/10 text-primary" : "bg-accent text-muted-foreground"
-                      }`}>
-                        <Icon className="size-5" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">{channel.name}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1">
-                          {statusBadge(channel.status)}
-                          {channel.lastTested && (
-                            <span className="text-[10px] text-muted-foreground">
-                              Last tested: {new Date(channel.lastTested).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          )}
-                        </div>
+              <div key={channel.id} className="rounded-[20px] bg-white p-6 md:p-8">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={`flex size-11 items-center justify-center rounded-full ${
+                      channel.enabled ? "bg-vez-navy text-white" : "bg-vez-surface text-vez-mute"
+                    }`}>
+                      <Icon className="size-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg text-vez-ink">{channel.name}</h2>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        {statusBadge(channel.status)}
+                        {channel.lastTested && (
+                          <span className="text-[10px] text-vez-mute">
+                            Last tested: {new Date(channel.lastTested).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <button onClick={() => toggleChannel(channel.id)}>
-                      {channel.enabled ? (
-                        <Badge className="bg-primary text-white gap-1">Enabled</Badge>
-                      ) : (
-                        <Badge variant="outline" className="gap-1 text-muted-foreground">Disabled</Badge>
-                      )}
-                    </button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {channel.fields.map((field) => (
-                      <div key={field.key}>
-                        <label className="text-sm font-medium mb-1.5 block">{field.label}</label>
-                        <div className="relative">
-                          <Input
-                            type={showFields[channel.id] ? "text" : "password"}
-                            placeholder={field.placeholder}
-                            value={field.value}
-                            onChange={(e) => updateField(channel.id, field.key, e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => toggleFieldVisibility(channel.id)}
-                    >
-                      {showFields[channel.id] ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                      {showFields[channel.id] ? "Hide" : "Show"} Values
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => testChannel(channel.id)}
-                      disabled={testingId === channel.id}
-                    >
-                      {testingId === channel.id ? (
-                        <><Loader2 className="size-3.5 animate-spin" /> Testing...</>
-                      ) : (
-                        "Test Connection"
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => saveChannel(channel.id)}
-                      disabled={savingId === channel.id}
-                    >
-                      {savingId === channel.id ? (
-                        <><Loader2 className="size-3.5 animate-spin" /> Saving...</>
-                      ) : (
-                        <><Save className="size-3.5" /> Save</>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  <button
+                    onClick={() => toggleChannel(channel.id)}
+                    className={`rounded-full px-4 py-2 text-xs transition-colors ${
+                      channel.enabled
+                        ? "bg-vez-navy text-white hover:opacity-90"
+                        : "border border-vez-line text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
+                    }`}
+                  >
+                    {channel.enabled ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  {channel.fields.map((field) => (
+                    <div key={field.key}>
+                      <label className="mb-2 block text-sm text-vez-mute">{field.label}</label>
+                      <input
+                        type={showFields[channel.id] ? "text" : "password"}
+                        placeholder={field.placeholder}
+                        value={field.value}
+                        onChange={(e) => updateField(channel.id, field.key, e.target.value)}
+                        className={fieldClass}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex items-center gap-2.5">
+                  <button
+                    className="flex items-center gap-1.5 rounded-full border border-vez-line px-4 py-2 text-xs text-vez-ink transition-colors hover:bg-vez-surface"
+                    onClick={() => toggleFieldVisibility(channel.id)}
+                  >
+                    {showFields[channel.id] ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                    {showFields[channel.id] ? "Hide" : "Show"} values
+                  </button>
+                  <button
+                    className="flex items-center gap-1.5 rounded-full border border-vez-line px-4 py-2 text-xs text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-50"
+                    onClick={() => testChannel(channel.id)}
+                    disabled={testingId === channel.id}
+                  >
+                    {testingId === channel.id ? (
+                      <><Loader2 className="size-3.5 animate-spin" /> Testing…</>
+                    ) : (
+                      "Test connection"
+                    )}
+                  </button>
+                  <button
+                    className="flex items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    onClick={() => saveChannel(channel.id)}
+                    disabled={savingId === channel.id}
+                  >
+                    {savingId === channel.id ? (
+                      <><Loader2 className="size-3.5 animate-spin" /> Saving…</>
+                    ) : (
+                      <><Save className="size-3.5" /> Save</>
+                    )}
+                  </button>
+                </div>
+              </div>
             )
           })}
         </div>

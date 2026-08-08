@@ -1,65 +1,111 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from "react"
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { User } from "./types"
-import { mockUsers } from "./mock-data"
+import { fetchMe, googleLogin, apiLogout, tokenStore, AUTH_EXPIRED_EVENT } from "./api"
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
-  loginWithGoogle: (role?: "admin" | "user") => Promise<boolean>
+  isAdmin: boolean
+  /** Real sign-in: exchange a Google ID token for a session. Returns the user on success. */
+  loginWithGoogle: (credential: string) => Promise<User | null>
   logout: () => void
 }
 
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const USER_KEY = "pnm_user"
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    const stored = localStorage.getItem("pnm_user")
-    if (stored) {
-      setUser(JSON.parse(stored))
-    }
-    setIsLoading(false)
+  /** Remove every auth artifact — localStorage + cookie + in-memory state. */
+  const clearSession = useCallback(() => {
+    setUser(null)
+    tokenStore.clear()
+    localStorage.removeItem(USER_KEY)
   }, [])
 
-  const loginWithGoogle = async (role?: "admin" | "user"): Promise<boolean> => {
-    // If a user is already stored (e.g., dummy login), keep their role.
-    // This prevents always forcing `role: "user"` during dummy/admin login flows.
-    const stored = localStorage.getItem("pnm_user")
+  // On mount: hydrate from localStorage, then re-validate the token against the
+  // API. A stored user whose token is gone/expired must NOT survive — otherwise
+  // the UI believes we're signed in while every API call fails.
+  useEffect(() => {
+    const stored = localStorage.getItem(USER_KEY)
     if (stored) {
       try {
         setUser(JSON.parse(stored))
-        return true
       } catch {
-        // fall through to mock default
+        localStorage.removeItem(USER_KEY)
       }
     }
 
-    // Default dummy login: pick active user/admin based on requested role.
-    const googleUser =
-      (role === "admin"
-        ? mockUsers.find((u) => u.role === "admin" && u.status === "active")
-        : mockUsers.find((u) => u.role === "user" && u.status === "active")) ??
-      mockUsers.find((u) => u.status === "active") ??
-      mockUsers[0]
+    fetchMe()
+      .then((me) => {
+        if (me) {
+          setUser(me)
+          localStorage.setItem(USER_KEY, JSON.stringify(me))
+        } else {
+          // Token missing/invalid server-side → drop the stale cached user too.
+          clearSession()
+        }
+      })
+      .catch(() => {
+        clearSession()
+      })
+      .finally(() => setIsLoading(false))
+  }, [clearSession])
 
+  // Global 401 listener: any API call that got rejected mid-session (expired
+  // token while browsing, revoked token, storage cleared) force-logs-out so
+  // route guards bounce to /login.
+  useEffect(() => {
+    const onUnauthorized = () => clearSession()
+    window.addEventListener(AUTH_EXPIRED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onUnauthorized)
+  }, [clearSession])
 
-    setUser(googleUser)
-    localStorage.setItem("pnm_user", JSON.stringify(googleUser))
-    return true
+  // Cross-tab sync: if another tab clears the auth keys (logout, "clear site
+  // data"), or signs in, reflect it here so this tab doesn't keep a ghost user.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === USER_KEY) {
+        if (e.newValue) {
+          try {
+            setUser(JSON.parse(e.newValue))
+          } catch {
+            setUser(null)
+          }
+        } else {
+          setUser(null)
+        }
+      }
+    }
+    window.addEventListener("storage", onStorage)
+    return () => window.removeEventListener("storage", onStorage)
+  }, [])
+
+  const loginWithGoogle = async (credential: string): Promise<User | null> => {
+    try {
+      const loggedIn = await googleLogin(credential)
+      setUser(loggedIn)
+      localStorage.setItem(USER_KEY, JSON.stringify(loggedIn))
+      return loggedIn
+    } catch {
+      tokenStore.clear()
+      return null
+    }
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem("pnm_user")
-  }
+  /** Sign out everywhere: revoke the server session, then drop local state. */
+  const logout = useCallback(() => {
+    void apiLogout()
+    clearSession()
+  }, [clearSession])
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAdmin: user?.role === "admin", loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,16 +1,65 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Logo } from "@/components/ui/logo"
-import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Bell, Menu, X, Globe, LogOut, LayoutDashboard, Shield, ArrowUpRight, ChevronDown } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { cn } from "@/lib/utils"
-import { ThemeToggle } from "@/components/theme-toggle"
+
+const productLinks = [
+  { id: "#problem", tKey: "nav.product.problem" },
+  { id: "#solution", tKey: "nav.product.solution" },
+  { id: "#features", tKey: "nav.product.features" },
+]
+
+const resourceLinks = [
+  { href: "/notices", tKey: "nav.notices" },
+  { href: "/documents", tKey: "nav.rag" },
+]
+
+const standaloneLinks = [
+  { id: "#pricing", tKey: "nav.pricing", anchor: true },
+  { href: "/about", tKey: "nav.about", anchor: false },
+]
+
+function Dropdown({ label, children, solid }: { label: string; children: React.ReactNode; solid: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+          "text-vez-ink hover:bg-white/60"
+        )}
+      >
+        {label}
+        <ChevronDown className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className={cn(
+          "absolute top-full left-0 mt-2 min-w-[160px] rounded-xl border p-1.5 shadow-lg backdrop-blur-xl",
+          solid ? "bg-white/90 border-white/60" : "bg-white/80 border-white/40"
+        )}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function Header() {
   const { user, logout } = useAuth()
@@ -20,320 +69,357 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10)
+    const onScroll = () => setScrolled(window.scrollY > 24)
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
 
-  const isHomePage = pathname === "/"
+  const isHome = pathname === "/"
+  const solid = !isHome || scrolled || mobileOpen
 
-  const mainNavLinks = isHomePage
-    ? [
-        { href: "/", label: "Home", scroll: false },
-        { href: "#problem", label: "Problem", scroll: true },
-        { href: "#solution", label: "Solution", scroll: true },
-        { href: "#features", label: "Features", scroll: true },
-        { href: "#about", label: "About Us", scroll: true },
-        { href: "#contact", label: "Contact", scroll: true },
-      ]
-    : [
-        { href: "/", label: "Home", scroll: false },
-        { href: "/#problem", label: "Problem", scroll: false },
-        { href: "/#solution", label: "Solution", scroll: false },
-        { href: "/#features", label: "Features", scroll: false },
-        { href: "/#about", label: "About Us", scroll: false },
-        { href: "/#contact", label: "Contact", scroll: false },
-      ]
-
-  const utilityLinks = [
-    { href: "/notices", label: "Notices" },
-    { href: "/rag", label: "Documents" },
-  ]
-
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, scroll?: boolean) => {
-    if (scroll && href.startsWith("#")) {
-      if (isHomePage) {
-        e.preventDefault()
-        const element = document.querySelector(href)
-        if (element) {
-          const offset = 80
-          const elementPosition = element.getBoundingClientRect().top + window.pageYOffset
-          window.scrollTo({ top: elementPosition - offset, behavior: "smooth" })
-        }
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, anchor: boolean) => {
+    if (anchor && isHome && href.startsWith("#")) {
+      e.preventDefault()
+      const element = document.querySelector(href)
+      if (element) {
+        const top = element.getBoundingClientRect().top + window.pageYOffset - 88
+        window.scrollTo({ top, behavior: "smooth" })
       }
-      // If not on homepage, the Link href="#section" won't work, so we need full path
-      setMobileOpen(false)
     }
+    setMobileOpen(false)
   }
+
+
+  const isActive = (href: string, anchor: boolean) =>
+    !anchor && pathname === href
 
   return (
     <>
       <header
         className={cn(
           "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300",
-          scrolled
-            ? "bg-background/95 backdrop-blur-xl shadow-sm"
-            : "bg-background/80 backdrop-blur-md"
+          solid
+            ? "bg-white/60 backdrop-blur-xl border-b border-white/50 shadow-sm"
+            : "bg-transparent"
         )}
       >
-        {/* Top accent line */}
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
-        {/* Bottom border */}
-        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-border/50" />
-
-        <div className="relative max-w-[1480px] mx-auto flex items-center justify-between h-16 lg:h-[4.5rem] px-4 sm:px-6 lg:px-8">
-          {/* Logo */}
-          <Link href="/" className="relative shrink-0">
-            <Logo size="sm" />
+        <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between px-6 md:px-8 lg:px-12">
+          {/* Brand */}
+          <Link href="/" className="shrink-0">
+            <Image
+              src="/images/logo.png"
+              alt="Suchana AI"
+              width={220}
+              height={220}
+              className="h-16 w-auto sm:h-[72px]"
+              priority
+            />
           </Link>
 
-          {/* Desktop Navigation — only visible on lg+ */}
-          <div className="hidden lg:flex items-center gap-2 xl:gap-3">
-            {/* Main nav */}
-            <nav className="flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {mainNavLinks.map((link) => {
-                const isActive = link.scroll ? false : pathname === link.href
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={(e) => handleNavClick(e, link.href, link.scroll)}
-                    className={cn(
-                      "px-3 xl:px-4 py-1.5 text-[13px] font-medium rounded-full transition-all duration-200 whitespace-nowrap",
-                      isActive
-                        ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                )
-              })}
-            </nav>
-
-            {/* Utility links */}
-            <div className="flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {utilityLinks.map((link) => (
+          {/* Frosted pill nav */}
+          <nav
+            className={cn(
+              "hidden lg:flex items-center gap-1 rounded-full p-2 backdrop-blur-md border transition-all duration-300",
+              solid ? "bg-white/40 border-white/50" : "bg-white/10 border-white/20"
+            )}
+          >
+            <Dropdown label={t("nav.product")} solid={solid}>
+              {productLinks.map((link) => (
                 <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "px-3 xl:px-4 py-1.5 text-[13px] font-medium rounded-full transition-all duration-200 whitespace-nowrap",
-                    pathname === link.href
-                      ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                  )}
+                  key={link.tKey}
+                  href={isHome ? link.id : `/${link.id}`}
+                  onClick={(e) => handleNavClick(e, isHome ? link.id : `/${link.id}`, true)}
+                  className="block rounded-lg px-3 py-2 text-base text-vez-ink transition-colors hover:bg-vez-sky/40"
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
               ))}
-            </div>
+            </Dropdown>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              {/* Language */}
-              <button
-                onClick={() => setLanguage(language === "en" ? "ne" : "en")}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-full hover:bg-accent transition-colors"
+            {resourceLinks.map((link) => (
+              <Link
+                key={link.tKey}
+                href={link.href}
+                className={cn(
+                  "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+                  isActive(link.href, false)
+                    ? "bg-vez-navy text-white"
+                    : "text-vez-ink hover:bg-white/60"
+                )}
               >
-                <Globe className="size-3.5" />
-                <span className="font-semibold">{language === "en" ? "EN" : "ने"}</span>
-              </button>
+                {t(link.tKey)}
+              </Link>
+            ))}
 
-              {/* Theme */}
-              <ThemeToggle />
-
-              {user ? (
-                <>
-                  <Button variant="ghost" size="icon" className="relative size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                    <Bell className="size-4" />
-                    <span className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-indigo-600 text-[9px] text-white flex items-center justify-center font-bold">
-                      3
-                    </span>
-                  </Button>
-
-                  {user.role === "admin" && (
-                    <Link href="/admin">
-                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                        <Shield className="size-4" />
-                      </Button>
-                    </Link>
+            {standaloneLinks.map((link) => {
+              const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
+              return (
+                <Link
+                  key={link.tKey}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, link.anchor)}
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-4 py-1.5 text-base transition-colors",
+                    isActive(href, link.anchor)
+                      ? "bg-vez-navy text-white"
+                      : "text-vez-ink hover:bg-white/60"
                   )}
-
-                  <Link href="/dashboard">
-                    <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full">
-                      <LayoutDashboard className="size-4" />
-                    </Button>
-                  </Link>
-
-                  {/* Avatar + logout */}
-                  <div className="flex items-center gap-2 ml-1 pl-2 border-l border-border">
-                    <div className="size-7 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center">
-                      <span className="text-[11px] font-bold text-white">{user.username[0].toUpperCase()}</span>
-                    </div>
-                    <div className="hidden xl:block text-sm leading-none">
-                      <p className="font-medium text-foreground">{user.username}</p>
-                      <Badge className="text-[9px] px-1.5 py-0 h-3.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 rounded-full mt-0.5">
-                        {user.role}
-                      </Badge>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={logout} className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full">
-                      <LogOut className="size-3.5" />
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <Link href="/login">
-                  <button className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white rounded-full bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-sm">
-                    <span>Get Started</span>
-                    <ArrowRight className="size-3.5" />
-                  </button>
+                >
+                  {t(link.tKey)}
                 </Link>
+              )
+            })}
+          </nav>
+
+          {/* Right actions */}
+          <div className="hidden lg:flex items-center gap-2">
+            <Link
+              href="/contact"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-5 py-2 text-base font-medium transition-all",
+                pathname === "/contact"
+                  ? "bg-vez-navy text-white"
+                  : "bg-vez-navy/10 text-vez-navy border border-vez-navy/10 hover:bg-vez-navy hover:text-white hover:border-vez-navy"
               )}
-            </div>
+            >
+              {t("nav.contact")}
+              <ArrowUpRight className="size-3.5" />
+            </Link>
+
+            <button
+              onClick={() => setLanguage(language === "en" ? "ne" : "en")}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-base text-vez-ink transition-colors hover:bg-white/60"
+            >
+              <Globe className="size-4" />
+              {language === "en" ? "EN" : "ने"}
+            </button>
+
+            {user ? (
+              <>
+                <button
+                  className={cn(
+                    "relative flex size-10 items-center justify-center rounded-full text-vez-ink/70 transition-colors hover:text-vez-navy",
+                    solid ? "hover:bg-vez-surface" : "hover:bg-white/40"
+                  )}
+                  aria-label="Notifications"
+                >
+                  <Bell className="size-4" />
+                  <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-vez-navy text-[9px] text-white">
+                    3
+                  </span>
+                </button>
+
+                {user.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    className={cn(
+                      "flex size-10 items-center justify-center rounded-full text-vez-ink/70 transition-colors hover:text-vez-navy",
+                      solid ? "hover:bg-vez-surface" : "hover:bg-white/40"
+                    )}
+                    aria-label="Admin panel"
+                  >
+                    <Shield className="size-4" />
+                  </Link>
+                )}
+
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+                >
+                  <LayoutDashboard className="size-4" />
+                  {t("nav.dashboard")}
+                </Link>
+
+                <div className="ml-1 flex items-center gap-2 border-l border-vez-ink/15 pl-3">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky">
+                    <span className="text-sm text-vez-navy">{user.username[0].toUpperCase()}</span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="flex size-9 items-center justify-center rounded-full text-vez-ink/60 transition-colors hover:bg-red-50 hover:text-red-600"
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="size-4" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+              >
+                {t("nav.signin")}
+                <ArrowUpRight className="size-4" />
+              </Link>
+            )}
           </div>
 
-          {/* Mobile menu button — visible below lg */}
-          <div className="flex lg:hidden items-center gap-2">
-            {/* Quick actions on mobile */}
+          {/* Mobile toggle */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <button
+              onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
+              className="flex size-10 items-center justify-center rounded-full bg-vez-navy/10 text-vez-navy backdrop-blur-[6px]"
+              aria-label="Notify"
+            >
+              <Bell className="size-4" />
+            </button>
             {user && (
-              <Button variant="ghost" size="icon" className="relative size-9 text-muted-foreground hover:text-foreground rounded-full">
+              <button className="relative flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]" aria-label="Notifications">
                 <Bell className="size-4" />
-                <span className="absolute top-0.5 right-0.5 size-3 rounded-full bg-indigo-600 text-[8px] text-white flex items-center justify-center font-bold">
+                <span className="absolute right-1 top-1 flex size-3.5 items-center justify-center rounded-full bg-vez-navy text-[8px] text-white">
                   3
                 </span>
-              </Button>
+              </button>
             )}
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 text-foreground hover:bg-accent rounded-full"
+            <button
+              className="flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]"
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label="Toggle menu"
             >
               {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* Mobile menu */}
         <div
           className={cn(
-            "lg:hidden overflow-hidden transition-all duration-300 ease-out",
-            mobileOpen ? "max-h-[85vh] opacity-100" : "max-h-0 opacity-0"
+            "lg:hidden overflow-hidden transition-all duration-300",
+            mobileOpen ? "max-h-[85vh]" : "max-h-0"
           )}
         >
-          <div className="border-t border-border bg-background/98 backdrop-blur-xl">
-            <nav className="max-w-[1480px] mx-auto flex flex-col px-4 sm:px-6 py-3 gap-0.5 max-h-[75vh] overflow-y-auto">
-              {/* Nav links */}
-              {mainNavLinks.map((link) => {
-                const isActive = link.scroll ? false : pathname === link.href
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={(e) => {
-                      handleNavClick(e, link.href, link.scroll)
-                      setMobileOpen(false)
-                    }}
-                    className={cn(
-                      "px-4 py-3 rounded-lg text-[15px] font-medium transition-colors",
-                      isActive
-                        ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                        : "text-foreground hover:bg-accent"
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                )
-              })}
-
-              <div className="h-px my-2 bg-border" />
-
-              {/* Utility */}
-              {utilityLinks.map((link) => (
+          <nav className="flex max-h-[75vh] flex-col gap-1 overflow-y-auto border-t border-vez-line bg-white px-6 py-4">
+            <p className="px-4 py-1 text-xs font-medium uppercase tracking-wider text-vez-mute">{t("nav.product")}</p>
+            {productLinks.map((link) => {
+              const href = isHome ? link.id : `/${link.id}`
+              return (
                 <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "px-4 py-3 rounded-lg text-[15px] font-medium transition-colors",
-                    pathname === link.href
-                      ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                      : "text-foreground hover:bg-accent"
-                  )}
+                  key={link.tKey}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, true)}
+                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink transition-colors hover:bg-vez-surface"
                 >
-                  {link.label}
+                  {t(link.tKey)}
                 </Link>
-              ))}
+              )
+            })}
 
-              <div className="h-px my-2 bg-border" />
+            <div className="my-2 h-px bg-vez-line" />
 
-              {/* Settings row */}
-              <div className="flex items-center gap-3 px-4 py-2">
-                <button
-                  onClick={() => setLanguage(language === "en" ? "ne" : "en")}
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-accent transition-colors"
-                >
-                  <Globe className="size-4" />
-                  <span className="font-medium">{language === "en" ? "EN" : "ने"}</span>
-                </button>
-              </div>
+            {resourceLinks.map((link) => (
+              <Link
+                key={link.tKey}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "rounded-[12px] px-4 py-3 text-base transition-colors",
+                  isActive(link.href, false) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
+                )}
+              >
+                {t(link.tKey)}
+              </Link>
+            ))}
 
-              <div className="h-px my-2 bg-border" />
+            <div className="my-2 h-px bg-vez-line" />
 
-              {/* User section */}
-              {user ? (
-                <>
-                  {/* User info */}
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="size-9 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shrink-0">
-                      <span className="text-sm font-bold text-white">{user.username[0].toUpperCase()}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{user.username}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
-                    </div>
-                  </div>
-
-                  <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-[15px] font-medium text-foreground hover:bg-accent transition-colors">
-                    Dashboard
-                  </Link>
-                  {user.role === "admin" && (
-                    <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-[15px] font-medium text-foreground hover:bg-accent transition-colors">
-                      Admin Panel
-                    </Link>
+            {standaloneLinks.map((link) => {
+              const href = link.anchor ? (isHome ? link.id! : `/${link.id}`) : link.href!
+              return (
+                <Link
+                  key={link.tKey}
+                  href={href}
+                  onClick={(e) => handleNavClick(e, href, link.anchor)}
+                  className={cn(
+                    "rounded-[12px] px-4 py-3 text-base transition-colors",
+                    isActive(href, link.anchor) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                   )}
-                  <button
-                    onClick={() => { logout(); setMobileOpen(false) }}
-                    className="px-4 py-3 rounded-lg text-[15px] font-medium text-left text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </>
-              ) : (
-                <div className="px-3 py-2">
-                  <Link href="/login" onClick={() => setMobileOpen(false)}>
-                    <button className="w-full flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors">
-                      <span>Get Started</span>
-                      <ArrowRight className="size-4" />
-                    </button>
-                  </Link>
-                </div>
+                >
+                  {t(link.tKey)}
+                </Link>
+              )
+            })}
+
+            <Link
+              href="/contact"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "rounded-[12px] px-4 py-3 text-base transition-colors",
+                pathname === "/contact" ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
               )}
-            </nav>
-          </div>
+            >
+              {t("nav.contact")}
+            </Link>
+
+            <div className="my-2 h-px bg-vez-line" />
+
+            <button
+              onClick={() => setLanguage(language === "en" ? "ne" : "en")}
+              className="flex items-center gap-2 rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+            >
+              <Globe className="size-4" />
+              {language === "en" ? "English" : "नेपाली"}
+            </button>
+
+            <div className="my-2 h-px bg-vez-line" />
+
+            {user ? (
+              <>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky">
+                    <span className="text-sm text-vez-navy">{user.username[0].toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <p className="text-base text-vez-ink">{user.username}</p>
+                    <p className="text-sm capitalize text-vez-mute">{user.role}</p>
+                  </div>
+                </div>
+
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                >
+                  {t("nav.dashboard")}
+                </Link>
+                {user.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                  >
+                    {t("nav.adminPanel")}
+                  </Link>
+                )}
+                <button
+                  onClick={() => {
+                    logout()
+                    setMobileOpen(false)
+                  }}
+                  className="rounded-[12px] px-4 py-3 text-left text-base text-red-600 hover:bg-red-50"
+                >
+                  {t("nav.signout")}
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white"
+              >
+                {t("nav.signin")}
+                <ArrowUpRight className="size-4" />
+              </Link>
+            )}
+          </nav>
         </div>
       </header>
 
-      {/* Spacer */}
-      <div className="h-16 lg:h-[4.5rem]" aria-hidden="true" />
+      {/* Spacer - only off the home page; the hero supplies its own top padding under the transparent header */}
+      {!isHome && <div className="h-20" aria-hidden="true" />}
     </>
   )
 }

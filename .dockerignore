@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.turbo
+*.log
+.env
+.env.*
+.DS_Store
+coverage
+dist
+
+# SSH/private keys
+*.key
+*.pem

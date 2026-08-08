@@ -3,7 +3,6 @@
 import React, { useState } from "react"
 import Link from "next/link"
 import {
-  Settings,
   User,
   Globe,
   Bell,
@@ -14,10 +13,6 @@ import {
   CheckCircle,
   Info,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
@@ -42,222 +37,218 @@ export default function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-white font-poppins">
         <Header />
         <div className="flex items-center justify-center py-32">
-          <Card className="max-w-md w-full">
-            <CardContent className="p-8 text-center">
-              <AlertCircle className="size-12 text-muted-foreground mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Sign in required</h2>
-              <p className="text-muted-foreground mb-4">Please sign in to access settings</p>
-              <Link href="/login"><Button>Sign In</Button></Link>
-            </CardContent>
-          </Card>
+          <div className="w-full max-w-sm rounded-[24px] bg-vez-surface p-10 text-center">
+            <AlertCircle className="mx-auto mb-4 size-10 text-vez-mute" />
+            <h2 className="mb-1 text-lg text-vez-ink">Sign in required</h2>
+            <p className="mb-6 text-sm text-vez-mute">Please sign in to access settings.</p>
+            <Link
+              href="/login"
+              className="block w-full rounded-full bg-vez-navy px-6 py-3 text-base text-white transition-opacity hover:opacity-90"
+            >
+              Sign in
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
+  const toggleButton = (enabled: boolean, onClick: () => void) => (
+    <button
+      onClick={onClick}
+      className={`rounded-full px-4 py-2 text-xs transition-colors ${
+        enabled
+          ? "bg-vez-navy text-white hover:opacity-90"
+          : "border border-vez-line text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
+      }`}
+    >
+      {enabled ? "Enabled" : "Disabled"}
+    </button>
+  )
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Settings className="size-5 text-primary" /> Settings
+        <div className="mb-8">
+          <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+            Settings.
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your account and alert preferences</p>
+          <p className="mt-2 text-sm text-vez-mute">Manage your account and alert preferences</p>
         </div>
 
         <div className="space-y-6">
           {/* Profile */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <User className="size-4" /> Profile
-              </CardTitle>
-              <CardDescription>Your account information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Username</label>
-                  <p className="mt-1 font-medium">{user.username}</p>
+          <div className="rounded-[20px] bg-white p-6 md:p-8">
+            <h2 className="flex items-center gap-2 text-lg text-vez-ink">
+              <User className="size-4 text-vez-navy" /> Profile
+            </h2>
+            <p className="mt-1 text-sm text-vez-mute">Your account information</p>
+            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {[
+                { label: "Username", value: user.username },
+                { label: "Email", value: user.email },
+                { label: "Role", value: user.role, capitalize: true },
+                { label: "Member since", value: new Date(user.createdAt).toLocaleDateString() },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-sm text-vez-mute">{item.label}</p>
+                  <p className={`mt-1 text-base text-vez-ink ${item.capitalize ? "capitalize" : ""}`}>{item.value}</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Email</label>
-                  <p className="mt-1 font-medium">{user.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Role</label>
-                  <p className="mt-1 font-medium capitalize">{user.role}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Member since</label>
-                  <p className="mt-1 font-medium">{new Date(user.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          </div>
 
           {/* Alert Preferences */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="size-4" /> Alert Preferences
-              </CardTitle>
-              <CardDescription>Choose how you want to receive notice alerts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
-                <Info className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground">
+          <div className="rounded-[20px] bg-white p-6 md:p-8">
+            <h2 className="flex items-center gap-2 text-lg text-vez-ink">
+              <Bell className="size-4 text-vez-navy" /> Alert preferences
+            </h2>
+            <p className="mt-1 text-sm text-vez-mute">Choose how you want to receive notice alerts</p>
+
+            <div className="mt-6 space-y-4">
+              <div className="flex items-start gap-2.5 rounded-[14px] bg-vez-surface px-4 py-3">
+                <Info className="mt-0.5 size-4 shrink-0 text-vez-mute" />
+                <p className="text-xs text-vez-mute">
                   You will only receive alerts through channels your administrator has configured.
                 </p>
               </div>
 
               {/* Email - always available */}
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                <div className="flex items-center gap-3">
-                  <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Mail className="size-4 text-primary" />
+              <div className="flex items-center justify-between rounded-[16px] bg-vez-surface p-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-white">
+                    <Mail className="size-4 text-vez-navy" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">Email</p>
-                    <p className="text-xs text-muted-foreground">{alertPrefs.email.value}</p>
+                    <p className="text-sm text-vez-ink">Email</p>
+                    <p className="text-xs text-vez-mute">{alertPrefs.email.value}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-green-600 bg-green-500/10 gap-1 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex items-center gap-1 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
                     <CheckCircle className="size-3" /> Available
-                  </Badge>
-                  <Button
-                    variant={alertPrefs.email.enabled ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAlertPrefs({ ...alertPrefs, email: { ...alertPrefs.email, enabled: !alertPrefs.email.enabled } })}
-                  >
-                    {alertPrefs.email.enabled ? "Enabled" : "Disabled"}
-                  </Button>
+                  </span>
+                  {toggleButton(alertPrefs.email.enabled, () =>
+                    setAlertPrefs({ ...alertPrefs, email: { ...alertPrefs.email, enabled: !alertPrefs.email.enabled } })
+                  )}
                 </div>
               </div>
 
               {/* WhatsApp - only if admin enabled */}
               {adminChannels.whatsapp && (
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                      <Phone className="size-4 text-indigo-600" />
+                <div className="flex items-center justify-between rounded-[16px] bg-vez-surface p-5">
+                  <div className="flex flex-1 items-center gap-3.5">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-white">
+                      <Phone className="size-4 text-vez-navy" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium">WhatsApp</p>
+                      <p className="text-sm text-vez-ink">WhatsApp</p>
                       {alertPrefs.whatsapp.enabled ? (
-                        <div className="flex items-center gap-2 mt-1">
-                          <Input
-                            className="h-7 text-xs w-40"
-                            placeholder="+977XXXXXXXXXX"
-                            value={alertPrefs.whatsapp.value}
-                            onChange={(e) => setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, value: e.target.value } })}
-                          />
-                        </div>
+                        <input
+                          className="mt-1.5 h-8 w-44 rounded-full border border-vez-line bg-white px-3.5 text-xs text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+                          placeholder="+977XXXXXXXXXX"
+                          value={alertPrefs.whatsapp.value}
+                          onChange={(e) => setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, value: e.target.value } })}
+                        />
                       ) : (
-                        <p className="text-xs text-muted-foreground">Receive alerts on WhatsApp</p>
+                        <p className="text-xs text-vez-mute">Receive alerts on WhatsApp</p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-green-600 bg-green-500/10 gap-1 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center gap-1 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
                       <CheckCircle className="size-3" /> Available
-                    </Badge>
-                    <Button
-                      variant={alertPrefs.whatsapp.enabled ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, enabled: !alertPrefs.whatsapp.enabled } })}
-                    >
-                      {alertPrefs.whatsapp.enabled ? "Enabled" : "Disabled"}
-                    </Button>
+                    </span>
+                    {toggleButton(alertPrefs.whatsapp.enabled, () =>
+                      setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, enabled: !alertPrefs.whatsapp.enabled } })
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Facebook Messenger */}
               {adminChannels.messenger ? (
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <MessageCircle className="size-4 text-blue-600" />
+                <div className="flex items-center justify-between rounded-[16px] bg-vez-surface p-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-white">
+                      <MessageCircle className="size-4 text-vez-navy" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Facebook Messenger</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-vez-ink">Facebook Messenger</p>
+                      <p className="text-xs text-vez-mute">
                         {alertPrefs.messenger.connected ? "Connected" : "Not connected"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {alertPrefs.messenger.connected ? (
-                      <Button
-                        variant={alertPrefs.messenger.enabled ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setAlertPrefs({ ...alertPrefs, messenger: { ...alertPrefs.messenger, enabled: !alertPrefs.messenger.enabled } })}
-                      >
-                        {alertPrefs.messenger.enabled ? "Enabled" : "Disabled"}
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => setAlertPrefs({ ...alertPrefs, messenger: { ...alertPrefs.messenger, connected: true, enabled: true } })}>
-                        Connect Facebook
-                      </Button>
-                    )}
-                  </div>
+                  {alertPrefs.messenger.connected ? (
+                    toggleButton(alertPrefs.messenger.enabled, () =>
+                      setAlertPrefs({ ...alertPrefs, messenger: { ...alertPrefs.messenger, enabled: !alertPrefs.messenger.enabled } })
+                    )
+                  ) : (
+                    <button
+                      className="rounded-full border border-vez-line px-4 py-2 text-xs text-vez-ink transition-colors hover:bg-vez-surface"
+                      onClick={() => setAlertPrefs({ ...alertPrefs, messenger: { ...alertPrefs.messenger, connected: true, enabled: true } })}
+                    >
+                      Connect Facebook
+                    </button>
+                  )}
                 </div>
               ) : (
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border/50 opacity-60">
-                  <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-lg bg-accent flex items-center justify-center">
-                      <MessageCircle className="size-4 text-muted-foreground" />
+                <div className="flex items-center justify-between rounded-[16px] bg-vez-surface p-5 opacity-60">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-white">
+                      <MessageCircle className="size-4 text-vez-mute" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Facebook Messenger</p>
-                      <p className="text-xs text-muted-foreground">Not enabled by administrator</p>
+                      <p className="text-sm text-vez-mute">Facebook Messenger</p>
+                      <p className="text-xs text-vez-mute">Not enabled by administrator</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-xs text-muted-foreground">Unavailable</Badge>
+                  <span className="rounded-full border border-vez-line px-3 py-1 text-xs text-vez-mute">Unavailable</span>
                 </div>
               )}
 
-              <Button className="mt-2">Save Preferences</Button>
-            </CardContent>
-          </Card>
+              <button className="mt-2 rounded-full bg-vez-navy px-6 py-3 text-sm text-white transition-opacity hover:opacity-90">
+                Save preferences
+              </button>
+            </div>
+          </div>
 
           {/* Language */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Globe className="size-4" /> Language
-              </CardTitle>
-              <CardDescription>Choose your preferred language</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Button
-                  variant={language === "en" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setLanguage("en")}
-                >
-                  English
-                </Button>
-                <Button
-                  variant={language === "ne" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setLanguage("ne")}
-                >
-                  नेपाली
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-[20px] bg-white p-6 md:p-8">
+            <h2 className="flex items-center gap-2 text-lg text-vez-ink">
+              <Globe className="size-4 text-vez-navy" /> Language
+            </h2>
+            <p className="mt-1 text-sm text-vez-mute">Choose your preferred language</p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setLanguage("en")}
+                className={`rounded-full px-5 py-2.5 text-sm transition-colors ${
+                  language === "en"
+                    ? "bg-vez-navy text-white"
+                    : "border border-vez-line text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
+                }`}
+              >
+                English
+              </button>
+              <button
+                onClick={() => setLanguage("ne")}
+                className={`rounded-full px-5 py-2.5 text-sm transition-colors ${
+                  language === "ne"
+                    ? "bg-vez-navy text-white"
+                    : "border border-vez-line text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
+                }`}
+              >
+                नेपाली
+              </button>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
-      
     </div>
   )
 }

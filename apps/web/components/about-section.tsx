@@ -150,7 +150,7 @@ export function AboutSection() {
             Suchana AI is a mission-driven technology platform addressing Nepal&apos;s fragmented public information ecosystem. We aggregate official government notices from 50+ portals, process them with AI, and make every document instantly searchable in plain language.
           </p>
           <p className="text-muted-foreground text-base md:text-lg leading-relaxed">
-            From job vacancies and exam schedules to tenders and policy updates — we ensure no citizen misses critical information that impacts their life, education, or livelihood.
+            From job vacancies and exam schedules to tenders and policy updates - we ensure no citizen misses critical information that impacts their life, education, or livelihood.
           </p>
         </div>
 

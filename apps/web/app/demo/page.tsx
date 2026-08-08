@@ -114,10 +114,10 @@ export default function DemoPage() {
         <Header />
       </div>
 
-      {/* Animated Hero Sections — full screen, GSAP Observer */}
+      {/* Animated Hero Sections - full screen, GSAP Observer */}
       <AnimatedHeroSections />
 
-      {/* Rest of page content — scrolls normally after hero */}
+      {/* Rest of page content - scrolls normally after hero */}
       <div className="relative z-10">
         {/* Metrics */}
         <section className="py-20 px-4">
@@ -256,7 +256,7 @@ export default function DemoPage() {
                     <FileText className="size-3 text-blue-500" /> 2.5M+ Documents
                   </span>
                 </div>
-                <Link href="/rag">
+                <Link href="/documents">
                   <Button size="lg" className="gap-2 h-12 px-8 text-base shadow-lg shadow-primary/20">
                     Try Document Search <ArrowRight className="size-4" />
                   </Button>
