@@ -19,4 +19,15 @@ services:
       PORT: 3535
       HOSTNAME: 0.0.0.0
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+
+    env_file:
+      - ./apps/api/.env
+
+    ports:
+      - "3001:3001"
+
     restart: unless-stopped

@@ -76,3 +76,6 @@ apps/api/uploads/*
 *.pub
 
 *.onnx
+
+# Runtime uploads
+apps/api/uploads
