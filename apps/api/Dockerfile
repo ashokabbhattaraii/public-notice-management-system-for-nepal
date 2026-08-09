@@ -49,4 +49,7 @@ WORKDIR /app/apps/api
 
 EXPOSE 3001
 
-CMD ["node", "dist/main.js"]
+# Apply any pending migrations before the app starts serving traffic — without
+# this, a fresh/behind DB makes every Prisma query throw and every endpoint
+# 500s with the generic Nest exception filter response.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/main.js"]
