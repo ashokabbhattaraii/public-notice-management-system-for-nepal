@@ -69,11 +69,22 @@ SUMMARIZE_CONCURRENCY: int = _env_int("SUMMARIZE_CONCURRENCY", 2)
 
 UPLOAD_DIR: str = _env("UPLOAD_DIR", "./data/uploads")
 
-CORS_ORIGINS: list[str] = [
-    o.strip()
-    for o in _env("CORS_ORIGINS", "http://localhost:3535,http://localhost:5005").split(",")
-    if o.strip()
-]
+# The live production domains are always allowed so a missing/stale
+# CORS_ORIGINS in the deployed env can't break the browser app.
+_PRODUCTION_ORIGINS = ["https://suchanaai.tech", "https://www.suchanaai.tech"]
+
+CORS_ORIGINS: list[str] = list(
+    dict.fromkeys(
+        [
+            o.strip()
+            for o in _env(
+                "CORS_ORIGINS", "http://localhost:3535,http://localhost:5005"
+            ).split(",")
+            if o.strip()
+        ]
+        + _PRODUCTION_ORIGINS
+    )
+)
 
 
 def ensure_upload_dir() -> Path:

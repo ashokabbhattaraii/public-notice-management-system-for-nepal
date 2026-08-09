@@ -34,10 +34,19 @@ async function bootstrap() {
   // credentials (cookies) and the headers the app actually uses. Origins are
   // taken from WEB_ORIGIN (comma-separated) so production can list the real
   // domain alongside localhost without a code change.
-  const webOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3535')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  // The live production domains are always allowed so a missing/stale
+  // WEB_ORIGIN in the deployed env can't break the browser app.
+  const productionOrigins = ['https://suchanaai.tech', 'https://www.suchanaai.tech'];
+
+  const webOrigins = Array.from(
+    new Set(
+      (process.env.WEB_ORIGIN ?? 'http://localhost:3535')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+        .concat(productionOrigins),
+    ),
+  );
 
   app.enableCors({
     origin: webOrigins,
