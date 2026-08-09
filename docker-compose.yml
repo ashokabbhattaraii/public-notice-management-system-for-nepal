@@ -36,6 +36,7 @@ services:
       NODE_ENV: production
       PORT: 3001
       HOSTNAME: 0.0.0.0
+      AI_SERVICE_URL: http://ai:8000
 
     ports:
       - "3001:3001"
@@ -54,6 +55,7 @@ services:
       ENVIRONMENT: production
       PORT: 8000
       HOSTNAME: 0.0.0.0
+      UPLOAD_DIR: /app/data/uploads
 
     expose:
       - "8000"
