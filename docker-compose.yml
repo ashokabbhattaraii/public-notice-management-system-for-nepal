@@ -68,7 +68,25 @@ services:
       - ai-models:/app/models
       - ai-data:/app/data
 
-    mem_limit: 700m
+    # multilingual-e5-base is 278M params in fp32 (~1.1 GB of weights), so the
+    # previous 700m limit could not fit the model at all — the load was killed
+    # (exit 137) the moment the download finished.
+    mem_limit: 2g
+
+    # The image ships neither curl nor wget, so probe with the stdlib.
+    # start_period is long because the first boot downloads ~1 GB from
+    # HuggingFace into the ai-models volume; /health answers "warming" until
+    # that completes, and only reports "ok" once the model is resident.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 900s
 
     restart: unless-stopped
 

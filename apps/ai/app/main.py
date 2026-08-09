@@ -66,13 +66,21 @@ async def app(scope, receive, send):
     await _send_json(send, body, status, scope)
 
 
+# Warmup state, surfaced by /health. The embedding model is downloaded and
+# loaded off the event loop *after* the port is bound, so operators can tell
+# "still warming" apart from "broken" instead of getting connection refused.
+_warmup_state: dict = {"phase": "pending", "error": None}
+
+
 async def _run_startup_validation() -> None:
     """Run critical startup validations. Raises RuntimeError on critical failures."""
     logger.info("Running startup validations...")
 
     # 1. Validate embedding model dimension matches config
     try:
-        model = embeddings._load_model()
+        # First call downloads ~1 GB from HuggingFace and is fully blocking;
+        # keep it off the event loop so the server keeps serving /health.
+        model = await asyncio.to_thread(embeddings._load_model)
         get_dim = getattr(model, "get_embedding_dimension", None) or model.get_sentence_embedding_dimension
         actual_dim = get_dim()
         if actual_dim != config.EMBEDDING_DIM:
@@ -89,7 +97,7 @@ async def _run_startup_validation() -> None:
     # 2. Validate BM25 sparse model availability (if HYBRID_SEARCH enabled)
     if config.HYBRID_SEARCH:
         try:
-            sparse_model = embeddings._load_sparse_model()
+            sparse_model = await asyncio.to_thread(embeddings._load_sparse_model)
             if sparse_model is None:
                 logger.warning("HYBRID_SEARCH=true but sparse model unavailable; falling back to dense-only")
             else:
@@ -99,7 +107,7 @@ async def _run_startup_validation() -> None:
 
     # 3. Validate Qdrant collection schema matches config
     try:
-        await _validate_qdrant_collection_schema()
+        await asyncio.to_thread(_validate_qdrant_collection_schema)
         logger.info("Qdrant collection schema validated")
     except RuntimeError:
         raise
@@ -120,8 +128,12 @@ async def _run_startup_validation() -> None:
     logger.info("All startup validations passed")
 
 
-async def _validate_qdrant_collection_schema() -> None:
-    """Validate that the Qdrant collection schema matches current config."""
+def _validate_qdrant_collection_schema() -> None:
+    """Validate that the Qdrant collection schema matches current config.
+
+    Synchronous: the qdrant-client calls below block, so callers run this via
+    asyncio.to_thread rather than on the event loop.
+    """
     from app import store
 
     client = store.get_client()
@@ -163,7 +175,30 @@ async def _validate_qdrant_collection_schema() -> None:
         raise RuntimeError(f"Qdrant collection validation failed: {e}") from e
 
 
+async def _warmup() -> None:
+    """Run startup validation in the background, after the port is listening."""
+    _warmup_state["phase"] = "warming"
+    t0 = time.perf_counter()
+    try:
+        await _run_startup_validation()
+        _warmup_state["phase"] = "ready"
+        _warmup_state["error"] = None
+        logger.info("Warmup complete (%.1fs)", time.perf_counter() - t0)
+    except RuntimeError as e:
+        _warmup_state["phase"] = "degraded"
+        _warmup_state["error"] = str(e)
+        logger.critical("Startup validation failed: %s", e)
+        # Don't crash — the health endpoint reports degraded instead,
+        # but log prominently so operators see it.
+        logger.error("SERVICE DEGRADED: %s", e)
+    except Exception as e:  # never let the background task die silently
+        _warmup_state["phase"] = "degraded"
+        _warmup_state["error"] = str(e)
+        logger.exception("Warmup crashed: %s", e)
+
+
 async def _handle_lifespan(scope, receive, send):
+    warmup_task: Optional[asyncio.Task] = None
     while True:
         message = await receive()
         if message["type"] == "lifespan.startup":
@@ -176,18 +211,17 @@ async def _handle_lifespan(scope, receive, send):
             )
             config.ensure_upload_dir()
 
-            # --- Startup validation ---
-            try:
-                await _run_startup_validation()
-            except RuntimeError as e:
-                logger.critical("Startup validation failed: %s", e)
-                # Don't crash — let health endpoint report degraded
-                # but log prominently so operators see it
-                logger.error("SERVICE DEGRADED: %s", e)
+            # Validation (notably the ~1 GB embedding-model download) runs in
+            # the background: uvicorn only binds the socket once we ack the
+            # startup message, so doing it here means minutes of "connection
+            # refused" on a cold model cache.
+            warmup_task = asyncio.create_task(_warmup())
 
             await send({"type": "lifespan.startup.complete"})
         elif message["type"] == "lifespan.shutdown":
             logger.info("Shutting down pnm-ai")
+            if warmup_task and not warmup_task.done():
+                warmup_task.cancel()
             await send({"type": "lifespan.shutdown.complete"})
             return
 
@@ -268,11 +302,15 @@ async def _health() -> tuple[int, dict]:
     except Exception:
         logger.exception("Health check: Qdrant probe raised")
 
-    return 200, {
-        "status": "ok",
+    phase = _warmup_state["phase"]
+    body = {
+        "status": "ok" if phase == "ready" else phase,
         "qdrant": qdrant_ok,
         "model_loaded": embeddings.is_loaded(),
     }
+    if _warmup_state["error"]:
+        body["error"] = _warmup_state["error"]
+    return 200, body
 
 
 async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
