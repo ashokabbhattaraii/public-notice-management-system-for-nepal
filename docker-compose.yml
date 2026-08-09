@@ -41,3 +41,28 @@ services:
       - "3001:3001"
 
     restart: unless-stopped
+
+  ai:
+    build:
+      context: .
+      dockerfile: apps/ai/Dockerfile
+
+    env_file:
+      - /opt/config/pnm/ai.env
+
+    environment:
+      PORT: 8000
+      HOST: 0.0.0.0
+
+    expose:
+      - "8000"
+
+    volumes:
+      - ai-models:/app/models
+      - ai-data:/app/data
+
+    restart: unless-stopped
+
+volumes:
+  ai-models:
+  ai-data:

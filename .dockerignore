@@ -12,3 +12,16 @@ dist
 # SSH/private keys
 *.key
 *.pem
+
+data/*
+models/*
+
+*.log
+
+__pycache__
+*.py[cod]
+*.so
+.Python
+.pytest_cache
+.ruff_cache
+.mypy_cache
