@@ -1,9 +1,12 @@
 # ---------- Base ----------
+
 FROM node:22-alpine AS base
 
 WORKDIR /app
 
+
 # ---------- Dependencies ----------
+
 FROM base AS deps
 
 RUN corepack enable
@@ -13,7 +16,9 @@ COPY apps/web/package.json ./apps/web/package.json
 
 RUN pnpm install --frozen-lockfile
 
+
 # ---------- Builder ----------
+
 FROM base AS builder
 
 RUN corepack enable
@@ -25,14 +30,35 @@ COPY . .
 
 WORKDIR /app/apps/web
 
-# Reduce memory pressure during Next.js production build
+# ---------- Next.js public environment variables ----------
+# These are intentionally public and are embedded into the
+# browser bundle by Next.js during the build.
+
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_AI_URL
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ARG NEXT_PUBLIC_POSTHOG_HOST
+
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_AI_URL=${NEXT_PUBLIC_AI_URL}
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+ENV NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}
+ENV NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
+
+# ---------- Build configuration ----------
+
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN pnpm build
 
+
 # ---------- Production ----------
+
 FROM node:22-alpine AS runner
 
 WORKDIR /app
@@ -49,4 +75,3 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 EXPOSE 3535
 
 CMD ["node", "apps/web/server.js"]
-
