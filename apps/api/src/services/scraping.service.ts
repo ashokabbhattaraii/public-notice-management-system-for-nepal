@@ -71,6 +71,12 @@ export interface UpdateScrapeSourceInput {
 export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
   private readonly aiServiceUrl: string;
+  // LLM-backed AI calls only (not plain HTTP fetches like sitemap detection).
+  // The AI service's primary model (DeepSeek) reasons before answering and
+  // can legitimately take 60s+ on a long notice; a 30s budget abandoned
+  // requests it was about to answer successfully. See the matching constant
+  // in NoticesService.
+  private readonly aiCallTimeoutMs = Number(process.env.AI_CALL_TIMEOUT_MS ?? 150_000);
   // A run is considered abandoned (API crashed mid-crawl, etc.) after this
   // many seconds; the scheduler then reclaims it as FAILED so the source can
   // be polled again. The actual per-source concurrency lock is the DB: a
@@ -643,7 +649,7 @@ export class ScrapingService {
     const freshlySummarizedIds: string[] = [];
 
     const validCategories = new Set([
-      'NOTICE', 'NEWS', 'PRESS_RELEASE', 'CIRCULAR', 'TENDER', 'VACANCY', 'JOB', 'INTERNSHIP', 'OTHER',
+      'NOTICE', 'NEWS', 'PRESS_RELEASE', 'CIRCULAR', 'TENDER', 'VACANCY', 'OTHER',
     ]);
 
     for (const item of items) {
@@ -851,6 +857,44 @@ export class ScrapingService {
     }
   }
 
+  /**
+   * Backfill: (re-)analyze + embed every scraped item still missing an
+   * aiSummary — e.g. a batch scraped while every LLM provider was out of
+   * quota, which previously left them permanently unsearchable (see
+   * analyzeNotice's soft-failure branch, now fixed to leave such rows
+   * retryable rather than stamping them as done).
+   */
+  async reanalyzeMissingSummaries(limit = 300): Promise<{ analyzed: number; failed: number; embedded: number }> {
+    const items = await this.prisma.scrapedItem.findMany({
+      where: { aiSummary: null, contentText: { not: null } },
+      select: { id: true, title: true, contentText: true },
+      take: limit,
+    });
+
+    const succeededIds: string[] = [];
+    let failed = 0;
+    const CONCURRENCY = 3;
+    for (let i = 0; i < items.length; i += CONCURRENCY) {
+      const batch = items.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (item) => {
+          const ok = await this.analyzeNotice(item.id, item.title, item.contentText!);
+          if (ok) succeededIds.push(item.id);
+          else failed++;
+        }),
+      );
+    }
+
+    if (succeededIds.length > 0) {
+      await this.embedNewNotices('', succeededIds);
+    }
+
+    this.logger.log(
+      `Backfill analysis: ${succeededIds.length} succeeded, ${failed} failed, of ${items.length} attempted`,
+    );
+    return { analyzed: succeededIds.length, failed, embedded: succeededIds.length };
+  }
+
   /** Pre-analyze a notice via the AI service and cache results in the DB. */
   /** Returns true when a summary was persisted (i.e. this notice should be embedded). */
   private async analyzeNotice(id: string, title: string, content: string): Promise<boolean> {
@@ -859,7 +903,7 @@ export class ScrapingService {
         this.httpService.post(
           `${this.aiServiceUrl}/notices/analyze`,
           { title, content },
-          { timeout: 30000 },
+          { timeout: this.aiCallTimeoutMs },
         ),
       );
       if (response.data?.analyzed) {
@@ -868,21 +912,38 @@ export class ScrapingService {
           data: {
             aiSummary: response.data.summary,
             keyFacts: response.data.key_facts ?? [],
-            tags: response.data.tags ?? [],
+            tags: this.normalizeTags(response.data.tags),
             aiAnalyzedAt: new Date(),
           },
         });
         return true;
       }
-      await this.prisma.scrapedItem.update({
-        where: { id },
-        data: { aiAnalyzedAt: new Date() },
-      });
+      // Don't stamp aiAnalyzedAt here — this is a soft failure (e.g. every
+      // LLM provider was out of quota), not "nothing worth summarizing".
+      // Leaving the row untouched keeps `aiSummary IS NULL` a reliable
+      // "still needs (re-)analysis" signal for a later retry sweep; stamping
+      // it as done previously meant a transient outage permanently blacked
+      // out affected notices from search (they were never embedded).
+      this.logger.warn(`Analysis for notice ${id} did not produce a summary; will retry later`);
       return false;
     } catch (err: any) {
       this.logger.warn(`Pre-analysis failed for notice ${id}: ${err.message}`);
       return false;
     }
+  }
+
+  // The public notices UI filters tags by exact match against a lowercase
+  // canonical vocabulary (see CANONICAL_TAGS in apps/web/lib/types.ts). The
+  // LLM prompt now asks for those exact strings, but normalizing at write
+  // time is a cheap safety net against casing/whitespace drift (e.g.
+  // "Education" vs "education") that would otherwise make a tag silently
+  // unfilterable.
+  private normalizeTags(tags: unknown): string[] {
+    if (!Array.isArray(tags)) return [];
+    return tags
+      .filter((t): t is string => typeof t === 'string')
+      .map((t) => t.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, ''))
+      .filter(Boolean);
   }
 
   private findPdfUrl(
@@ -1027,7 +1088,7 @@ export class ScrapingService {
       this.httpService.post(
         `${this.aiServiceUrl}/notices/analyze`,
         { title: item.title, content: item.contentText },
-        { timeout: 30000 },
+        { timeout: this.aiCallTimeoutMs },
       ),
     );
     if (!response.data?.analyzed) {
@@ -1037,7 +1098,7 @@ export class ScrapingService {
       aiSummary: response.data.summary,
       aiSummaryNe: response.data.summary_ne ?? null,
       keyFacts: response.data.key_facts ?? [],
-      tags: response.data.tags ?? [],
+      tags: this.normalizeTags(response.data.tags),
       aiCategoryConfidence: response.data.category_confidence ?? null,
       category: response.data.category ?? undefined,
       aiAnalyzedAt: new Date(),

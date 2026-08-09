@@ -128,6 +128,13 @@ export class ScrapingController {
     return this.scrapingService.deleteItem(id);
   }
 
+  /** Fire-and-forget backfill for items stuck without an AI summary (e.g. from a past LLM-provider outage). */
+  @Post('items/reanalyze-missing')
+  async reanalyzeMissing(@Body('limit') limit?: number) {
+    this.scrapingService.reanalyzeMissingSummaries(limit ? Number(limit) : undefined).catch(() => {});
+    return { started: true };
+  }
+
   @Get('runs')
   async listRuns(
     @Query('sourceId') sourceId?: string,

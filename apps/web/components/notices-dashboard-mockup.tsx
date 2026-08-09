@@ -44,8 +44,6 @@ const categoryLabels: Record<string, string> = {
   CIRCULAR: "Circular",
   TENDER: "Tender",
   VACANCY: "Vacancy",
-  JOB: "Job",
-  INTERNSHIP: "Internship",
   OTHER: "Other",
 }
 

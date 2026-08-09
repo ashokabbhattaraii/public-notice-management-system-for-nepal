@@ -50,9 +50,20 @@ CODE_FENCE_RE = re.compile(r"^```(\w*)\n(.*?)\n```", re.MULTILINE | re.DOTALL)
 LIST_ITEM_RE = re.compile(r"^(\s*)[-*+]\s+", re.MULTILINE)
 ORDERED_LIST_RE = re.compile(r"^(\s*)\d+\.\s+", re.MULTILINE)
 PAGE_BREAK_RE = re.compile(r"\n\n---PAGE\s+(\d+)---\n\n")  # injected by PDF extractor
+_PARA_BREAK_RE = re.compile(r"\n\s*\n")
+
+# Ceiling for a single paragraph block. Plain PDF/DOCX-extracted text almost
+# never contains markdown headers/tables/code fences, so without this a whole
+# document with no such markers would collapse into ONE block spanning the
+# entire text (observed: a 340,000-char PDF chunked into exactly 1 chunk,
+# regardless of chunk_size) — chunk_blocks can only size-bound *between*
+# blocks, so it needs more than one block to work with in the first place.
+_MAX_PARAGRAPH_BLOCK_CHARS = 1200
 
 
-def parse_blocks(text: str, page_num: Optional[int] = None) -> list[Block]:
+def parse_blocks(
+    text: str, page_num: Optional[int] = None, max_paragraph_chars: int = _MAX_PARAGRAPH_BLOCK_CHARS
+) -> list[Block]:
     """
     Parse text into structural blocks with hierarchy awareness.
 
@@ -62,6 +73,10 @@ def parse_blocks(text: str, page_num: Optional[int] = None) -> list[Block]:
     - Code fences (```lang\ncode\n```)
     - Lists (bulleted and numbered)
     - Page breaks (---PAGE N---)
+
+    `max_paragraph_chars` bounds plain-text (non-markdown) paragraph blocks —
+    should track the caller's chunk_size so a single block can never itself
+    exceed the target chunk size (see _split_paragraph_span).
     """
     if not text.strip():
         return []
@@ -77,7 +92,7 @@ def parse_blocks(text: str, page_num: Optional[int] = None) -> list[Block]:
         for i, part in enumerate(page_parts):
             if i % 2 == 0:
                 # Content
-                sub_blocks = _parse_blocks_single_page(part, current_page)
+                sub_blocks = _parse_blocks_single_page(part, current_page, max_paragraph_chars)
                 for b in sub_blocks:
                     b.char_start += char_pos
                     b.char_end += char_pos
@@ -92,10 +107,66 @@ def parse_blocks(text: str, page_num: Optional[int] = None) -> list[Block]:
         return blocks
 
     # No page breaks - parse as single page
-    return _parse_blocks_single_page(text, page_num or 1)
+    return _parse_blocks_single_page(text, page_num or 1, max_paragraph_chars)
 
 
-def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
+def _split_paragraph_span(text: str, base_offset: int, max_chars: int = _MAX_PARAGRAPH_BLOCK_CHARS) -> list[Block]:
+    """Split a plain-text span (no markdown structure) into paragraph blocks.
+
+    Splits on blank-line boundaries first; any resulting paragraph still
+    longer than `max_chars` (e.g. raw PDF extraction with no blank lines at
+    all) is further hard-split near word boundaries, so chunk_blocks always
+    has multiple appropriately-sized blocks to bound instead of one oversized
+    one. `max_chars` should track the caller's chunk_size.
+    """
+    spans: list[tuple[int, int]] = []
+    last = 0
+    for m in _PARA_BREAK_RE.finditer(text):
+        if m.start() > last:
+            spans.append((last, m.start()))
+        last = m.end()
+    if last < len(text):
+        spans.append((last, len(text)))
+
+    blocks: list[Block] = []
+    for start, end in spans:
+        span_text = text[start:end]
+        if not span_text.strip():
+            continue
+        if len(span_text) <= max_chars:
+            blocks.append(Block(
+                content=span_text.strip(),
+                block_type="paragraph",
+                page_num=None,
+                char_start=base_offset + start,
+                char_end=base_offset + end,
+            ))
+            continue
+
+        piece_start = 0
+        while piece_start < len(span_text):
+            piece_end = min(piece_start + max_chars, len(span_text))
+            if piece_end < len(span_text):
+                boundary = span_text.rfind(" ", piece_start, piece_end)
+                if boundary > piece_start:
+                    piece_end = boundary
+            piece = span_text[piece_start:piece_end].strip()
+            if piece:
+                blocks.append(Block(
+                    content=piece,
+                    block_type="paragraph",
+                    page_num=None,
+                    char_start=base_offset + start + piece_start,
+                    char_end=base_offset + start + piece_end,
+                ))
+            piece_start = piece_end if piece_end > piece_start else len(span_text)
+
+    return blocks
+
+
+def _parse_blocks_single_page(
+    text: str, page_num: int, max_paragraph_chars: int = _MAX_PARAGRAPH_BLOCK_CHARS
+) -> list[Block]:
     """Parse a single page's text into blocks."""
     blocks: list[Block] = []
     char_pos = 0
@@ -142,17 +213,9 @@ def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
     # Now build blocks: elements + paragraphs between them
     last_end = 0
     for start, end, btype, content in elements:
-        # Paragraph before this element
+        # Paragraph(s) before this element
         if start > last_end:
-            para_text = text[last_end:start].strip()
-            if para_text:
-                blocks.append(Block(
-                    content=para_text,
-                    block_type="paragraph",
-                    page_num=None,
-                    char_start=last_end,
-                    char_end=start,
-                ))
+            blocks.extend(_split_paragraph_span(text[last_end:start], last_end, max_paragraph_chars))
         # The element itself
         level = 0
         if btype.startswith("header_h"):
@@ -171,17 +234,9 @@ def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
         ))
         last_end = end
 
-    # Trailing paragraph
+    # Trailing paragraph(s)
     if last_end < len(text):
-        para_text = text[last_end:].strip()
-        if para_text:
-            blocks.append(Block(
-                content=para_text,
-                block_type="paragraph",
-                page_num=None,
-                char_start=last_end,
-                char_end=len(text),
-            ))
+        blocks.extend(_split_paragraph_span(text[last_end:], last_end, max_paragraph_chars))
 
     # Post-process: merge consecutive list items into list blocks
     return _merge_list_blocks(blocks)
@@ -418,7 +473,9 @@ def chunk_text(
         return []
 
     # Parse into structural blocks
-    blocks = parse_blocks(text, page_num)
+    # Cap plain-text paragraph blocks at chunk_size so a single block can
+    # never itself exceed the target chunk size (see _split_paragraph_span).
+    blocks = parse_blocks(text, page_num, max_paragraph_chars=chunk_size)
 
     # Chunk with structure awareness
     chunks = chunk_blocks(blocks, chunk_size, overlap)

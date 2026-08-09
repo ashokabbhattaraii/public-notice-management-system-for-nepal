@@ -25,6 +25,16 @@ _DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
 _ASCII_ALPHA_RE = re.compile(r"[a-zA-Z]")
 _LEGACY_FONT_INDICATORS = set("{}[]|\\;+=/")
 
+# A virama (्) directly followed by a dependent vowel sign is orthographically
+# impossible in real Devanagari — matras only attach to a bare consonant, never
+# after a halant. Real text has zero of these; PDFs whose font has a scrambled
+# glyph->Unicode cmap (real Devanagari codepoints, but reph/matra/conjunct
+# ordering jumbled — a different failure mode than the "wrong font entirely"
+# ASCII-lookalike case _LEGACY_FONT_INDICATORS catches) produce many. Observed
+# on real scraped notices: a correctly-rendered page has ~0; a scrambled one
+# had 108 in 5,453 characters.
+_INVALID_VIRAMA_MATRA_RE = re.compile(r"्[ािीुूृेैोौ]")
+
 # Language detection patterns
 _LATIN_RE = re.compile(r"[a-zA-Z]")
 _CYRILLIC_RE = re.compile(r"[а-яА-Я]")
@@ -192,6 +202,20 @@ def _is_valid_unicode(text: str) -> bool:
     devanagari_count = len(_DEVANAGARI_RE.findall(non_space))
     devanagari_ratio = devanagari_count / total
 
+    # Real Devanagari codepoints, but scrambled glyph->Unicode ordering — a
+    # different corruption than "wrong font entirely" below, so it must be
+    # checked even when devanagari_ratio is high (that check alone would
+    # otherwise short-circuit past this and wrongly call it valid).
+    invalid_virama_count = len(_INVALID_VIRAMA_MATRA_RE.findall(sample))
+    if devanagari_count > 0 and invalid_virama_count / devanagari_count > 0.005:
+        logger.info(
+            "Scrambled Devanagari glyph ordering detected "
+            "(%d invalid virama+matra sequences among %d Devanagari chars) — OCR needed",
+            invalid_virama_count,
+            devanagari_count,
+        )
+        return False
+
     # If we have meaningful Devanagari, it's valid Unicode
     if devanagari_ratio > 0.1:
         return True
@@ -279,10 +303,15 @@ def _extract_pdf(path: Path) -> dict:
         logger.info("PDF has minimal embedded text — using OCR")
         return _ocr_pdf(path, page_count)
 
-    # Case 2: Extracted text is legacy-encoded (Preeti, Kantipur, etc.)
+    # Case 2: Extracted text is legacy-encoded (Preeti, Kantipur, etc.) or has
+    # scrambled Devanagari glyph ordering. Either way, `full_text` is passed
+    # as a language hint — even when scrambled/wrong-font, its *script* (which
+    # characters appear, e.g. real Devanagari codepoints vs ASCII lookalikes)
+    # is a far more reliable signal than a fresh bootstrap OCR guess (see
+    # _ocr_pdf's hint_text parameter).
     if not _is_valid_unicode(full_text):
         logger.info("PDF text is legacy font encoded — using OCR for correct Unicode")
-        ocr_result = _ocr_pdf(path, page_count)
+        ocr_result = _ocr_pdf(path, page_count, hint_text=full_text)
         if ocr_result["text"].strip():
             return ocr_result
         logger.warning("OCR produced no text; falling back to raw extraction")
@@ -290,12 +319,23 @@ def _extract_pdf(path: Path) -> dict:
     return {"text": full_text, "is_ocr": False, "page_count": page_count}
 
 
-def _ocr_pdf(path: Path, page_count: int) -> dict:
+def _ocr_pdf(path: Path, page_count: int, hint_text: str = "") -> dict:
     """OCR a PDF by rendering pages to images and running Tesseract.
 
     Processes pages in small batches to avoid loading hundreds of full-res
     images into memory simultaneously. Uses temp files for Tesseract input
     to avoid stdin/pipe issues with certain pytesseract + Leptonica combos.
+
+    `hint_text` (optional): text from a prior native-extraction attempt on
+    this same PDF, used to pick the OCR language directly instead of
+    re-detecting from a fresh "bootstrap OCR" of page 1. That bootstrap OCR
+    is itself unreliable exactly when we need it most — a scrambled-font PDF
+    can produce garbled Latin-looking noise even when OCR'd with the correct
+    language pack loaded, which would make script detection conclude "this is
+    English" and drop Nepali for the *entire* document, compounding the
+    original failure. `hint_text`'s script (which real codepoints appear,
+    regardless of ordering/scrambling) is a much more reliable signal since
+    it came from the PDF's actual embedded character data, not a fresh guess.
     """
     if not _check_tesseract():
         logger.error("Cannot OCR: Tesseract is not installed")
@@ -310,26 +350,28 @@ def _ocr_pdf(path: Path, page_count: int) -> dict:
 
     logger.info("Starting OCR: %d pages at %d DPI (batch=%d)", page_count, dpi, batch_size)
 
-    # Extract first page to detect language
-    first_page_text = ""
-    try:
-        images = convert_from_path(str(path), dpi=dpi, first_page=1, last_page=1)
-        if images:
-            # Quick extraction to detect language
-            import pytesseract
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-                images[0].save(f, format="PNG")
-                tmp_path = f.name
-            try:
-                first_page_text = pytesseract.image_to_string(tmp_path, lang=config.TESSERACT_LANG)
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-    except Exception:
-        pass
+    if hint_text.strip() and _detect_script(hint_text) != "unknown":
+        ocr_langs = _pick_tesseract_langs(hint_text)
+        logger.info("Using Tesseract languages from native-extraction hint: %s", ocr_langs)
+    else:
+        # No usable hint (e.g. a genuinely scanned PDF with ~no embedded
+        # text) — fall back to bootstrapping language from a page-1 OCR pass.
+        first_page_text = ""
+        try:
+            images = convert_from_path(str(path), dpi=dpi, first_page=1, last_page=1)
+            if images:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                    images[0].save(f, format="PNG")
+                    tmp_path = f.name
+                try:
+                    first_page_text = pytesseract.image_to_string(tmp_path, lang=config.TESSERACT_LANG)
+                finally:
+                    Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            pass
 
-    # Detect optimal languages
-    ocr_langs = _pick_tesseract_langs(first_page_text)
-    logger.info("Using Tesseract languages for PDF OCR: %s", ocr_langs)
+        ocr_langs = _pick_tesseract_langs(first_page_text)
+        logger.info("Using Tesseract languages for PDF OCR (bootstrap): %s", ocr_langs)
 
     for start in range(1, page_count + 1, batch_size):
         end = min(start + batch_size - 1, page_count)

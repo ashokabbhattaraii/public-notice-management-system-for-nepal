@@ -126,12 +126,14 @@ export interface ScrapingSource {
 
 // ─── Live scraping (crawl4ai pipeline, dynamic multi-source) ─────────────────
 
-export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE" | "CIRCULAR" | "TENDER" | "VACANCY" | "JOB" | "INTERNSHIP" | "OTHER"
+// Job/internship openings are filed under VACANCY, not separate categories —
+// the classifier could never reliably distinguish them (0 items ever landed
+// in JOB/INTERNSHIP across the full scraped dataset), so they were just two
+// permanently-empty, confusing filter tabs.
+export type ScrapedItemCategory = "NOTICE" | "NEWS" | "PRESS_RELEASE" | "CIRCULAR" | "TENDER" | "VACANCY" | "OTHER"
 
 export const CATEGORY_ORDER: ScrapedItemCategory[] = [
   "NOTICE",
-  "JOB",
-  "INTERNSHIP",
   "VACANCY",
   "CIRCULAR",
   "TENDER",
@@ -147,8 +149,6 @@ const CATEGORY_LABELS: Record<ScrapedItemCategory, string> = {
   CIRCULAR: "Circular",
   TENDER: "Tender",
   VACANCY: "Vacancy",
-  JOB: "Job",
-  INTERNSHIP: "Internship",
   OTHER: "Other",
 }
 export function categoryLabel(cat: ScrapedItemCategory): string {

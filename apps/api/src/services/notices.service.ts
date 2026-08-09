@@ -8,6 +8,12 @@ import { TtlCache } from '../common/cache/ttl-cache';
 import { SingleFlight, SingleFlightCooldownError } from '../common/cache/single-flight';
 import { SettingsService } from './settings.service';
 import { withTraceAsync } from '../common/logger';
+import { buildExcerpt, scoreNotice, tokenizeQuestion } from './notice-search.util';
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export interface PublicNoticeFilters {
   category?: string;
@@ -30,6 +36,13 @@ export interface PublicNoticeFilters {
 export class NoticesService {
   private readonly logger = new Logger(NoticesService.name);
   private readonly aiServiceUrl: string;
+
+  // The AI service's primary LLM (DeepSeek) is a reasoning model that can
+  // legitimately take 60s+ on a long notice. A 30s budget here meant we
+  // abandoned requests the AI service was about to answer successfully —
+  // wasting the work and forcing a needless retry later. Sized above the AI
+  // service's own DeepSeek read budget (120s) plus its fast fallbacks.
+  private readonly aiCallTimeoutMs = Number(process.env.AI_CALL_TIMEOUT_MS ?? 150_000);
 
   // Hot public read paths are cheap to recompute and change slowly, so serve
   // them from a single-flight TTL cache instead of hitting Postgres on every
@@ -252,7 +265,7 @@ export class NoticesService {
           this.httpService.post(
             `${this.aiServiceUrl}/notices/analyze`,
             { title, content },
-            { timeout: 30000 },
+            { timeout: this.aiCallTimeoutMs },
           ),
         );
       } catch (err: any) {
@@ -282,14 +295,21 @@ export class NoticesService {
     });
   }
 
-  async askQuestion(id: string, question: string): Promise<{ answer: string }> {
+  async askQuestion(
+    id: string,
+    question: string,
+    history: ChatTurn[] = [],
+  ): Promise<{ answer: string }> {
     const notice = await this.prisma.scrapedItem.findUnique({ where: { id } });
     if (!notice) throw new NotFoundException(`Notice ${id} not found`);
 
     // Identical questions on the same notice share one LLM call (memoized in
     // qaCache). Fallback/error answers are never cached — only real AI
     // answers, so a transient failure isn't served stale for 5 minutes.
-    const cacheKey = `qa:${id}:${question}`;
+    // History is part of the key: "what about the fee?" means something
+    // different after a different preceding turn, so answers cannot be shared
+    // across conversations.
+    const cacheKey = `qa:${id}:${question}:${this.historyKey(history)}`;
     const cached = this.qaCache.get(cacheKey);
     if (cached) return cached as { answer: string };
 
@@ -297,8 +317,13 @@ export class NoticesService {
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.aiServiceUrl}/notices/ask`,
-          { title: notice.title, content: notice.contentText ?? '', question },
-          { timeout: 30000 },
+          {
+            title: notice.title,
+            content: notice.contentText ?? '',
+            question,
+            history: this.trimHistory(history),
+          },
+          { timeout: this.aiCallTimeoutMs },
         ),
       );
       const answer = { answer: String(response.data?.answer ?? '') };
@@ -316,58 +341,274 @@ export class NoticesService {
    * 2. Pass results to AI service which uses them or falls back to Qdrant semantic search
    * 3. LLM generates an answer from the retrieved context
    */
-  async search(question: string, category?: string, language?: string) {
-    // Identical chatbot queries (same question + filters) share the LLM call
-    // within the TTL window — a popular question asked by many visitors
-    // doesn't re-hit the AI service (and possibly Qdrant) each time.
-    const cacheKey = `search:${question}:${category ?? ''}:${language ?? ''}`;
-    const cached = this.qaCache.get(cacheKey);
-    if (cached) return cached;
+  // "How many X notices are there" is a database aggregate, not a retrieval
+  // question — semantic/vector search can only ever return a handful of
+  // top-k chunks, so it structurally cannot answer a count accurately (it
+  // was returning unrelated notices as if they answered "how many tenders").
+  // Detect this intent and answer directly from the real count instead of
+  // ever reaching the LLM/vector-search path.
+  private static readonly COUNT_INTENT_RE = /\b(how many|number of|count of|total(?:\s+number)?\s+of)\b/i;
 
-    // Step 1: PostgreSQL keyword search via ILIKE (simple but effective for keyword queries)
-    const pgResults = await this.prisma.scrapedItem.findMany({
+  private static readonly CATEGORY_KEYWORDS: Record<string, ScrapedItemCategory> = {
+    tender: ScrapedItemCategory.TENDER,
+    tenders: ScrapedItemCategory.TENDER,
+    // Job/internship openings are all filed under VACANCY (see schema.prisma)
+    vacancy: ScrapedItemCategory.VACANCY,
+    vacancies: ScrapedItemCategory.VACANCY,
+    job: ScrapedItemCategory.VACANCY,
+    jobs: ScrapedItemCategory.VACANCY,
+    internship: ScrapedItemCategory.VACANCY,
+    internships: ScrapedItemCategory.VACANCY,
+    circular: ScrapedItemCategory.CIRCULAR,
+    circulars: ScrapedItemCategory.CIRCULAR,
+    'press release': ScrapedItemCategory.PRESS_RELEASE,
+    'press releases': ScrapedItemCategory.PRESS_RELEASE,
+    press: ScrapedItemCategory.PRESS_RELEASE,
+    news: ScrapedItemCategory.NEWS,
+    // Deliberately no 'notice'/'notices' keyword mapping: the word is used
+    // site-wide as the generic term for "everything" (page title, nav, etc.)
+    // as well as being one specific category among many, so free-text
+    // "how many notices are there" should mean the grand total (falls
+    // through to the 'ALL' pattern below) — the specific NOTICE category is
+    // still reachable via the explicit `category` param (e.g. from a page
+    // already filtered to it).
+  };
+
+  /** Returns the target category for a count question, 'ALL', or null if this isn't a count question. */
+  private detectCountIntent(
+    question: string,
+    categoryParam?: string,
+  ): ScrapedItemCategory | 'ALL' | null {
+    if (!NoticesService.COUNT_INTENT_RE.test(question)) return null;
+
+    if (
+      categoryParam &&
+      (Object.values(ScrapedItemCategory) as string[]).includes(categoryParam)
+    ) {
+      return categoryParam as ScrapedItemCategory;
+    }
+
+    const lower = question.toLowerCase();
+    for (const [keyword, cat] of Object.entries(NoticesService.CATEGORY_KEYWORDS)) {
+      if (lower.includes(keyword)) return cat;
+    }
+
+    if (/\b(notices?|news|items?|documents?|postings?)\b/i.test(question)) return 'ALL';
+    return null;
+  }
+
+  private formatCategoryLabel(category: ScrapedItemCategory): string {
+    return category.toLowerCase().replace(/_/g, ' ');
+  }
+
+  /** How many rows the tokenized OR-query pulls before in-process ranking. */
+  private static readonly KEYWORD_CANDIDATE_LIMIT = 40;
+  /** How many ranked candidates are handed to the AI service for fusion. */
+  private static readonly KEYWORD_RESULT_LIMIT = 12;
+
+  /**
+   * Tokenized keyword retrieval over notices.
+   *
+   * Postgres does the cheap, selective part (rows containing *any* content
+   * word), and ranking happens in-process where field weighting, phrase
+   * bonuses and recency decay are expressible — see `notice-search.util.ts`.
+   * Each result carries a query-focused excerpt of the body, so the LLM sees
+   * the actual deadline/fee/eligibility text rather than only the summary.
+   */
+  private async keywordSearch(question: string, category?: string) {
+    const parsed = tokenizeQuestion(question);
+    const terms = [...parsed.tokens, ...parsed.phrases];
+
+    // Nothing but stopwords ("what about it?") — no lexical signal to search
+    // on, so let the vector leg handle it alone rather than returning the
+    // newest notices as if they were relevant.
+    if (terms.length === 0) return [];
+
+    const rows = await this.prisma.scrapedItem.findMany({
       where: {
         ...(category ? { category: category as ScrapedItemCategory } : {}),
-        OR: [
-          { title: { contains: question, mode: 'insensitive' } },
-          { aiSummary: { contains: question, mode: 'insensitive' } },
-          { contentText: { contains: question, mode: 'insensitive' } },
-        ],
+        OR: terms.flatMap((term) => [
+          { title: { contains: term, mode: 'insensitive' as const } },
+          { aiSummary: { contains: term, mode: 'insensitive' as const } },
+          { contentText: { contains: term, mode: 'insensitive' as const } },
+        ]),
       },
       select: {
         id: true,
         title: true,
         aiSummary: true,
+        summary: true,
+        contentText: true,
         category: true,
         sourceLabel: true,
         sourceUrl: true,
         publishedAt: true,
+        metadata: true,
       },
       orderBy: { publishedAt: 'desc' },
-      take: 10,
+      take: NoticesService.KEYWORD_CANDIDATE_LIMIT,
     });
 
-    // Step 2: Pass to AI service for hybrid search + LLM answer generation
+    const now = new Date();
+    return rows
+      .map((row) => ({ row, score: scoreNotice(row, parsed, now) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, NoticesService.KEYWORD_RESULT_LIMIT)
+      .map(({ row, score }) => ({
+        id: row.id,
+        title: row.title,
+        aiSummary: row.aiSummary,
+        excerpt: buildExcerpt(row.contentText, parsed),
+        category: row.category,
+        sourceLabel: row.sourceLabel,
+        sourceUrl: row.sourceUrl,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
+        deadline: this.extractDeadline(row.metadata),
+        keywordScore: Number(score.toFixed(3)),
+      }));
+  }
+
+  /**
+   * Surface a deadline from the scraper's structured metadata so time-sensitive
+   * questions ("is it still open?") can be answered without the model having to
+   * find a date buried in the body text.
+   */
+  private extractDeadline(metadata: Prisma.JsonValue | null): string | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+    const record = metadata as Record<string, unknown>;
+    for (const key of ['deadline', 'deadlineDate', 'lastDate', 'applicationDeadline']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
+  }
+
+  /** Turns kept for follow-up resolution. Beyond this, older context stops
+   * helping and starts crowding out the retrieved notices. */
+  private static readonly HISTORY_TURNS = 6;
+  private static readonly HISTORY_CHARS = 600;
+
+  private trimHistory(history: ChatTurn[] = []): ChatTurn[] {
+    return history
+      .slice(-NoticesService.HISTORY_TURNS)
+      .filter((turn) => turn?.content?.trim())
+      .map((turn) => ({
+        role: turn.role,
+        content: turn.content.trim().slice(0, NoticesService.HISTORY_CHARS),
+      }));
+  }
+
+  /** Compact history fingerprint for cache keys. */
+  private historyKey(history: ChatTurn[] = []): string {
+    return this.trimHistory(history)
+      .map((turn) => `${turn.role}:${turn.content.slice(0, 80)}`)
+      .join('|');
+  }
+
+  /**
+   * Questions that are unambiguously about the corpus at large rather than the
+   * notice the user happens to have open. Everything else defaults to the open
+   * notice, which is the sane reading of a question asked while reading one.
+   *
+   * This replaces a client-side heuristic that ended in `return true` — so
+   * "show me other tenders", asked on a notice page, was answered from that
+   * single notice.
+   */
+  private static readonly GENERAL_SCOPE_PATTERNS: RegExp[] = [
+    /\b(other|another|different|more)\s+(notice|notices|tender|tenders|vacanc|job|circular|news)/i,
+    /^(show|find|list|search|get|browse)\s+(me\s+)?(all|any|other|new|latest|recent)/i,
+    /\b(all|any)\s+(notice|notices|tender|tenders|vacanc|jobs?)\b/i,
+    /\b(what|anything)('s| is| are)?\s+(new|latest|recent|happening)\b/i,
+    /\bhow many\b/i,
+    /\b(similar|related)\s+(notice|notices|to this)\b/i,
+  ];
+
+  private isGeneralScope(question: string): boolean {
+    return NoticesService.GENERAL_SCOPE_PATTERNS.some((pattern) => pattern.test(question));
+  }
+
+  /**
+   * Phrases the AI service is instructed to use when a notice does not contain
+   * the answer. Detecting them lets a notice-scoped miss fall through to a
+   * corpus-wide search instead of dead-ending on "this notice doesn't say".
+   */
+  private static readonly ABSTENTION_PATTERNS: RegExp[] = [
+    /does\s?n[o']t\s+(contain|mention|state|specify|say)/i,
+    /no\s+(information|mention|details?)\s+(about|on|regarding)/i,
+    /not\s+(specified|stated|mentioned|provided)\s+in\s+(this|the)\s+notice/i,
+    /उल्लेख छैन|जानकारी छैन/,
+  ];
+
+  private looksLikeAbstention(answer: string): boolean {
+    return NoticesService.ABSTENTION_PATTERNS.some((pattern) => pattern.test(answer));
+  }
+
+  /**
+   * Single entry point for the chatbot: decides what kind of question this is
+   * and answers accordingly.
+   *
+   * Routing lives here rather than in the browser because it needs the
+   * conversation history, the notice record, and the ability to retry against
+   * a different strategy — none of which the client has.
+   */
+  async chat(input: {
+    question: string;
+    category?: string;
+    language?: string;
+    noticeId?: string;
+    history?: ChatTurn[];
+  }) {
+    const question = input.question.trim();
+    const history = this.trimHistory(input.history);
+
+    if (input.noticeId && !this.isGeneralScope(question)) {
+      const scoped = await this.askQuestion(input.noticeId, question, history);
+      // The open notice genuinely doesn't cover it — widen to the whole
+      // corpus rather than leaving the user at a dead end.
+      if (!this.looksLikeAbstention(scoped.answer)) {
+        return { ...scoped, sources: [], scope: 'notice' as const, confidence: 'medium' };
+      }
+      this.logger.debug('Notice-scoped answer abstained; widening to corpus search');
+    }
+
+    const result = await this.search(question, input.category, input.language, history);
+    return { ...(result as object), scope: 'general' as const };
+  }
+
+  async search(
+    question: string,
+    category?: string,
+    language?: string,
+    history: ChatTurn[] = [],
+  ) {
+    const countTarget = this.detectCountIntent(question, category);
+    if (countTarget) return this.countAnswer(countTarget);
+
+    // Identical chatbot queries (same question + filters) share the LLM call
+    // within the TTL window — a popular question asked by many visitors
+    // doesn't re-hit the AI service (and possibly Qdrant) each time.
+    const cacheKey = `search:${question}:${category ?? ''}:${language ?? ''}:${this.historyKey(history)}`;
+    const cached = this.qaCache.get(cacheKey);
+    if (cached) return cached;
+
+    // Step 1: PostgreSQL keyword retrieval, tokenized and ranked
+    const pgResults = await this.keywordSearch(question, category);
+
+    // Step 2: Pass to AI service for hybrid fusion + LLM answer generation
     try {
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.aiServiceUrl}/notices/search`,
           {
             question,
-            pg_results: pgResults.map((r) => ({
-              id: r.id,
-              title: r.title,
-              aiSummary: r.aiSummary,
-              category: r.category,
-              sourceLabel: r.sourceLabel,
-              sourceUrl: r.sourceUrl,
-              publishedAt: r.publishedAt?.toISOString() || null,
-            })),
+            pg_results: pgResults,
             category: category || null,
             language: language || 'en',
             top_k: 5,
+            history,
           },
-{ timeout: 45000 },
+          { timeout: this.aiCallTimeoutMs },
         ),
       );
       this.qaCache.set(cacheKey, response.data);
@@ -396,6 +637,89 @@ export class NoticesService {
         model_used: null,
       };
     }
+  }
+
+  /**
+   * Streaming counterpart of `chat`, for the SSE endpoint.
+   *
+   * Returns a description of what to stream rather than the stream itself, so
+   * routing stays here (with the DB and the notice record) while the transport
+   * details stay in the controller. `answer` is set for the cases resolved
+   * without an LLM — counts are exact database aggregates and have nothing to
+   * stream.
+   */
+  async prepareChatStream(input: {
+    question: string;
+    category?: string;
+    language?: string;
+    noticeId?: string;
+    history?: ChatTurn[];
+  }): Promise<
+    | { kind: 'immediate'; payload: Record<string, unknown> }
+    | { kind: 'stream'; url: string; body: Record<string, unknown>; scope: 'notice' | 'general' }
+  > {
+    const question = input.question.trim();
+    const history = this.trimHistory(input.history);
+
+    const countTarget = this.detectCountIntent(question, input.category);
+    if (countTarget) {
+      return { kind: 'immediate', payload: await this.countAnswer(countTarget) };
+    }
+
+    if (input.noticeId && !this.isGeneralScope(question)) {
+      const notice = await this.prisma.scrapedItem.findUnique({
+        where: { id: input.noticeId },
+        select: { title: true, contentText: true },
+      });
+      // Only stream from the notice when it actually has text; otherwise fall
+      // through to corpus search, which at least has something to work with.
+      if (notice?.contentText?.trim()) {
+        return {
+          kind: 'stream',
+          scope: 'notice',
+          url: `${this.aiServiceUrl}/notices/ask/stream`,
+          body: {
+            title: notice.title,
+            content: notice.contentText,
+            question,
+            history,
+          },
+        };
+      }
+    }
+
+    return {
+      kind: 'stream',
+      scope: 'general',
+      url: `${this.aiServiceUrl}/notices/search/stream`,
+      body: {
+        question,
+        pg_results: await this.keywordSearch(question, input.category),
+        category: input.category || null,
+        language: input.language || 'en',
+        top_k: 5,
+        history,
+      },
+    };
+  }
+
+  /** Exact count from the database — never routed through retrieval, which
+   * structurally cannot answer an aggregate from top-k results. */
+  private async countAnswer(countTarget: ScrapedItemCategory | 'ALL') {
+    const counts = (await this.categoryCounts()) as Record<string, number>;
+    const total =
+      countTarget === 'ALL'
+        ? Object.values(counts).reduce((sum: number, n: number) => sum + Number(n), 0)
+        : Number(counts[countTarget] ?? 0);
+    const noun = total === 1 ? 'notice' : 'notices';
+    const label =
+      countTarget === 'ALL' ? noun : `${this.formatCategoryLabel(countTarget)} ${noun}`;
+    return {
+      answer: `There ${total === 1 ? 'is' : 'are'} currently **${total}** ${label}.`,
+      sources: [],
+      model_used: null,
+      confidence: 'high',
+    };
   }
 
   async categoryCounts() {

@@ -1,28 +1,28 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useCallback } from "react"
-import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Bot, User, Sparkles, Minimize2, ExternalLink, FileText } from "lucide-react"
+import React, { Suspense, useState, useRef, useEffect } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
+import {
+  MessageCircle,
+  X,
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Minimize2,
+  ExternalLink,
+  FileText,
+  Square,
+  Check,
+  Copy,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { searchNotices, askNoticeQuestion, NoticeSearchResponse } from "@/lib/api"
 import { useNoticeContext } from "@/lib/notice-context"
+import { useNoticeChat, type ChatStage } from "@/lib/use-notice-chat"
+import { AnswerMarkdown, ConfidenceNote } from "@/components/chat/answer-markdown"
+import type { NoticeSource } from "@/lib/api"
 import gsap from "gsap"
-
-interface Source {
-  id: string
-  title: string
-  category: string
-  sourceUrl: string
-}
-
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  sources?: Source[]
-  contextUsed?: "notice" | "general"
-}
 
 const GENERAL_SUGGESTIONS = [
   "What exams are coming up?",
@@ -38,42 +38,75 @@ const NOTICE_SUGGESTIONS = [
   "What action should I take?",
 ]
 
+/** Wording for each retrieval stage, so the wait is legible rather than a
+ * featureless spinner. */
+const STAGE_LABELS: Record<NonNullable<ChatStage>, string> = {
+  searching: "Searching notices…",
+  reading: "Reading the notice…",
+  answering: "Writing the answer…",
+}
+
+/**
+ * The assistant is mounted globally in `providers.tsx`, so its use of
+ * `useSearchParams` (to scope answers to the active category filter) would
+ * otherwise force every statically prerendered page to bail out — it failed
+ * the production build on /admin/users. The Suspense boundary lives here so
+ * the fix travels with the component rather than with each mount site.
+ */
 export function FloatingChat() {
+  return (
+    <Suspense fallback={null}>
+      <FloatingChatPanel />
+    </Suspense>
+  )
+}
+
+function FloatingChatPanel() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { activeNotice } = useNoticeContext()
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [loading, setLoading] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
   const messagesEnd = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
   const prevNoticeId = useRef<string | null>(null)
 
-  // Reset messages when switching between notices
+  // Scope the corpus search to whatever the user is filtered to
+  // (e.g. /notices?category=TENDER), so answers match what's on screen.
+  const activeCategory =
+    pathname === "/notices" ? searchParams.get("category") ?? undefined : undefined
+
+  const { messages, send, stop, reset, loading, stage } = useNoticeChat({
+    noticeId: activeNotice?.id,
+    category: activeCategory,
+  })
+
+  // Reset the conversation when moving between notices — history from a
+  // different notice would misdirect follow-up questions.
   useEffect(() => {
     if (activeNotice?.id !== prevNoticeId.current) {
-      if (prevNoticeId.current !== null) {
-        setMessages([])
-      }
+      if (prevNoticeId.current !== null) reset()
       prevNoticeId.current = activeNotice?.id ?? null
     }
-  }, [activeNotice?.id])
+  }, [activeNotice?.id, reset])
 
   useEffect(() => {
     if (fabRef.current) {
-      gsap.fromTo(fabRef.current,
+      gsap.fromTo(
+        fabRef.current,
         { scale: 0, rotation: -90 },
-        { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2)", delay: 1 }
+        { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2)", delay: 1 },
       )
     }
   }, [])
 
   useEffect(() => {
     if (open && chatRef.current) {
-      gsap.fromTo(chatRef.current,
+      gsap.fromTo(
+        chatRef.current,
         { opacity: 0, scale: 0.9, y: 20 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "power2.out" }
+        { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "power2.out" },
       )
     }
   }, [open])
@@ -82,54 +115,12 @@ export function FloatingChat() {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, loading])
 
-  const handleSend = useCallback(async (text?: string) => {
-    const query = text || input.trim()
-    if (!query || loading) return
-
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: query }
-    setMessages(prev => [...prev, userMsg])
+  function handleSubmit(text?: string) {
+    const query = text ?? input
+    if (!query.trim() || loading) return
     setInput("")
-    setLoading(true)
-
-    try {
-      // If we have an active notice context, try notice-specific Q&A first
-      if (activeNotice?.id && activeNotice.contentText) {
-        const isAboutCurrentNotice = isNoticeRelatedQuery(query, activeNotice.title)
-
-        if (isAboutCurrentNotice) {
-          const { answer } = await askNoticeQuestion(activeNotice.id, query)
-          const botMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: answer,
-            contextUsed: "notice",
-          }
-          setMessages(prev => [...prev, botMsg])
-          return
-        }
-      }
-
-      // General notice search
-      const result: NoticeSearchResponse = await searchNotices(query)
-      const botMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: result.answer,
-        sources: result.sources?.length ? result.sources : undefined,
-        contextUsed: "general",
-      }
-      setMessages(prev => [...prev, botMsg])
-    } catch {
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Sorry, I couldn't process that request right now. Please try again.",
-      }
-      setMessages(prev => [...prev, errorMsg])
-    } finally {
-      setLoading(false)
-    }
-  }, [input, loading, activeNotice])
+    void send(query)
+  }
 
   if (pathname?.startsWith("/documents")) return null
 
@@ -140,21 +131,22 @@ export function FloatingChat() {
 
   return (
     <>
-      {/* Chat Panel */}
       {open && (
         <div
           ref={chatRef}
-          className="fixed bottom-24 right-6 z-[60] w-[400px] max-w-[calc(100vw-2rem)] h-[540px] max-h-[75vh] rounded-2xl border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
+          className="fixed bottom-24 right-6 z-[60] flex h-[540px] max-h-[75vh] w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/95 shadow-2xl backdrop-blur-xl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border/60 bg-primary/5">
+          <div className="flex items-center justify-between border-b border-border/60 bg-primary/5 p-4">
             <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
                 <Bot className="size-4 text-primary" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Suchana AI</p>
-                <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{subtitle}</p>
+                <p className="max-w-[200px] truncate text-[10px] text-muted-foreground">
+                  {subtitle}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -169,38 +161,35 @@ export function FloatingChat() {
 
           {/* Context badge */}
           {activeNotice && (
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-primary/3">
-              <FileText className="size-3 text-primary shrink-0" />
-              <p className="text-[10px] text-primary truncate flex-1">
+            <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2">
+              <FileText className="size-3 shrink-0 text-primary" />
+              <p className="flex-1 truncate text-[10px] text-primary">
                 Context: {activeNotice.title}
               </p>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary shrink-0">
-                Locked
-              </span>
             </div>
           )}
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {messages.length === 0 && (
-              <div className="text-center py-6">
-                <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
+              <div className="py-6 text-center">
+                <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10">
                   <Sparkles className="size-6 text-primary" />
                 </div>
-                <p className="text-sm font-medium mb-1">
+                <p className="mb-1 text-sm font-medium">
                   {activeNotice ? "Ask about this notice" : "How can I help?"}
                 </p>
-                <p className="text-xs text-muted-foreground mb-4">
+                <p className="mb-4 text-xs text-muted-foreground">
                   {activeNotice
-                    ? "I have the full context of this notice — ask me anything"
+                    ? "I have the full text of this notice — ask me anything"
                     : "Ask about notices, exams, tenders, or policies"}
                 </p>
-                <div className="flex flex-wrap gap-1.5 justify-center">
+                <div className="flex flex-wrap justify-center gap-1.5">
                   {suggestions.map((s) => (
                     <button
                       key={s}
-                      onClick={() => handleSend(s)}
-                      className="text-[11px] px-2.5 py-1.5 rounded-full border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-colors text-muted-foreground hover:text-foreground"
+                      onClick={() => handleSubmit(s)}
+                      className="rounded-full border border-border/60 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
                     >
                       {s}
                     </button>
@@ -210,60 +199,75 @@ export function FloatingChat() {
             )}
 
             {messages.map((msg) => (
-              <div key={msg.id} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "")}>
+              <div key={msg.id} className={cn("flex gap-2", msg.role === "user" && "justify-end")}>
                 {msg.role === "assistant" && (
-                  <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
                     <Bot className="size-3 text-primary" />
                   </div>
                 )}
-                <div className="max-w-[80%]">
-                  <div className={cn(
-                    "rounded-xl px-3 py-2 text-xs leading-relaxed",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : "bg-accent/60 rounded-bl-sm"
-                  )}>
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                <div className="max-w-[85%]">
+                  <div
+                    className={cn(
+                      "rounded-xl px-3 py-2 text-xs leading-relaxed",
+                      msg.role === "user"
+                        ? "rounded-br-sm bg-primary text-primary-foreground"
+                        : "rounded-bl-sm bg-accent/60",
+                    )}
+                  >
+                    {msg.role === "user" ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      <>
+                        <AnswerMarkdown content={msg.content} sources={msg.sources} />
+                        {msg.streaming && msg.content && (
+                          <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-primary align-middle" />
+                        )}
+                      </>
+                    )}
                   </div>
-                  {msg.contextUsed === "notice" && (
-                    <p className="mt-0.5 text-[9px] text-muted-foreground flex items-center gap-1">
-                      <FileText className="size-2.5" /> From current notice
+
+                  {msg.role === "assistant" && !msg.streaming && msg.content && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <ConfidenceNote confidence={msg.confidence} className="mt-0" />
+                      {msg.stopped && (
+                        <span className="text-[10px] text-muted-foreground">Stopped</span>
+                      )}
+                      <CopyButton text={msg.content} />
+                    </div>
+                  )}
+
+                  {msg.scope === "notice" && (
+                    <p className="mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground">
+                      <FileText className="size-2.5" /> From the notice you&apos;re reading
                     </p>
                   )}
+
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-1.5 space-y-1">
-                      {msg.sources.slice(0, 3).map((src) => (
-                        <a
-                          key={src.id}
-                          href={`/notices/${src.id}`}
-                          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-primary transition-colors group"
-                        >
-                          <ExternalLink className="size-2.5 shrink-0 opacity-50 group-hover:opacity-100" />
-                          <span className="truncate">{src.title}</span>
-                        </a>
-                      ))}
-                    </div>
+                    <SourceList sources={msg.sources} />
                   )}
                 </div>
                 {msg.role === "user" && (
-                  <div className="size-6 rounded-full bg-accent flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-accent">
                     <User className="size-3" />
                   </div>
                 )}
               </div>
             ))}
 
-            {loading && (
+            {/* Stage indicator: only before the first token arrives. Once text
+                is streaming, the text itself is the progress indicator. */}
+            {loading && stage && stage !== "answering" && (
               <div className="flex gap-2">
-                <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <Bot className="size-3 text-primary" />
                 </div>
-                <div className="bg-accent/60 rounded-xl rounded-bl-sm px-3 py-2">
+                <div className="flex items-center gap-2 rounded-xl rounded-bl-sm bg-accent/60 px-3 py-2">
                   <div className="flex gap-1">
-                    <span className="size-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="size-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="size-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "0ms" }} />
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "150ms" }} />
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "300ms" }} />
                   </div>
+                  <span className="text-[10px] text-muted-foreground">{STAGE_LABELS[stage]}</span>
                 </div>
               </div>
             )}
@@ -271,39 +275,59 @@ export function FloatingChat() {
           </div>
 
           {/* Input */}
-          <div className="p-3 border-t border-border/60">
-            <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex gap-2">
+          <div className="border-t border-border/60 p-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSubmit()
+              }}
+              className="flex gap-2"
+            >
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={activeNotice ? "Ask about this notice…" : "Ask about notices..."}
-                className="flex-1 h-9 rounded-lg border border-border/60 bg-background px-3 text-sm outline-none focus:border-primary/50 transition-colors"
-                disabled={loading}
+                placeholder={activeNotice ? "Ask about this notice…" : "Ask about notices…"}
+                className="h-9 flex-1 rounded-lg border border-border/60 bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/50"
               />
-              <Button type="submit" size="icon" className="size-9 rounded-lg shrink-0" disabled={!input.trim() || loading}>
-                <Send className="size-3.5" />
-              </Button>
+              {loading ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="size-9 shrink-0 rounded-lg"
+                  onClick={stop}
+                  aria-label="Stop generating"
+                >
+                  <Square className="size-3 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="size-9 shrink-0 rounded-lg"
+                  disabled={!input.trim()}
+                  aria-label="Send"
+                >
+                  <Send className="size-3.5" />
+                </Button>
+              )}
             </form>
           </div>
         </div>
       )}
 
-      {/* FAB Button */}
+      {/* FAB */}
       <button
         ref={fabRef}
         onClick={() => setOpen(!open)}
-        className={cn(
-          "fixed bottom-6 right-6 z-[60] size-16 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95",
-          open
-            ? "bg-white text-gray-900 ring-4 ring-white/20"
-            : "bg-white text-gray-900 ring-4 ring-white/30"
-        )}
+        aria-label={open ? "Close assistant" : "Open assistant"}
+        className="fixed bottom-6 right-6 z-[60] flex size-16 items-center justify-center rounded-full bg-white text-gray-900 shadow-2xl ring-4 ring-white/30 transition-all hover:scale-110 active:scale-95"
         style={{ boxShadow: "0 0 20px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.4)" }}
       >
         {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
         {!open && (
-          <span className="absolute -top-1 -right-1 size-5 rounded-full bg-green-400 border-2 border-white flex items-center justify-center animate-pulse">
+          <span className="absolute -right-1 -top-1 flex size-5 animate-pulse items-center justify-center rounded-full border-2 border-white bg-green-400">
             <span className="size-2.5 rounded-full bg-white" />
           </span>
         )}
@@ -312,40 +336,48 @@ export function FloatingChat() {
   )
 }
 
-/**
- * Heuristic to determine if a user's question is about the currently viewed
- * notice or a general/unrelated query. Returns true if likely about the
- * current notice.
- */
-function isNoticeRelatedQuery(query: string, noticeTitle: string): boolean {
-  const q = query.toLowerCase()
+/** Numbered source cards, anchored so inline [n] citations can jump to them. */
+function SourceList({ sources }: { sources: NoticeSource[] }) {
+  return (
+    <div className="mt-1.5 space-y-1">
+      {sources.slice(0, 4).map((src, i) => (
+        <a
+          key={src.id || i}
+          id={`source-${src.citation ?? i + 1}`}
+          href={`/notices/${src.id}`}
+          className="group flex items-start gap-1.5 text-[10px] text-muted-foreground transition-colors hover:text-primary"
+        >
+          <span className="mt-px flex h-3.5 min-w-3.5 shrink-0 items-center justify-center rounded bg-muted px-1 text-[9px] font-semibold">
+            {src.citation ?? i + 1}
+          </span>
+          <span className="line-clamp-2 flex-1">{src.title}</span>
+          <ExternalLink className="mt-0.5 size-2.5 shrink-0 opacity-50 group-hover:opacity-100" />
+        </a>
+      ))}
+    </div>
+  )
+}
 
-  // Explicit signals that the user is asking about something else
-  const generalPatterns = [
-    /^(show|find|list|search|get)\s+(me\s+)?(all|latest|recent|other|new)/,
-    /other notices/,
-    /different (notice|topic)/,
-    /what('s| is) (new|happening|latest)/,
-    /how many notices/,
-  ]
-  if (generalPatterns.some(p => p.test(q))) return false
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
 
-  // Explicit signals about "this" notice
-  const thisNoticePatterns = [
-    /\b(this|the|current)\s+(notice|document|pdf|circular|tender|announcement)/,
-    /\b(it|its|it's)\b/,
-    /^(what|who|when|where|how|why|is|are|does|do|can|should|tell me|explain|summarize|summarise)/,
-    /deadline|due date|last date/,
-    /eligib|qualif|require|criteria/,
-    /apply|application|submit/,
-    /affect|impact|concern/,
-    /contact|phone|email|address/,
-    /fee|cost|amount|salary|payment/,
-  ]
-  if (thisNoticePatterns.some(p => p.test(q))) return true
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard permission denied — nothing useful to fall back to.
+    }
+  }
 
-  // If the query is short and question-like, assume it's about the current notice
-  if (q.length < 60 && (q.endsWith("?") || q.split(" ").length <= 8)) return true
-
-  return true
+  return (
+    <button
+      onClick={handleCopy}
+      aria-label="Copy answer"
+      className="text-muted-foreground transition-colors hover:text-foreground"
+    >
+      {copied ? <Check className="size-2.5" /> : <Copy className="size-2.5" />}
+    </button>
+  )
 }

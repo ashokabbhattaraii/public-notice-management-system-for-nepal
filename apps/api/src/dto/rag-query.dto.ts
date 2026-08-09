@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, MaxLength, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RagQueryDto {
@@ -7,7 +7,11 @@ export class RagQueryDto {
   question: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(64)
+  @Matches(/^[a-zA-Z0-9_-]+$/, {
+    message: 'documentId must be a valid document ID (alphanumeric, dash or underscore)',
+  })
   documentId?: string;
 
   @IsOptional()

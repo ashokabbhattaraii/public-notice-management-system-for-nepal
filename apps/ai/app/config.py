@@ -48,6 +48,13 @@ CHUNK_OVERLAP: int = _env_int("CHUNK_OVERLAP", 120)
 # Chunks embedded per model.encode() call; keeps memory bounded on large docs.
 EMBEDDING_BATCH_SIZE: int = _env_int("EMBEDDING_BATCH_SIZE", 32)
 
+# OpenCode Zen — primary LLM provider (DeepSeek V4 Flash, generous free quota).
+# Base URL isn't hardcoded since we don't want a guessed endpoint baked into
+# the codebase; set it from your OpenCode Zen dashboard/docs.
+OPENCODE_ZEN_API_KEY: str = _env("OPENCODE_ZEN_API_KEY")
+OPENCODE_ZEN_BASE_URL: str = _env("OPENCODE_ZEN_BASE_URL")
+OPENCODE_ZEN_MODEL: str = _env("OPENCODE_ZEN_MODEL", "deepseek-v4-flash")
+
 GROQ_API_KEY: str = _env("GROQ_API_KEY")
 GROQ_API_KEYS: list[str] = [k.strip() for k in _env("GROQ_API_KEYS", "").split(",") if k.strip()] or ([GROQ_API_KEY] if GROQ_API_KEY else [])
 GROQ_MODEL: str = _env("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -59,6 +66,43 @@ GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-2.0-flash")
 # E5-family models compress cosine similarity into ~0.7-0.9; observed in
 # practice: irrelevant hits ~0.76-0.78, relevant ~0.82+.
 RAG_SCORE_THRESHOLD: float = float(_env("RAG_SCORE_THRESHOLD", "0.78"))
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_float(key: str, default: float) -> float:
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    return float(val)
+
+
+# --- Reranking -------------------------------------------------------------
+# A cross-encoder reorders the retrieval shortlist before it becomes LLM
+# context. bge-reranker-v2-m3 is multilingual, so it handles the Nepali /
+# romanized-Nepali / English mix this portal sees. Adds ~150-400ms on CPU for a
+# 20-passage shortlist; disable if that budget matters more than ordering.
+RERANK_ENABLED: bool = _env_bool("RERANK_ENABLED", True)
+RERANKER_MODEL: str = _env("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_BATCH_SIZE: int = _env_int("RERANK_BATCH_SIZE", 16)
+# Shortlist size handed to the reranker. Larger recall is what makes reranking
+# worthwhile, but cost is linear in this number.
+RERANK_CANDIDATES: int = _env_int("RERANK_CANDIDATES", 20)
+
+# --- Notice search ---------------------------------------------------------
+# Vector hits below this are never considered, regardless of the relative
+# cutoff below. Deliberately well under the old hard 0.75 gate, which silently
+# discarded correct-but-loosely-phrased matches and produced "I couldn't find
+# anything" for questions the corpus did answer.
+NOTICE_SEARCH_MIN_SCORE: float = _env_float("NOTICE_SEARCH_MIN_SCORE", 0.62)
+# Relative cutoff: drop hits scoring more than this far below the best hit.
+# Scales with query difficulty instead of assuming a fixed absolute quality bar.
+NOTICE_SEARCH_RELATIVE_MARGIN: float = _env_float("NOTICE_SEARCH_RELATIVE_MARGIN", 0.08)
 
 TESSERACT_LANG: str = _env("TESSERACT_LANG", "nep+eng")
 

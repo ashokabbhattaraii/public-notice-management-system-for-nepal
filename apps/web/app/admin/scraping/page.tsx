@@ -322,6 +322,17 @@ function AdminScrapingPageContent() {
     }
   }, [])
 
+  /** Current URL with the given params merged in (null deletes a param); other params (e.g. tab) are preserved. */
+  function buildQuery(overrides: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === null) params.delete(key)
+      else params.set(key, value)
+    }
+    const qs = params.toString()
+    return qs ? `${pathname}?${qs}` : pathname
+  }
+
   function openCreateDialog() {
     setForm(emptyForm)
     setShowAdvanced(false)
@@ -329,6 +340,7 @@ function AdminScrapingPageContent() {
     setSitemapNotice(null)
     setCheckResult(null)
     setDialogOpen(true)
+    router.replace(buildQuery({ dialog: "add", sourceId: null }), { scroll: false })
   }
 
   function openEditDialog(source: ScrapeSource) {
@@ -351,7 +363,38 @@ function AdminScrapingPageContent() {
     setSitemapNotice(null)
     setCheckResult(null)
     setDialogOpen(true)
+    router.replace(buildQuery({ dialog: "edit", sourceId: source.id }), { scroll: false })
   }
+
+  function closeDialog() {
+    setDialogOpen(false)
+    router.replace(buildQuery({ dialog: null, sourceId: null }), { scroll: false })
+  }
+
+  // Deep-link support: ?dialog=add or ?dialog=edit&sourceId=<id> opens the
+  // dialog on load (e.g. a shared "edit this source" link, or a page refresh
+  // while the dialog was open). Runs once sources have loaded so edit-mode
+  // can find the matching source; a stale/unknown sourceId just clears the
+  // params instead of leaving a dead link.
+  const didOpenFromUrl = useRef(false)
+  useEffect(() => {
+    if (didOpenFromUrl.current || loading) return
+    const dialogParam = searchParams.get("dialog")
+    if (dialogParam === "add") {
+      didOpenFromUrl.current = true
+      openCreateDialog()
+    } else if (dialogParam === "edit") {
+      const sourceId = searchParams.get("sourceId")
+      const source = sources.find((s) => s.id === sourceId)
+      didOpenFromUrl.current = true
+      if (source) {
+        openEditDialog(source)
+      } else {
+        router.replace(buildQuery({ dialog: null, sourceId: null }), { scroll: false })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources, loading])
 
   /** One-time sitemap detection, persisted on the source. Edit mode only. */
   async function handleDetectSitemap() {
@@ -431,7 +474,7 @@ function AdminScrapingPageContent() {
       } else {
         await createScrapeSource(payload)
       }
-      setDialogOpen(false)
+      closeDialog()
       await loadAll()
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed to save source")
@@ -1224,7 +1267,7 @@ function AdminScrapingPageContent() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setDialogOpen(false)}
+                  onClick={closeDialog}
                   className="flex size-8 shrink-0 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface"
                   aria-label="Close"
                 >
@@ -1243,7 +1286,7 @@ function AdminScrapingPageContent() {
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="e.g. Ministry of Home Affairs"
-                        className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                        className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                       />
                     </div>
                     <div>
@@ -1254,7 +1297,7 @@ function AdminScrapingPageContent() {
                         value={form.baseUrl}
                         onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
                         placeholder="https://example.gov.np"
-                        className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                        className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                       />
                     </div>
                   </div>
@@ -1270,7 +1313,7 @@ function AdminScrapingPageContent() {
                           value={form.noticeListUrl}
                           onChange={(e) => setForm({ ...form, noticeListUrl: e.target.value })}
                           placeholder="https://example.gov.np/notices"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         />
                       </div>
                       <div>
@@ -1280,7 +1323,7 @@ function AdminScrapingPageContent() {
                           value={form.newsListUrl}
                           onChange={(e) => setForm({ ...form, newsListUrl: e.target.value })}
                           placeholder="https://example.gov.np/news"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         />
                       </div>
                       <div>
@@ -1290,7 +1333,7 @@ function AdminScrapingPageContent() {
                           value={form.pressReleaseListUrl}
                           onChange={(e) => setForm({ ...form, pressReleaseListUrl: e.target.value })}
                           placeholder="https://example.gov.np/press-release"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         />
                       </div>
                     </div>
@@ -1329,7 +1372,7 @@ function AdminScrapingPageContent() {
                           onChange={(e) =>
                             setForm({ ...form, pollIntervalSeconds: Number(e.target.value) || 60 })
                           }
-                          className="h-9 w-24 rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-9 w-24 rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         />
                         <span className="text-xs text-vez-mute">seconds</span>
                         <span className="ml-auto text-xs font-medium text-vez-ink">
@@ -1353,7 +1396,7 @@ function AdminScrapingPageContent() {
                           value={form.sitemapUrl}
                           onChange={(e) => setForm({ ...form, sitemapUrl: e.target.value })}
                           placeholder="https://example.gov.np/sitemap-news.xml"
-                          className="h-9 w-full min-w-0 rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-9 w-full min-w-0 rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         />
                         <button
                           type="button"
@@ -1429,7 +1472,7 @@ function AdminScrapingPageContent() {
                           onChange={(e) =>
                             setForm({ ...form, paginationType: e.target.value as ScrapePaginationType })
                           }
-                          className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                         >
                           <option value="QUERY_PARAM">Query parameter (?page=2, ?start=20, …)</option>
                           <option value="PATH_TEMPLATE">Path template ({"{page}"} placeholder in the URL)</option>
@@ -1443,7 +1486,7 @@ function AdminScrapingPageContent() {
                             value={form.paginationParam}
                             onChange={(e) => setForm({ ...form, paginationParam: e.target.value })}
                             placeholder="page"
-                            className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                            className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                           />
                         </div>
                       )}
@@ -1462,7 +1505,7 @@ function AdminScrapingPageContent() {
                               min={0}
                               value={form.startPage}
                               onChange={(e) => setForm({ ...form, startPage: Number(e.target.value) || 1 })}
-                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                             />
                           </div>
                           <div>
@@ -1473,7 +1516,7 @@ function AdminScrapingPageContent() {
                               max={20}
                               value={form.maxPages}
                               onChange={(e) => setForm({ ...form, maxPages: Number(e.target.value) || 1 })}
-                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy focus:ring-2 focus:ring-vez-sky/30"
                             />
                           </div>
                         </div>
@@ -1497,7 +1540,7 @@ function AdminScrapingPageContent() {
                   <div className="flex shrink-0 items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setDialogOpen(false)}
+                      onClick={closeDialog}
                       className="rounded-full px-5 py-2.5 text-sm text-vez-mute transition-colors hover:bg-vez-surface"
                     >
                       Cancel

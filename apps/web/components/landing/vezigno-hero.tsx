@@ -22,8 +22,6 @@ const quickTagNames: Record<string, string> = {
   CIRCULAR: "Circulars",
   TENDER: "Tenders",
   VACANCY: "Vacancies",
-  JOB: "Jobs",
-  INTERNSHIP: "Internships",
   OTHER: "More",
 }
 

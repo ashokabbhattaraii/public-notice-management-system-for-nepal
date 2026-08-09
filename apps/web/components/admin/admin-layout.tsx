@@ -1,16 +1,16 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
-  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield,
+  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Bell, Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
-import { mockScrapingSources } from "@/lib/mock-data"
+import { fetchScrapeSources } from "@/lib/api"
 import { RequireAuth } from "@/components/auth/require-auth"
 
 const navGroups = [
@@ -25,7 +25,6 @@ const navGroups = [
     links: [
       { href: "/admin/notices", label: "Notices", icon: FileText },
       { href: "/admin/categories", label: "Categories", icon: FolderOpen },
-      { href: "/admin/sources", label: "Sources", icon: Link2 },
     ],
   },
   {
@@ -47,7 +46,25 @@ const navGroups = [
 
 function SidebarContent({ pathname, onLinkClick }: { pathname: string; onLinkClick?: () => void }) {
   const { user } = useAuth()
-  const errorSources = mockScrapingSources.filter(s => s.status === "error").length
+  const [errorSources, setErrorSources] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadErrorCount() {
+      try {
+        const sources = await fetchScrapeSources()
+        if (!cancelled) setErrorSources(sources.filter((s) => s.lastStatus === "FAILED").length)
+      } catch {
+        // Sidebar badge is best-effort — leave it at 0 rather than erroring the whole layout.
+      }
+    }
+    loadErrorCount()
+    const timer = setInterval(loadErrorCount, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
 
   return (
     <div className="flex h-full flex-col bg-white">

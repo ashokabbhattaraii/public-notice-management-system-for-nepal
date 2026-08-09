@@ -511,8 +511,6 @@ function AdminNoticesPageContent() {
                     <option value="CIRCULAR">Circular</option>
                     <option value="TENDER">Tender</option>
                     <option value="VACANCY">Vacancy</option>
-                    <option value="JOB">Job</option>
-                    <option value="INTERNSHIP">Internship</option>
                     <option value="OTHER">Other</option>
                   </select>
                 </div>

@@ -1,0 +1,228 @@
+{
+  "$comment": [
+    "Evaluation set for the notice chatbot. Each case declares what a correct",
+    "response looks like without hardcoding notice IDs, so the set stays valid",
+    "as the corpus changes.",
+    "",
+    "Fields:",
+    "  id            stable identifier, used to compare runs",
+    "  question      what the user types",
+    "  kind          retrieval | count | abstain | smalltalk | followup | language",
+    "  expect_sources  true if the answer should cite at least one notice",
+    "  expect_terms    terms that should appear in the answer (any one counts)",
+    "  forbid_terms    terms whose presence indicates a failure mode",
+    "  history         prior turns, for follow-up resolution cases",
+    "",
+    "Add corpus-specific cases (real deadlines, real office names) at the end:",
+    "those are the highest-signal tests, but only you know your data."
+  ],
+  "cases": [
+    {
+      "id": "ret-tender-latest",
+      "question": "What are the latest tender notices?",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-vacancy-open",
+      "question": "Are there any open vacancy announcements right now?",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-exam",
+      "question": "What exams are coming up?",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-scholarship",
+      "question": "Tell me about scholarship notices",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-deadline-generic",
+      "question": "Which notices have deadlines this month?",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-procurement",
+      "question": "procurement notices for construction work",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-education-ministry",
+      "question": "notices published by the Ministry of Education",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-health",
+      "question": "any health related public notices?",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-circular",
+      "question": "recent circulars",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-press-release",
+      "question": "latest press releases",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-keyword-nrb",
+      "question": "NRB policy updates",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+    {
+      "id": "ret-multiword",
+      "question": "application requirements for government job openings",
+      "kind": "retrieval",
+      "expect_sources": true
+    },
+
+    {
+      "id": "count-all",
+      "question": "How many notices are there?",
+      "kind": "count",
+      "expect_terms": ["currently"],
+      "forbid_terms": ["I couldn't find", "I could not find"]
+    },
+    {
+      "id": "count-tender",
+      "question": "How many tenders are there in total?",
+      "kind": "count",
+      "expect_terms": ["tender"]
+    },
+    {
+      "id": "count-vacancy",
+      "question": "how many vacancies do you have",
+      "kind": "count",
+      "expect_terms": ["vacanc"]
+    },
+
+    {
+      "id": "abstain-unrelated",
+      "question": "What is the current price of Bitcoin?",
+      "kind": "abstain",
+      "expect_sources": false,
+      "expect_terms": ["couldn't find", "could not find", "don't", "not", "no notices"]
+    },
+    {
+      "id": "abstain-weather",
+      "question": "Will it rain in Pokhara tomorrow?",
+      "kind": "abstain",
+      "expect_sources": false
+    },
+    {
+      "id": "abstain-invented-scheme",
+      "question": "What are the eligibility rules for the Zephyr Housing Grant 2090?",
+      "kind": "abstain",
+      "expect_terms": ["couldn't find", "could not find", "no ", "not "],
+      "forbid_terms": ["eligibility criteria are", "you must be aged"]
+    },
+
+    {
+      "id": "smalltalk-hello",
+      "question": "hello",
+      "kind": "smalltalk",
+      "expect_sources": false,
+      "forbid_terms": ["couldn't find", "could not find"]
+    },
+    {
+      "id": "smalltalk-thanks",
+      "question": "thank you so much",
+      "kind": "smalltalk",
+      "expect_sources": false
+    },
+    {
+      "id": "smalltalk-romanized",
+      "question": "namaste kasto cha",
+      "kind": "smalltalk",
+      "expect_sources": false
+    },
+    {
+      "id": "smalltalk-identity",
+      "question": "who are you?",
+      "kind": "smalltalk",
+      "expect_sources": false
+    },
+
+    {
+      "id": "followup-fee",
+      "question": "what about the fee?",
+      "kind": "followup",
+      "history": [
+        { "role": "user", "content": "Tell me about recent vacancy announcements" },
+        {
+          "role": "assistant",
+          "content": "There are several open vacancy announcements for government positions, including administrative and technical posts."
+        }
+      ],
+      "expect_sources": true
+    },
+    {
+      "id": "followup-deadline",
+      "question": "and the deadline?",
+      "kind": "followup",
+      "history": [
+        { "role": "user", "content": "What tender notices are open for road construction?" },
+        {
+          "role": "assistant",
+          "content": "There are open tenders for road construction work in several districts."
+        }
+      ],
+      "expect_sources": true
+    },
+    {
+      "id": "followup-who",
+      "question": "who published it?",
+      "kind": "followup",
+      "history": [
+        { "role": "user", "content": "Tell me about the latest circular" },
+        { "role": "assistant", "content": "The most recent circular concerns administrative procedures." }
+      ],
+      "expect_sources": true
+    },
+
+    {
+      "id": "lang-nepali-notices",
+      "question": "सूचनाहरूमा के के छन्?",
+      "kind": "language",
+      "expect_sources": true
+    },
+    {
+      "id": "lang-nepali-deadline",
+      "question": "आवेदनको म्याद कहिले सम्म हो?",
+      "kind": "language",
+      "expect_sources": true
+    },
+    {
+      "id": "lang-romanized",
+      "question": "kun kun tender khulla cha?",
+      "kind": "language",
+      "expect_sources": true
+    },
+    {
+      "id": "lang-romanized-vacancy",
+      "question": "vacancy ko bare ma bhannus",
+      "kind": "language",
+      "expect_sources": true
+    },
+    {
+      "id": "lang-mixed",
+      "question": "education sambandhi notice haru k k cha?",
+      "kind": "language",
+      "expect_sources": true
+    }
+  ]
+}

@@ -140,11 +140,12 @@ export async function apiLogout(): Promise<void> {
 
 // ─── Documents API ───────────────────────────────────────────────────────────
 
-export async function uploadDocument(file: File, title: string): Promise<RagDocument> {
+export async function uploadDocument(file: File, title: string, isSystem = false): Promise<RagDocument> {
   const token = tokenStore.get()
   const form = new FormData()
   form.append("file", file)
   form.append("title", title)
+  if (isSystem) form.append("isSystem", "true")
 
   const res = await fetch(`${API_URL}/documents`, {
     method: "POST",
@@ -156,6 +157,13 @@ export async function uploadDocument(file: File, title: string): Promise<RagDocu
     throw new Error(err || `Upload failed: ${res.status}`)
   }
   return res.json()
+}
+
+export async function updateDocument(id: string, data: { title?: string }): Promise<RagDocument> {
+  return apiFetch<RagDocument>(`/documents/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
 }
 
 export async function fetchDocuments(
@@ -419,10 +427,40 @@ export async function askNoticeQuestion(id: string, question: string): Promise<{
   })
 }
 
+export interface NoticeSource {
+  /** Index of the inline [n] marker in the answer that points at this source. */
+  citation?: number
+  id: string
+  title: string
+  category: string
+  sourceUrl: string
+  publishedAt?: string | null
+  score?: number
+}
+
+export type AnswerConfidence = "high" | "medium" | "low" | "none"
+
 export interface NoticeSearchResponse {
   answer: string
-  sources: { id: string; title: string; category: string; sourceUrl: string; score?: number }[]
+  sources: NoticeSource[]
   model_used: string | null
+  confidence?: AnswerConfidence
+  scope?: "notice" | "general"
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant"
+  content: string
+}
+
+export interface ChatRequest {
+  question: string
+  category?: string
+  language?: string
+  /** The notice currently open, if any. The server decides whether the
+   * question is actually about it. */
+  noticeId?: string
+  history?: ChatTurn[]
 }
 
 export async function searchNotices(
@@ -434,6 +472,72 @@ export async function searchNotices(
     method: "POST",
     body: JSON.stringify({ question, category, language }),
   })
+}
+
+/** Events emitted by `POST /notices/chat/stream`. */
+export type ChatStreamEvent =
+  | { type: "scope"; scope: "notice" | "general" }
+  | { type: "stage"; stage: "searching" | "reading" | "answering" }
+  | { type: "sources"; sources: NoticeSource[] }
+  | { type: "delta"; text: string }
+  | {
+      type: "done"
+      sources?: NoticeSource[]
+      model_used?: string | null
+      confidence?: AnswerConfidence
+    }
+  | { type: "error"; error: string }
+
+/**
+ * Stream a chat answer, invoking `onEvent` as each event arrives.
+ *
+ * Pass an AbortSignal to support a stop button; aborting propagates all the
+ * way to the AI service, which stops generating rather than finishing an
+ * answer nobody will read.
+ */
+export async function streamNoticeChat(
+  request: ChatRequest,
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/notices/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Chat stream failed: ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+
+    // SSE frames are separated by a blank line. A frame can straddle two
+    // network chunks, so anything after the last separator stays buffered.
+    const frames = buffer.split("\n\n")
+    buffer = frames.pop() ?? ""
+
+    for (const frame of frames) {
+      const line = frame.split("\n").find((l) => l.startsWith("data:"))
+      if (!line) continue
+      const payload = line.slice(5).trim()
+      if (!payload) continue
+      try {
+        onEvent(JSON.parse(payload) as ChatStreamEvent)
+      } catch {
+        // A malformed frame shouldn't kill an otherwise healthy stream.
+      }
+    }
+  }
 }
 
 export async function fetchNoticeCategoryCounts(): Promise<Record<string, number>> {

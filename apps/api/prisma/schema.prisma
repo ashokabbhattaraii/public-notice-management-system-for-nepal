@@ -68,6 +68,11 @@ model Document {
   @@map("documents")
 }
 
+// JOB and INTERNSHIP were removed (merged into VACANCY) — in practice the
+// AI classifier could never reliably tell them apart (0 items ever landed
+// in either across the full scraped dataset), so they were just two
+// permanently-empty, confusing filter tabs. VACANCY now covers any open
+// position — job, internship, or otherwise.
 enum ScrapedItemCategory {
   NOTICE
   NEWS
@@ -75,8 +80,6 @@ enum ScrapedItemCategory {
   CIRCULAR
   TENDER
   VACANCY
-  JOB
-  INTERNSHIP
   OTHER
 }
 

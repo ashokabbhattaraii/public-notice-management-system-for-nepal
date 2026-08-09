@@ -55,8 +55,16 @@ export class SystemDocumentsService implements OnModuleInit {
       this.logger.log(
         `System document "${def.title}" already exists (status: ${existing.status})`,
       );
-      // If it failed previously, retry embedding
-      if (existing.status === DocumentStatus.FAILED || existing.status === DocumentStatus.UNEMBEDDED) {
+      // Retry if it failed, was never embedded, or is stuck PROCESSING — a
+      // PROCESSING row found at cold-start is always orphaned (an API
+      // restart/crash mid-embed is the only way to land here on startup;
+      // nothing else could still be running it), so it would otherwise be
+      // stranded forever with no automatic recovery.
+      if (
+        existing.status === DocumentStatus.FAILED ||
+        existing.status === DocumentStatus.UNEMBEDDED ||
+        existing.status === DocumentStatus.PROCESSING
+      ) {
         this.logger.log(`Re-embedding system document "${def.title}"...`);
         this.documentsService.processDocument(existing).catch((err) => {
           this.logger.error(`Failed to re-embed "${def.title}": ${err.message}`);

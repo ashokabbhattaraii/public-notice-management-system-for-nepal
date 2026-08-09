@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -8,6 +8,12 @@ import { AuthService } from '../services/auth.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
 import { TokenRevocationService } from '../common/token-revocation.service';
 
+// Global: JwtAuthGuard/OptionalJwtAuthGuard (which depend on
+// TokenRevocationService) are used by every feature module's controllers,
+// not just auth's own — without @Global(), each of those modules would need
+// to import AuthModule individually, and any that forgot would silently get
+// an undefined TokenRevocationService injected into the guard.
+@Global()
 @Module({
   imports: [
     ConfigModule,

@@ -40,8 +40,9 @@ export class DocumentsService {
     mimeType: string;
     fileSize: number;
     filePath: string;
-    uploadedBy: string;
+    uploadedBy: string | null;
     fileHash: string;
+    isSystem?: boolean;
   }): Promise<Document> {
     const document = await this.prisma.document.create({ data });
 
@@ -53,6 +54,12 @@ export class DocumentsService {
     });
 
     return document;
+  }
+
+  /** Rename a document. Callers enforce ownership/admin rules. */
+  async update(id: string, data: { title?: string }): Promise<Document> {
+    await this.findOne(id);
+    return this.prisma.document.update({ where: { id }, data });
   }
 
   /** Find a document by its content hash (for deduplication). */

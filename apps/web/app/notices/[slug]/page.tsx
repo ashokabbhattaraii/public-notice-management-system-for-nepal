@@ -9,12 +9,14 @@ import {
   Bookmark, BookmarkCheck, Loader2, Check,
   Paperclip, FileImage, Download, Sparkles,
   CheckCircle, Tag, MessageSquare, Send, ArrowRight,
-  AlertTriangle, Clock, Timer, ChevronDown, ChevronUp,
+  AlertTriangle, Clock, Timer, ChevronDown, ChevronUp, Square,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
-import { fetchNotice, askNoticeQuestion } from "@/lib/api"
+import { fetchNotice } from "@/lib/api"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
+import { useNoticeChat } from "@/lib/use-notice-chat"
+import { AnswerMarkdown, ConfidenceNote } from "@/components/chat/answer-markdown"
 import type { PublicNoticeDetail } from "@/lib/types"
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
@@ -451,9 +453,17 @@ export default function NoticeDetailPage() {
   const [copied, setCopied] = useState(false)
 
   const [question, setQuestion] = useState("")
-  const [qaHistory, setQaHistory] = useState<Array<{ q: string; a: string }>>([])
-  const [answering, setAnswering] = useState(false)
   const [extracting, setExtracting] = useState(false)
+
+  // Same streaming pipeline as the floating assistant, so an answer given here
+  // is identical to the one given there for the same question.
+  const {
+    messages: qaMessages,
+    send: ask,
+    stop: stopAnswering,
+    loading: answering,
+    stage: qaStage,
+  } = useNoticeChat({ noticeId })
 
   useEffect(() => {
     let cancelled = false
@@ -516,22 +526,11 @@ export default function NoticeDetailPage() {
     }
   }
 
-  async function handleAsk(q?: string) {
+  function handleAsk(q?: string) {
     const finalQuestion = (q ?? question).trim()
     if (!finalQuestion || answering || !notice) return
-    setAnswering(true)
     setQuestion("")
-    try {
-      const { answer } = await askNoticeQuestion(notice.id, finalQuestion)
-      setQaHistory((prev) => [...prev, { q: finalQuestion, a: answer }])
-    } catch {
-      setQaHistory((prev) => [
-        ...prev,
-        { q: finalQuestion, a: "Sorry, I couldn't process that question right now. Please try again." },
-      ])
-    } finally {
-      setAnswering(false)
-    }
+    void ask(finalQuestion)
   }
 
   if (loading) {
@@ -830,7 +829,7 @@ export default function NoticeDetailPage() {
                 </div>
 
                 <div className="rounded-[16px] border border-vez-line bg-white p-6">
-                  {qaHistory.length === 0 && (
+                  {qaMessages.length === 0 && (
                     <div className="mb-4 grid gap-2 sm:grid-cols-2">
                       {SUGGESTED_QUESTIONS.map((q) => (
                         <button
@@ -846,29 +845,45 @@ export default function NoticeDetailPage() {
                     </div>
                   )}
 
-                  {qaHistory.length > 0 && (
+                  {qaMessages.length > 0 && (
                     <div className="mb-4 max-h-[400px] space-y-4 overflow-y-auto">
-                      {qaHistory.map((item, i) => (
-                        <div key={i} className="space-y-2">
-                          <div className="ml-auto max-w-[80%] rounded-[14px] rounded-br-[4px] bg-vez-sky/25 px-4 py-3 text-right text-sm text-vez-ink">
-                            {item.q}
+                      {qaMessages.map((msg) =>
+                        msg.role === "user" ? (
+                          <div
+                            key={msg.id}
+                            className="ml-auto max-w-[80%] rounded-[14px] rounded-br-[4px] bg-vez-sky/25 px-4 py-3 text-right text-sm text-vez-ink"
+                          >
+                            {msg.content}
                           </div>
-                          <div className="mr-auto max-w-[85%] rounded-[14px] rounded-bl-[4px] bg-vez-surface px-4 py-3">
+                        ) : (
+                          <div
+                            key={msg.id}
+                            className="mr-auto max-w-[85%] rounded-[14px] rounded-bl-[4px] bg-vez-surface px-4 py-3"
+                          >
                             <div className="mb-1.5 flex items-center gap-1.5">
                               <Sparkles className="size-3 text-vez-navy" />
                               <span className="text-xs text-vez-navy">Suchana AI</span>
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-vez-ink">{item.a}</p>
+                            <AnswerMarkdown
+                              content={msg.content}
+                              sources={msg.sources}
+                              className="text-sm text-vez-ink"
+                            />
+                            {msg.streaming && msg.content && (
+                              <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-vez-navy align-middle" />
+                            )}
+                            {!msg.streaming && <ConfidenceNote confidence={msg.confidence} />}
                           </div>
-                        </div>
-                      ))}
-                      {answering && (
-                        <div className="mr-auto rounded-[14px] bg-vez-surface px-4 py-3">
+                        ),
+                      )}
+                      {answering && qaStage && qaStage !== "answering" && (
+                        <div className="mr-auto flex items-center gap-2 rounded-[14px] bg-vez-surface px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <span className="size-1.5 animate-bounce rounded-full bg-vez-navy" />
                             <span className="size-1.5 animate-bounce rounded-full bg-vez-navy [animation-delay:150ms]" />
                             <span className="size-1.5 animate-bounce rounded-full bg-vez-navy [animation-delay:300ms]" />
                           </div>
+                          <span className="text-xs text-vez-mute">Reading the notice…</span>
                         </div>
                       )}
                     </div>
@@ -881,15 +896,25 @@ export default function NoticeDetailPage() {
                       onKeyDown={(e) => e.key === "Enter" && handleAsk()}
                       placeholder="Ask a question about this notice…"
                       className="h-11 w-full rounded-full border border-vez-line bg-vez-surface px-5 text-sm text-vez-ink outline-none placeholder:text-vez-mute focus:border-vez-sky focus:bg-white"
-                      disabled={answering}
                     />
-                    <button
-                      onClick={() => handleAsk()}
-                      disabled={!question.trim() || answering}
-                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-navy text-white transition-opacity disabled:opacity-40"
-                    >
-                      <Send className="size-4" />
-                    </button>
+                    {answering ? (
+                      <button
+                        onClick={stopAnswering}
+                        aria-label="Stop generating"
+                        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-surface text-vez-ink transition-opacity hover:opacity-80"
+                      >
+                        <Square className="size-3.5 fill-current" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleAsk()}
+                        disabled={!question.trim()}
+                        aria-label="Send question"
+                        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-navy text-white transition-opacity disabled:opacity-40"
+                      >
+                        <Send className="size-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </section>

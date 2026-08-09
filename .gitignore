@@ -55,6 +55,10 @@ __pycache__/
 .venv/
 venv/
 ENV/
+# SSH/private keys
+*.key
+*.pem
+*.pub
 
 # Turbo
 .turbo/
@@ -68,3 +72,6 @@ apps/api/uploads/*
 *.p12
 *.log
 *.sqlite
+
+# Downloaded/exported ML model artifacts
+apps/ai/models/

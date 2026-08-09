@@ -1,4 +1,4 @@
-import re
+import time
 from typing import Optional
 
 import numpy as np
@@ -6,48 +6,24 @@ import numpy as np
 from app import config
 from app import embeddings
 from app import llm
+from app import reranker
+from app import smalltalk
 from app import store
 from app.logger import get_logger
+from app.metrics import metrics
 
 logger = get_logger(__name__)
 
 # Over-fetch factor: retrieve extra candidates so filtering/dedup can drop
-# weak or redundant chunks and still return top_k good ones.
-_CANDIDATE_MULTIPLIER = 3
-_MAX_CANDIDATES = 20
+# weak or redundant chunks and still return top_k good ones. With reranking
+# enabled the over-fetch is what makes reordering worthwhile — a wider net
+# gives the cross-encoder something to actually improve on.
+_CANDIDATE_MULTIPLIER = 4
+_MAX_CANDIDATES = 24
 
-# Greetings/pleasantries in English, romanized Nepali, and Devanagari.
-# Matched only against short messages so document questions never hit this.
-_SMALL_TALK_PHRASES = [
-    "hi", "hii", "hey", "hello", "yo", "sup", "wassup", "whats up", "howdy",
-    "hi there", "hello there", "hey there", "hi bro", "hello bro",
-    "namaste", "namaskar", "नमस्ते", "नमस्कार",
-    "good morning", "good afternoon", "good evening", "good day", "good night",
-    "how are you", "how r u", "how are u", "how do you do",
-    "thank you", "thanks", "thankyou", "thanku", "thx", "ty",
-    "dhanyabad", "dhanyawad", "धन्यवाद",
-    "ok", "okay", "k", "hmm", "nice", "cool", "great",
-    "bye", "goodbye", "bye bye", "see you", "see ya", "tata",
-]
-
-
-def _squeeze(text: str) -> str:
-    """Collapse letter runs so 'Helllloooooo' and 'hello' both become 'helo'."""
-    return re.sub(r"(.)\1+", r"\1", text)
-
-
-# Pre-squeezed lookup set; input is squeezed the same way before comparing.
-_SMALL_TALK = {_squeeze(p) for p in _SMALL_TALK_PHRASES}
-
-
-def _is_small_talk(question: str) -> bool:
-    if len(question) > 40:
-        return False
-    text = question.strip().lower()
-    # Drop punctuation/emoji, keep latin words and Devanagari; normalize spaces.
-    text = re.sub(r"[^a-zऀ-ॿ\s]+", "", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return bool(text) and _squeeze(text) in _SMALL_TALK
+# The lexical greeting check lives in `smalltalk` so the notice chatbot shares
+# it; this module layers the embedding classifier below on top.
+_is_small_talk = smalltalk.is_small_talk
 
 
 # --- Semantic intent routing ---------------------------------------------
@@ -137,11 +113,10 @@ async def _detect_chat_intent(question: str, query_embedding: list[float]) -> bo
     return verdict == "chat"
 
 
-def _select_context(results: list[dict], top_k: int) -> list[dict]:
-    """Filter candidates: drop low-score hits and near-duplicate chunks.
-    Then merge adjacent chunks from the same document/page/section for
-    coherent citations with page-range output."""
-    selected: list[dict] = []
+def _select_context(question: str, results: list[dict], top_k: int) -> list[dict]:
+    """Filter candidates, rerank them against the question, then merge adjacent
+    chunks from the same document/page/section for coherent citations."""
+    deduped: list[dict] = []
     seen_keys: set[str] = set()
 
     for r in results:
@@ -153,51 +128,71 @@ def _select_context(results: list[dict], top_k: int) -> list[dict]:
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        selected.append(r)
-        if len(selected) >= top_k:
-            break
+        deduped.append(r)
 
-    # Merge adjacent chunks from same document/page/section
+    # Reorder by cross-encoder before truncating to top_k. Truncating first (as
+    # this did previously) throws away the chunks reranking exists to promote:
+    # the embedding order decides what survives, and the passage that actually
+    # answers the question is frequently ranked 6th-10th by embeddings alone.
+    if reranker.is_available() and len(deduped) > 1:
+        order = reranker.rerank(question, [r["content"] for r in deduped], top_k=top_k)
+        selected = []
+        for index, score in order:
+            chunk = deduped[index]
+            chunk["rerank_score"] = round(score, 4)
+            selected.append(chunk)
+    else:
+        selected = deduped[:top_k]
+
+    # Citations read better in document order than in relevance order.
+    selected.sort(key=lambda c: (c["doc_id"], c["chunk_index"]))
     return _merge_adjacent_chunks(selected)
 
 
 def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
     """Merge adjacent chunks from the same document/page/section.
     Returns merged chunks with page_range metadata for citations."""
+
+    def _page_of(chunk: dict) -> int | None:
+        return chunk.get("metadata", {}).get("page_num")
+
+    def _section_of(chunk: dict) -> str | None:
+        return chunk.get("metadata", {}).get("section_path")
+
+    def _char_end(chunk: dict) -> int | None:
+        return chunk.get("metadata", {}).get("char_end")
+
     if not chunks:
         return chunks
 
     merged: list[dict] = []
     current = chunks[0].copy()
+    last_index = current["chunk_index"]
+    current["page_range"] = [_page_of(current), _page_of(current)]
 
     for next_chunk in chunks[1:]:
         # Check if chunks are from same doc and adjacent (chunk_index diff <= 1)
         same_doc = current["doc_id"] == next_chunk["doc_id"]
-        adjacent = next_chunk["chunk_index"] - current["chunk_index"] <= 1
-        same_section = current.get("metadata", {}).get("section_path") == next_chunk.get("metadata", {}).get("section_path")
+        adjacent = next_chunk["chunk_index"] - last_index <= 1
+        same_section = _section_of(current) == _section_of(next_chunk)
 
         if same_doc and adjacent and same_section:
             # Merge: concatenate content, update ranges
             current["content"] += "\n\n" + next_chunk["content"]
-            current["char_end"] = next_chunk.get("char_end", current["char_end"])
-            current["chunk_index"] = current["chunk_index"]  # keep first index
+            end = _char_end(next_chunk)
+            if end is not None:
+                current["metadata"]["char_end"] = end
+            last_index = next_chunk["chunk_index"]
             # Track page range
-            if "page_range" not in current:
-                current["page_range"] = [current.get("page_num"), current.get("page_num")]
-            next_page = next_chunk.get("page_num")
+            next_page = _page_of(next_chunk)
             if next_page is not None:
-                if current["page_range"][1] != next_page:
-                    current["page_range"][1] = next_page
+                current["page_range"][1] = next_page
         else:
-            # Finalize current, start new
-            if "page_range" not in current:
-                current["page_range"] = [current.get("page_num"), current.get("page_num")]
             merged.append(current)
             current = next_chunk.copy()
+            last_index = current["chunk_index"]
+            current["page_range"] = [_page_of(current), _page_of(current)]
 
-    # Don't forget the last chunk
-    if "page_range" not in current:
-        current["page_range"] = [current.get("page_num"), current.get("page_num")]
     merged.append(current)
 
     return merged
@@ -220,11 +215,11 @@ async def query(
     )
 
     async def _chat_reply() -> dict:
-        answer = await llm.generate_chat(question, language)
+        answer, model_used = await llm.generate_chat(question, language)
         return {
             "answer": answer,
             "sources": [],
-            "model_used": config.GROQ_MODEL if config.GROQ_API_KEY else None,
+            "model_used": model_used,
         }
 
     if _is_small_talk(question):
@@ -248,7 +243,7 @@ async def query(
     metrics.histogram("search_latency").observe(time.perf_counter() - search_start)
     metrics.counter("searches_total").inc()
 
-    results = _select_context(candidates["results"], top_k)
+    results = _select_context(question, candidates["results"], top_k)
     search_mode = candidates["mode"]
     logger.info(
         "Retrieved %d candidates, kept %d after threshold/dedup (mode=%s)",
@@ -258,10 +253,11 @@ async def query(
     )
 
     if not results:
+        no_results_answer, no_results_model = await llm.generate_no_results(question, language)
         return {
-            "answer": await llm.generate_no_results(question, language),
+            "answer": no_results_answer,
             "sources": [],
-            "model_used": config.GROQ_MODEL if config.GROQ_API_KEY else None,
+            "model_used": no_results_model,
         }
 
     context_chunks = [
@@ -269,11 +265,10 @@ async def query(
         for r in results
     ]
 
-    answer = await llm.generate_answer(question, context_chunks, language)
+    answer, model_used = await llm.generate_answer(question, context_chunks, language)
 
-    model_used = config.GROQ_MODEL if config.GROQ_API_KEY else "extractive"
     logger.info(
-        "RAG query answered from %d sources (model=%s)", len(results), model_used
+        "RAG query answered from %d sources (model=%s)", len(results), model_used or "extractive"
     )
 
     sources = [

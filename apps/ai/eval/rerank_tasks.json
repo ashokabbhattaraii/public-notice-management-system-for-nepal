@@ -1,0 +1,154 @@
+{
+ "tasks": [
+  {
+   "id": "en-scholarship-australia",
+   "lang": "en",
+   "query": "Which scholarship is open for masters programs in 2027 and when can I apply?",
+   "target": "Australia Awards Scholarship - 2027 का लागि दरखास्त आह्वान हुने सम्बन्धी सूचना ।\nThe Australian Government is offering scholarships for master's degree programs in 2027, with applications open from February 2 to April 30, 2026, targeting nine priority sectors in Nepal. The scholarships aim to support Nepal's long-term development, and applicants must meet eligibility requirements, including residence in Nepal and relevant professional experience. The Australia Awards team will provide online information sessions to support applicants."
+  },
+  {
+   "id": "en-02-ambassador-apply",
+   "lang": "en",
+   "query": "How can a Nepali citizen apply to become an ambassador to another country?",
+   "target": "सूचना- विभिन्न मुलुकहरूका लागि नेपालको राजदूत पदमा आवेदन/सिफारिस आह्वान\nThe Ministry of Foreign Affairs of Nepal has called for applications and nominations for the position of Ambassador to various countries. Eligible and interested Nepali citizens can apply or be nominated by others. The application process is open until June 5, 2026."
+  },
+  {
+   "id": "en-03-gurkha-pension",
+   "lang": "en",
+   "query": "What was discussed about British Gurkha pensions between Nepal and the UK?",
+   "target": "Press Release- Foreign Minister Holds Virtual Meeting with UK Defence Ministers on British Gurkha Issues\nForeign Minister Shishir Khanal held a virtual meeting with UK Defence Secretary John Healey and Veterans Minister Louise Sandher-Jones to discuss long-standing British Gurkha grievances, including the demand for proportionate pensions. Khanal urged the UK to resolve these issues with justice, fairness, and respect, and the UK side reaffirmed its commitment to work closely with Nepal. Representatives of British Gurkha organisations also attended the meeting."
+  },
+  {
+   "id": "en-04-election-observers",
+   "lang": "en",
+   "query": "Can international organisations come to Nepal to observe the next House of Representatives election?",
+   "target": "Call for international observers to observe \"House of Representatives Election, 2026\" of Nepal\nNepal has issued a public call inviting international observers to observe the House of Representatives Election scheduled for 2026. The notice was published on 14 Kartik 2082 (approximately 30 October 2025)."
+  },
+  {
+   "id": "en-05-transcripts-wes",
+   "lang": "en",
+   "query": "How do Kathmandu University alumni request transcripts for credential evaluation like WES?",
+   "target": "Transcripts & Grades\nThis notice explains how students and alumni of Kathmandu University can request academic transcripts, certificates, and credential verification, including sending documents directly to employers or WES. It lists fees for various documents and provides bank account details for payment."
+  },
+  {
+   "id": "en-06-passport-amendment",
+   "lang": "en",
+   "query": "Is the government changing the Passport Act to make getting a passport easier?",
+   "target": "सर्वसाधारणको राय माग गरिएको सम्बन्धी सूचना\nThe Nepalese government has proposed an amendment to the Passport Act, 2076, which aims to simplify the process of obtaining a passport and make it more efficient. The amendment also includes provisions for temporary passports and special passports for government officials and dignitaries."
+  },
+  {
+   "id": "en-07-procurement-committee",
+   "lang": "en",
+   "query": "Where do I submit the application for the vacant Public Procurement Review Committee posts?",
+   "target": "सार्वजनिक खरिद पुनरावलोकन समितिको रिक्त अध्यक्ष र सदस्य पदमा दरखास्तका लागि अनुसूची-१ र अनुसूची-२ बमोजिमको आवेदन फारामको ढाँचा।\nThe Government of Nepal, through the Office of the Prime Minister and Council of Ministers, is inviting applications to fill the vacant positions of Chairperson (1) and Members (2) of the Public Procurement Review Committee. Eligible candidates must submit their applications within 7 days of the notice's publication date (2083/02/29) to the Public Procurement Monitoring Office in Kathmandu, using the prescribed forms. The Council of Ministers will make the final appointment based on a shortlist prepared by the office."
+  },
+  {
+   "id": "en-08-ku-vc-interview",
+   "lang": "en",
+   "query": "Where do shortlisted candidates for the university Vice Chancellor position present and take interviews?",
+   "target": "सङ्क्षिप्त सूची प्रकाशन तथा प्रस्तुतीकरण र अन्तर्वार्तासम्बन्धी सूचना\nKathmandu University has published the shortlist of candidates for the Vice Chancellor position. Shortlisted candidates must give a 15-minute presentation followed by an interview on 2083/04/22 at the Ministry of Education, Singha Durbar, Kathmandu. Feedback on the candidates can be submitted via a Google link by 2083/04/20."
+  },
+  {
+   "id": "en-09-iran-travel",
+   "lang": "en",
+   "query": "Should Nepali nationals travel to Iran in the current situation?",
+   "target": "Travel Advisory — Iran\nThe Nepalese government advises citizens living and working in Iran to exercise caution and follow local security advisories, and urges those planning to travel to Iran to postpone their plans until the situation normalizes. Nepali citizens can contact the Ministry of Foreign Affairs or the Embassy of Nepal in Doha for emergencies. The advisory is due to the current situation in Iran."
+  },
+  {
+   "id": "ne-01-rajdut-myad",
+   "lang": "ne",
+   "query": "नेपालको राजदूत पदका लागि दरखास्त कहिले सम्म दिन मिल्ने?",
+   "target": "सूचना- विभिन्न मुलुकहरूका लागि नेपालको राजदूत पदमा आवेदन/सिफारिस आह्वान\nThe Ministry of Foreign Affairs of Nepal has called for applications and nominations for the position of Ambassador to various countries. Eligible and interested Nepali citizens can apply or be nominated by others. The application process is open until June 5, 2026."
+  },
+  {
+   "id": "ne-02-visa-documents",
+   "lang": "ne",
+   "query": "विदेशी नियोगमा भिसा आवेदन गर्दा नक्कली कागजात पेश गरे के हुन्छ?",
+   "target": "विदेशी नियोगहरुमा भिसा आवेदन गर्ने नेपालीहरुलाई अनुरोध\nThis Nepali notice requests citizens applying for visas at foreign missions to submit only authentic documents and truthful information. It warns that false or misleading documents can lead to visa rejection, travel bans, and legal consequences, and reminds applicants that they remain responsible even when using visa consultants. It also urges compliance with destination countries' visa laws, as violations can harm both the applicant and Nepal's overall reputation."
+  },
+  {
+   "id": "ne-03-lilam",
+   "lang": "ne",
+   "query": "पुराना सवारी साधनको लिलाम बढाबढ बिक्रीका लागि बोलपत्र कसरी दिने?",
+   "target": "पुराना सवारी साधन र अन्य सामान लिलाम बढाबढ बिक्रीसम्बन्धी बोलपत्र आह्वानको सूचना\nThis notice invites bids for the auction sale of old vehicles and other goods. It was published on 29 Bhadra 2077 (Nepali calendar) and serves as a public invitation for interested parties to participate in the bidding process."
+  },
+  {
+   "id": "ne-04-singhadurbar-loot",
+   "lang": "ne",
+   "query": "सिंहदरबारको घटनामा लुटिएका कम्प्युटर र ल्यापटप फिर्ता गर्ने व्यवस्थाबारे के छ?",
+   "target": "लुटपाट भएका/चोरिएका सामान फिर्ता गरिदिने सम्बन्धमा।\nThe Ministry of Foreign Affairs requests the public to return computers, laptops, printers, and other government and personal items that were looted or damaged during the incident at Singha Durbar on 2082/05/24. The ministry has initiated legal action against those involved and asks anyone with information about the stolen items to contact the provided officials; informants' identities will be kept confidential."
+  },
+  {
+   "id": "ne-05-west-asia-apil",
+   "lang": "ne",
+   "query": "पश्चिम एसियामा रहेका नेपालीहरूका लागि परराष्ट्र मन्त्रालयको अपील के छ?",
+   "target": "परराष्ट्र मन्त्रालयको अपिल\nThe Ministry of Foreign Affairs has issued an appeal to Nepali nationals in West Asia, urging them to rely only on official government information and avoid spreading rumors or fear-inducing content. It warns that violating local security laws could lead to heavy fines, imprisonment, or deportation. The ministry also requests media support in spreading public awareness."
+  },
+  {
+   "id": "ne-06-passport",
+   "lang": "ne",
+   "query": "राहदानी ऐन संशोधनको प्रस्तावमा के के व्यवस्था छ?",
+   "target": "सर्वसाधारणको राय माग गरिएको सम्बन्धी सूचना\nThe Nepalese government has proposed an amendment to the Passport Act, 2076, which aims to simplify the process of obtaining a passport and make it more efficient. The amendment also includes provisions for temporary passports and special passports for government officials and dignitaries."
+  },
+  {
+   "id": "ne-08-kuwait",
+   "lang": "ne",
+   "query": "कुवेतको आक्रमणमा नेपाली नागरिकको मृत्यु भएको विषयमा मन्त्रालयको भनाइ के छ?",
+   "target": "Press Release on the Tragic Death of a Nepali National in Kuwait\nThe Ministry of Foreign Affairs of Nepal issued a press release expressing deep sorrow over the death of a Nepali national in an attack in northern Kuwait. It condemns the attack, urges restraint and dialogue, and calls for respect for international humanitarian law. The Ministry also offers condolences and promises to facilitate the repatriation of the deceased's remains."
+  },
+  {
+   "id": "ne-09-gorkha",
+   "lang": "ne",
+   "query": "ब्रिटिस गोरखाको पेन्सनका विषयमा नेपाल र बेलायतबीच के छलफल भयो?",
+   "target": "Press Release- Foreign Minister Holds Virtual Meeting with UK Defence Ministers on British Gurkha Issues\nForeign Minister Shishir Khanal held a virtual meeting with UK Defence Secretary John Healey and Veterans Minister Louise Sandher-Jones to discuss long-standing British Gurkha grievances, including the demand for proportionate pensions. Khanal urged the UK to resolve these issues with justice, fairness, and respect, and the UK side reaffirmed its commitment to work closely with Nepal. Representatives of British Gurkha organisations also attended the meeting."
+  },
+  {
+   "id": "ne-10-australia-info-session",
+   "lang": "ne",
+   "query": "अस्ट्रेलिया सरकारले छात्रवृत्तिका लागि अनलाइन जानकारी सत्र कहिले दिने भनेको?",
+   "target": "Australia Awards Scholarship - 2027 का लागि दरखास्त आह्वान हुने सम्बन्धी सूचना ।\nThe Australian Government is offering scholarships for master's degree programs in 2027, with applications open from February 2 to April 30, 2026, targeting nine priority sectors in Nepal. The scholarships aim to support Nepal's long-term development, and applicants must meet eligibility requirements, including residence in Nepal and relevant professional experience. The Australia Awards team will provide online information sessions to support applicants."
+  },
+  {
+   "id": "rom-01-scholarship",
+   "lang": "rom",
+   "query": "australia ko scholarship ma master bhanya lagi apply garna milne date kati samma ho?",
+   "target": "Australia Awards Scholarship - 2027 का लागि दरखास्त आह्वान हुने सम्बन्धी सूचना ।\nThe Australian Government is offering scholarships for master's degree programs in 2027, with applications open from February 2 to April 30, 2026, targeting nine priority sectors in Nepal. The scholarships aim to support Nepal's long-term development, and applicants must meet eligibility requirements, including residence in Nepal and relevant professional experience. The Australia Awards team will provide online information sessions to support applicants."
+  },
+  {
+   "id": "rom-02-ambassador",
+   "lang": "rom",
+   "query": "nepal ko rajdut banna ko lagi apply kasari garne?",
+   "target": "सूचना- विभिन्न मुलुकहरूका लागि नेपालको राजदूत पदमा आवेदन/सिफारिस आह्वान\nThe Ministry of Foreign Affairs of Nepal has called for applications and nominations for the position of Ambassador to various countries. Eligible and interested Nepali citizens can apply or be nominated by others. The application process is open until June 5, 2026."
+  },
+  {
+   "id": "rom-03-vacancy-schedule",
+   "lang": "rom",
+   "query": "sarkari job ko vacancy bharna ko lagi annual schedule kata payinxa?",
+   "target": "आ.व. २०८३/०८४ को पदपूर्ति सम्बन्धी वार्षिक कार्यतालिका\nThis notice announces the annual schedule for vacancy filling (पदपूर्ति) for fiscal year 2083/084. It provides a timeline for recruitment-related processes, likely for government positions. The notice is published in Nepali and appears to be directed at job seekers and relevant authorities."
+  },
+  {
+   "id": "rom-04-stolen-laptop",
+   "lang": "rom",
+   "query": "singha durbar bata choriyeko computer laptop return garna parne kura k ho?",
+   "target": "लुटपाट भएका/चोरिएका सामान फिर्ता गरिदिने सम्बन्धमा।\nThe Ministry of Foreign Affairs requests the public to return computers, laptops, printers, and other government and personal items that were looted or damaged during the incident at Singha Durbar on 2082/05/24. The ministry has initiated legal action against those involved and asks anyone with information about the stolen items to contact the provided officials; informants' identities will be kept confidential."
+  },
+  {
+   "id": "rom-05-amb-form-error",
+   "lang": "rom",
+   "query": "rajdut ko post ko lagi online form ma error aayo bhane ke garne?",
+   "target": "Attention: Application for the position of Ambassador\nThe Ministry of Foreign Affairs has set up an alternate application link for the Ambassador position after applicants faced server errors due to high traffic. Those who already submitted successfully and received confirmation do not need to apply again. The official alternate link is https://mofa.gov.np/form/update-form-1/."
+  },
+  {
+   "id": "rom-06-ku-transcripts",
+   "lang": "rom",
+   "query": "kathmandu university ma transcript lida fee kati parxa?",
+   "target": "Transcripts & Grades\nThis notice explains how students and alumni of Kathmandu University can request academic transcripts, certificates, and credential verification, including sending documents directly to employers or WES. It lists fees for various documents and provides bank account details for payment."
+  },
+  {
+   "id": "rom-07-health-form",
+   "lang": "rom",
+   "query": "health worker ko registration form kahan bharne?",
+   "target": "स्वास्थ्यकर्मी तथा स्वास्थ्य संस्था सुरक्षाको दर्ता फारम (Google Form)\nThe notice provides two Google Forms for registering health institutions and health workers as part of a safety registration initiative. Health institutions and health workers can use the provided links to complete their registration. The notice is dated 13 Falgun 2081."
+  }
+ ]
+}

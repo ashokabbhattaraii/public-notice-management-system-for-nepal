@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -11,16 +12,18 @@ from app import chunker
 from app import config
 from app import embeddings
 from app import extractor
+from app import grounding
 from app import llm
 from app import notice_rag
 from app import notice_store
 from app import progress
 from app import rag
+from app import reranker
 from app import scraper
 from app import scrape_progress
 from app import secure_http
 from app import store
-from app import metrics
+from app.metrics import metrics
 from app.logger import get_logger, set_request_id, setup_logging
 
 logger = get_logger(__name__)
@@ -44,6 +47,12 @@ async def app(scope, receive, send):
 
     if method == "OPTIONS":
         await _cors_preflight(send, scope)
+        return
+
+    # Streaming endpoints are dispatched here rather than in `_route`, because
+    # they write directly to `send` over the life of the response instead of
+    # returning a (status, body) pair. `_route` has no access to `send`.
+    if await _route_streaming(method, path, scope, receive, send):
         return
 
     start = time.perf_counter()
@@ -116,6 +125,20 @@ async def _run_startup_validation() -> None:
             logger.warning("No LLM API keys configured — summarization/analysis will use extractive fallback")
     except Exception as e:
         logger.warning("LLM config check failed: %s", e)
+
+    # 5. Warm the reranker (best-effort). Loading it lazily would make the
+    # first user question of each boot pay a multi-second model load on top of
+    # its own latency; warming here moves that cost to startup. A failure is
+    # non-fatal — retrieval falls back to fusion order.
+    if config.RERANK_ENABLED:
+        try:
+            reranker.warm_up()
+            if reranker.is_available():
+                logger.info("Reranker ready (%s)", config.RERANKER_MODEL)
+            else:
+                logger.warning("Reranker unavailable; using fused retrieval order")
+        except Exception as e:
+            logger.warning("Reranker warm-up failed: %s", e)
 
     logger.info("All startup validations passed")
 
@@ -192,6 +215,27 @@ async def _handle_lifespan(scope, receive, send):
             return
 
 
+async def _route_streaming(method: str, path: str, scope: dict, receive, send) -> bool:
+    """Dispatch endpoints that stream their response.
+
+    Returns True when the request was handled (and the response fully sent),
+    False to let normal routing take over.
+    """
+    if method == "GET" and re.match(r"^/documents/([^/]+)/progress/stream$", path):
+        await _document_progress_sse(scope, send)
+        return True
+
+    if method == "POST" and path == "/notices/search/stream":
+        await _notices_search_sse(scope, receive, send)
+        return True
+
+    if method == "POST" and path == "/notices/ask/stream":
+        await _notices_ask_sse(scope, receive, send)
+        return True
+
+    return False
+
+
 async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dict]:
     if method == "GET" and path == "/":
         return 200, {"service": "pnm-ai", "status": "running", "version": "1.0.0"}
@@ -212,9 +256,7 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
         doc_id = doc_progress_match.group(1)
         return _document_progress(doc_id)
 
-    doc_progress_sse_match = re.match(r"^/documents/([^/]+)/progress/stream$", path)
-    if method == "GET" and doc_progress_sse_match:
-        return await _document_progress_sse(scope, send)
+    # /documents/{id}/progress/stream is handled by _route_streaming.
 
     if method == "GET" and path == "/progress":
         return _progress_batch(scope)
@@ -361,16 +403,6 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
     )
 
     metadata["file_hash"] = file_hash
-
-    progress.start(doc_id, filename)
-
-    try:
-        return await asyncio.to_thread(
-            _ingest_document, doc_id, save_path, filename, mime_type, metadata
-        )
-    except Exception as e:
-        progress.fail(doc_id, str(e))
-        raise
 
     progress.start(doc_id, filename)
 
@@ -956,13 +988,14 @@ async def _notices_ask(receive) -> tuple[int, dict]:
     title = (data.get("title") or "").strip()
     content = (data.get("content") or "").strip()
     question = (data.get("question") or "").strip()
+    history = data.get("history") or []
     if not question:
         return 400, {"error": "Field 'question' is required"}
     if not content:
         return 200, {"answer": "This notice has no captured text content to answer questions about."}
 
     try:
-        answer = await llm.answer_notice_question(title, content, question)
+        answer = await llm.answer_notice_question(title, content, question, history=history)
         return 200, {"answer": answer}
     except Exception as e:
         logger.exception("Notice Q&A failed")
@@ -987,6 +1020,7 @@ async def _notices_search(receive) -> tuple[int, dict]:
     category = data.get("category")
     language = data.get("language", "en")
     top_k = int(data.get("top_k", 5))
+    history = data.get("history") or []
 
     try:
         result = await notice_rag.search_and_answer(
@@ -995,11 +1029,152 @@ async def _notices_search(receive) -> tuple[int, dict]:
             category=category,
             language=language,
             top_k=top_k,
+            history=history,
         )
         return 200, result
     except Exception as e:
         logger.exception("Notice search failed")
         return 500, {"error": f"Search failed: {str(e)}"}
+
+
+async def _start_sse(scope, send) -> None:
+    await send({
+        "type": "http.response.start",
+        "status": 200,
+        "headers": [
+            (b"content-type", b"text/event-stream"),
+            (b"cache-control", b"no-cache"),
+            (b"connection", b"keep-alive"),
+            # Without this, nginx buffers the whole stream and delivers it in
+            # one piece — which silently undoes streaming behind any proxy.
+            (b"x-accel-buffering", b"no"),
+            *_get_cors_headers(scope),
+        ],
+    })
+
+
+async def _sse_emit(send, event: dict) -> None:
+    await send({
+        "type": "http.response.body",
+        # ensure_ascii=False keeps Devanagari readable on the wire rather than
+        # ballooning every Nepali answer into \uXXXX escapes.
+        "body": f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode(),
+        "more_body": True,
+    })
+
+
+async def _read_sse_request(scope, receive, send) -> Optional[dict]:
+    """Parse and validate a streaming request body.
+
+    Returns None (having already sent an error response) when the request is
+    unusable. Validation must happen before the SSE response starts, since
+    status codes cannot be changed once the stream is open.
+    """
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        await _send_json(send, {"error": "Invalid JSON body"}, 400, scope)
+        return None
+
+    if not (data.get("question") or "").strip():
+        await _send_json(send, {"error": "Field 'question' is required"}, 400, scope)
+        return None
+
+    return data
+
+
+async def _notices_search_sse(scope, receive, send) -> None:
+    """POST /notices/search/stream — same contract as /notices/search, but the
+    answer arrives as Server-Sent Events so the client renders it as it is
+    written instead of after the full generation completes."""
+    start = time.perf_counter()
+    data = await _read_sse_request(scope, receive, send)
+    if data is None:
+        return
+
+    await _start_sse(scope, send)
+    try:
+        async for event in notice_rag.search_and_answer_stream(
+            question=data["question"].strip(),
+            pg_results=data.get("pg_results"),
+            category=data.get("category"),
+            language=data.get("language", "en"),
+            top_k=int(data.get("top_k", 5)),
+            history=data.get("history") or [],
+        ):
+            await _sse_emit(send, event)
+    except asyncio.CancelledError:
+        # Client navigated away or pressed stop — nothing to report.
+        raise
+    except Exception as e:
+        logger.exception("Streaming notice search failed")
+        await _sse_emit(send, {"type": "error", "error": str(e)})
+
+    await send({"type": "http.response.body", "body": b"", "more_body": False})
+    logger.info(
+        "POST /notices/search/stream -> 200 (%.0fms)",
+        (time.perf_counter() - start) * 1000,
+    )
+
+
+async def _notices_ask_sse(scope, receive, send) -> None:
+    """POST /notices/ask/stream — streaming single-notice Q&A.
+
+    Body: {title, content, question, history?}. Emits the same event shapes as
+    /notices/search/stream so one client-side reader handles both."""
+    start = time.perf_counter()
+    data = await _read_sse_request(scope, receive, send)
+    if data is None:
+        return
+
+    question = data["question"].strip()
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+
+    await _start_sse(scope, send)
+
+    if not content:
+        await _sse_emit(send, {
+            "type": "delta",
+            "text": "This notice has no captured text to answer questions about.",
+        })
+        await _sse_emit(send, {"type": "done", "sources": [], "confidence": "none"})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+        return
+
+    collected: list[str] = []
+    model_used = None
+    try:
+        await _sse_emit(send, {"type": "stage", "stage": "answering"})
+        async for delta, model in llm.answer_notice_question_stream(
+            title, content, question, history=data.get("history") or []
+        ):
+            model_used = model or model_used
+            collected.append(delta)
+            await _sse_emit(send, {"type": "delta", "text": delta})
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.exception("Streaming notice Q&A failed")
+        await _sse_emit(send, {"type": "error", "error": str(e)})
+
+    answer = "".join(collected)
+    # source_count=1: the notice itself is the single implicit source, so the
+    # answer contract asks for no [n] markers here. Passing 0 would grade every
+    # correct answer on this path as ungrounded.
+    verdict = grounding.assess(answer, content, source_count=1)
+    await _sse_emit(send, {
+        "type": "done",
+        "sources": [],
+        "model_used": model_used,
+        **verdict,
+    })
+    await send({"type": "http.response.body", "body": b"", "more_body": False})
+    logger.info(
+        "POST /notices/ask/stream -> 200 (%.0fms)",
+        (time.perf_counter() - start) * 1000,
+    )
 
 
 async def _notices_embed(receive) -> tuple[int, dict]:

@@ -729,11 +729,11 @@ _CATEGORY_SLUG_MAP = {
     "bid": "TENDER",
     "boli": "TENDER",
     "vacancy": "VACANCY",
-    "job": "JOB",
-    "career": "JOB",
-    "intern": "INTERNSHIP",
-    "internship": "INTERNSHIP",
-    "trainee": "INTERNSHIP",
+    "job": "VACANCY",
+    "career": "VACANCY",
+    "intern": "VACANCY",
+    "internship": "VACANCY",
+    "trainee": "VACANCY",
 }
 
 
@@ -822,7 +822,7 @@ _SUMMARIZE_PROMPT = """You analyze a Nepalese government notice/news item and pr
   "summary": "<2-3 sentence plain-language summary in English>",
   "summary_ne": "<2-3 sentence summary in Nepali (Devanagari script)>",
   "urgency": "<LOW|MEDIUM|HIGH — HIGH for exam deadlines, visa deadlines, tenders with close dates, vacancy deadlines; MEDIUM for important policy/regulatory changes; LOW for routine press releases, general news>",
-  "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, JOB, INTERNSHIP, OTHER — JOB for job openings/career postings; INTERNSHIP for internship/trainee programs; VACANCY for generic openings with no clear job-vs-intern nature; classify based on content>",
+  "category": "<one of: NOTICE, NEWS, PRESS_RELEASE, CIRCULAR, TENDER, VACANCY, OTHER — VACANCY for any open position (job, internship, traineeship, or otherwise); classify based on content>",
   "category_confidence": <0.0-1.0 float>,
   "key_facts": ["<fact 1>", "<fact 2>", ...],
   "tags": ["<tag1>", "<tag2>", ...]

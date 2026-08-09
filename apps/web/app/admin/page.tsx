@@ -252,7 +252,7 @@ export default function AdminDashboard() {
                     <Link2 className="size-4 text-vez-navy" /> Scraping sources
                   </h3>
                   <Link
-                    href="/admin/sources"
+                    href="/admin/scraping"
                     className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
                   >
                     Manage <ArrowRight className="size-3" />
@@ -278,7 +278,7 @@ export default function AdminDashboard() {
                   {[
                     { href: "/admin/notices", label: "Notices", icon: FileText },
                     { href: "/admin/users", label: "Users", icon: Users },
-                    { href: "/admin/sources", label: "Add source", icon: Globe },
+                    { href: "/admin/scraping", label: "Add source", icon: Globe },
                     { href: "/admin/alerts", label: "Alerts", icon: Activity },
                   ].map((action) => {
                     const Icon = action.icon

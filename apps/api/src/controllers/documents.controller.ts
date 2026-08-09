@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Query,
@@ -17,7 +18,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { Response } from 'express';
-import { User } from '@prisma/client';
+import { User, Role } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
@@ -25,6 +26,7 @@ import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { DocumentsService } from '../services/documents.service';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
+import { UpdateDocumentDto } from '../dto/update-document.dto';
 import { ListDocumentsDto } from '../dto/list-documents.dto';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -97,6 +99,10 @@ export class DocumentsController {
     // Stable doc_id from content hash (first 32 chars = 128 bits)
     const docId = fileHash.substring(0, 32);
 
+    // Only admins may create system documents (shared, visible to everyone);
+    // silently ignored for anyone else rather than erroring the whole upload.
+    const isSystem = dto.isSystem === true && user.role === Role.admin;
+
     const document = await this.documentsService.create({
       id: docId,
       title: dto.title,
@@ -104,11 +110,30 @@ export class DocumentsController {
       mimeType: file.mimetype,
       fileSize: file.size,
       filePath: file.path,
-      uploadedBy: user.id,
+      uploadedBy: isSystem ? null : user.id,
       fileHash: fileHash,
+      isSystem,
     });
 
     return document;
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    const doc = await this.documentsService.findOne(id);
+    if (doc.isSystem) {
+      if (user.role !== Role.admin) {
+        throw new ForbiddenException('Only admins can edit system documents');
+      }
+    } else if (doc.uploadedBy !== user.id) {
+      throw new ForbiddenException('You can only edit your own documents');
+    }
+    return this.documentsService.update(id, dto);
   }
 
   // Returns system docs + user's own docs (scoped)
@@ -143,7 +168,11 @@ export class DocumentsController {
     @CurrentUser() user: User,
   ) {
     const doc = await this.documentsService.findOne(id);
-    if (!doc.isSystem && doc.uploadedBy !== user.id) {
+    if (doc.isSystem) {
+      if (user.role !== Role.admin) {
+        throw new ForbiddenException('Only admins can (re-)embed system documents');
+      }
+    } else if (doc.uploadedBy !== user.id) {
       throw new ForbiddenException('You can only embed your own documents');
     }
     return this.documentsService.embed(id);
@@ -157,9 +186,10 @@ export class DocumentsController {
   ) {
     const doc = await this.documentsService.findOne(id);
     if (doc.isSystem) {
-      throw new ForbiddenException('System documents cannot be unembedded');
-    }
-    if (doc.uploadedBy !== user.id) {
+      if (user.role !== Role.admin) {
+        throw new ForbiddenException('Only admins can unembed system documents');
+      }
+    } else if (doc.uploadedBy !== user.id) {
       throw new ForbiddenException('You can only unembed your own documents');
     }
     return this.documentsService.unembed(id);
@@ -230,9 +260,10 @@ export class DocumentsController {
   ) {
     const doc = await this.documentsService.findOne(id);
     if (doc.isSystem) {
-      throw new ForbiddenException('System documents cannot be deleted');
-    }
-    if (doc.uploadedBy !== user.id) {
+      if (user.role !== Role.admin) {
+        throw new ForbiddenException('Only admins can delete system documents');
+      }
+    } else if (doc.uploadedBy !== user.id) {
       throw new ForbiddenException('You can only delete your own documents');
     }
     await this.documentsService.remove(id);

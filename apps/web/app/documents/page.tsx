@@ -6,7 +6,7 @@ import {
   Cpu, MessageSquare, Database, ChevronRight,
   LayoutPanelLeft, BookOpen, Copy, Trash2,
   ThumbsUp, ThumbsDown, RefreshCw, CheckCircle,
-  Clock, AlertCircle, Loader2, X, File,
+  Clock, AlertCircle, Loader2, X, File, Pencil, Check,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -15,7 +15,7 @@ import { ChatMessage, RagDocument, RagSource, DocumentProgress } from "@/lib/typ
 import { useAuth } from "@/lib/auth-context"
 import {
   fetchDocuments, uploadDocument, deleteDocument, ragQuery,
-  embedDocument, unembedDocument, fetchDocumentsProgress,
+  embedDocument, unembedDocument, fetchDocumentsProgress, updateDocument,
 } from "@/lib/api"
 
 // Titles often arrive as raw filenames ("_Hamro_Life_Bank_SRS.pdf");
@@ -71,6 +71,25 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// apiFetch throws the raw response body as the Error message, which for
+// NestJS is JSON like {"message":"...","statusCode":500}. Dumping that
+// straight into the chat looks broken and unprofessional; extract the human
+// part when possible and fall back to a plain, generic message otherwise —
+// never show a raw stack/status code to the end user.
+function friendlyErrorMessage(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  try {
+    const parsed = JSON.parse(raw)
+    const detail = Array.isArray(parsed.message) ? parsed.message.join(", ") : parsed.message
+    if (typeof detail === "string" && detail && !/internal server error/i.test(detail)) {
+      return detail
+    }
+  } catch {
+    // Not JSON — fall through to the generic message below.
+  }
+  return "Something went wrong answering that — please try again in a moment."
 }
 
 function formatMimeType(mime: string): string {
@@ -147,20 +166,44 @@ function EmbedToggle({ on, busy, onChange }: { on: boolean; busy: boolean; onCha
 
 // ─── DocCard ──────────────────────────────────────────────────────────────────
 
-function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete, onAsk }: {
+function DocCard({ doc, progress, toggleBusy, canManage, isAdmin, onToggleEmbed, onDelete, onAsk, onRename }: {
   doc: RagDocument
   progress?: DocumentProgress
   toggleBusy: boolean
   canManage: boolean
+  isAdmin: boolean
   onToggleEmbed: () => void
   onDelete: () => void
   onAsk: () => void
+  onRename: (title: string) => Promise<void> | void
 }) {
   const isIndexed = doc.status === "INDEXED"
   const isProcessing = doc.status === "PENDING" || doc.status === "PROCESSING"
   const isFailed = doc.status === "FAILED"
   const isUnembedded = doc.status === "UNEMBEDDED"
-  const showControls = canManage && !doc.isSystem
+  // System docs are shared/read-only for everyone except admins, who can
+  // fully manage them (retry embedding, rename, delete) just like their own.
+  const showControls = canManage && (!doc.isSystem || isAdmin)
+
+  const [editing, setEditing] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(doc.title)
+  const [renaming, setRenaming] = useState(false)
+
+  async function saveRename() {
+    const trimmed = titleDraft.trim()
+    if (!trimmed || trimmed === doc.title) {
+      setEditing(false)
+      setTitleDraft(doc.title)
+      return
+    }
+    setRenaming(true)
+    try {
+      await onRename(trimmed)
+      setEditing(false)
+    } finally {
+      setRenaming(false)
+    }
+  }
 
   const percent = isProcessing ? (progress?.percent ?? 0) : 0
   const stageLabel = progress?.stage ? stageLabels[progress.stage] ?? "Processing" : "Queued"
@@ -172,14 +215,55 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
           <FileText className="size-5 text-vez-navy" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="line-clamp-2 text-[15px] font-medium leading-snug text-vez-ink">{doc.title}</p>
-            {doc.isSystem && (
-              <span className="shrink-0 rounded-md bg-vez-navy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-vez-navy">
-                System
-              </span>
-            )}
-          </div>
+          {editing ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveRename()
+                  if (e.key === "Escape") { setEditing(false); setTitleDraft(doc.title) }
+                }}
+                disabled={renaming}
+                className="min-w-0 flex-1 rounded-lg border border-vez-line px-2 py-1 text-sm text-vez-ink outline-none focus:border-vez-navy"
+              />
+              <button
+                onClick={saveRename}
+                disabled={renaming}
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                aria-label="Save title"
+              >
+                {renaming ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              </button>
+              <button
+                onClick={() => { setEditing(false); setTitleDraft(doc.title) }}
+                disabled={renaming}
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-vez-mute hover:bg-vez-surface"
+                aria-label="Cancel"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <p className="line-clamp-2 text-[15px] font-medium leading-snug text-vez-ink">{doc.title}</p>
+              {doc.isSystem && (
+                <span className="shrink-0 rounded-md bg-vez-navy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-vez-navy">
+                  System
+                </span>
+              )}
+              {showControls && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                  aria-label="Rename document"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="rounded-md bg-vez-surface px-2 py-0.5 text-xs font-medium text-vez-mute">
               {formatMimeType(doc.mimeType)}
@@ -270,12 +354,13 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 
-function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
+function UploadModal({ onClose, onUploaded, isAdmin }: { onClose: () => void; onUploaded: () => void; isAdmin: boolean }) {
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState("")
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
   const [dragOver, setDragOver] = useState(false)
+  const [asSystem, setAsSystem] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleUpload = async () => {
@@ -283,7 +368,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     setUploading(true)
     setError("")
     try {
-      await uploadDocument(file, title.trim())
+      await uploadDocument(file, title.trim(), asSystem)
       onUploaded()
       onClose()
     } catch (e: any) {
@@ -383,6 +468,23 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             />
           </div>
 
+          {isAdmin && (
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-vez-line bg-vez-surface/50 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={asSystem}
+                onChange={(e) => setAsSystem(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 rounded border-vez-line accent-vez-navy"
+              />
+              <span>
+                <span className="block text-sm font-medium text-vez-ink">Add as a system document</span>
+                <span className="block text-xs text-vez-mute">
+                  Visible and searchable for every user, not just you — same as the seeded Constitution/Budget docs.
+                </span>
+              </span>
+            </label>
+          )}
+
           {error && (
             <div className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3">
               <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-500" />
@@ -407,7 +509,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function RagPage() {
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   const [view, setView] = useState<ViewMode>("split")
   const [mobileTab, setMobileTab] = useState<MobileTab>("chat")
@@ -513,6 +615,15 @@ export default function RagPage() {
     }
   }
 
+  const handleRename = async (id: string, title: string) => {
+    try {
+      const updated = await updateDocument(id, { title })
+      setDocs(prev => prev.map(d => (d.id === id ? { ...d, ...updated } : d)))
+    } catch (e: any) {
+      alert(`Rename failed: ${e.message}`)
+    }
+  }
+
   const handleToggleEmbed = async (doc: RagDocument) => {
     setTogglingIds(prev => new Set(prev).add(doc.id))
     try {
@@ -556,11 +667,11 @@ export default function RagPage() {
         modelUsed: result.model_used,
       }
       setMessages(prev => [...prev, assistantMsg])
-    } catch (e: any) {
+    } catch (e: unknown) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `Sorry, I couldn't process your question. ${e.message || "Please try again."}`,
+        content: friendlyErrorMessage(e),
         timestamp: new Date().toISOString(),
       }])
     } finally {
@@ -691,9 +802,11 @@ export default function RagPage() {
               progress={progressMap[doc.id]}
               toggleBusy={togglingIds.has(doc.id)}
               canManage={!!user}
+              isAdmin={isAdmin}
               onToggleEmbed={() => handleToggleEmbed(doc)}
               onDelete={() => handleDelete(doc.id)}
               onAsk={() => askAboutDoc(doc)}
+              onRename={(title) => handleRename(doc.id, title)}
             />
           ))
         )}
@@ -755,11 +868,11 @@ export default function RagPage() {
               }`}>
                 {msg.role === "assistant" ? <Markdown content={msg.content} /> : msg.content}
               </div>
-              {msg.modelUsed === "extractive" && (
+              {msg.modelUsed === null && (
                 <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                   <span>
-                    Fallback mode - showing extracted document text. Set <code className="font-mono">GROQ_API_KEY</code> in <code className="font-mono">apps/ai/.env</code> for full AI answers.
+                    Fallback mode - showing extracted document text because no AI provider is currently available. Check the LLM API keys in <code className="font-mono">apps/ai/.env</code>.
                   </span>
                 </div>
               )}
@@ -988,7 +1101,7 @@ export default function RagPage() {
         </div>
       </div>
 
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploaded={() => loadDocs()} />}
+      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploaded={() => loadDocs()} isAdmin={isAdmin} />}
     </div>
   )
 }
