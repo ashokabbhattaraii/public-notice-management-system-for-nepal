@@ -51,8 +51,9 @@ services:
       - /opt/config/pnm/ai.env
 
     environment:
+      ENVIRONMENT: production
       PORT: 8000
-      HOST: 0.0.0.0
+      HOSTNAME: 0.0.0.0
 
     expose:
       - "8000"
