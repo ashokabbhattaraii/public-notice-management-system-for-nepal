@@ -14,10 +14,15 @@ services:
     ports:
       - "3535:3535"
 
+    env_file:
+      - /opt/config/pnm/web.env
+
     environment:
       NODE_ENV: production
       PORT: 3535
       HOSTNAME: 0.0.0.0
+
+    restart: unless-stopped
 
   api:
     build:
@@ -25,7 +30,12 @@ services:
       dockerfile: apps/api/Dockerfile
 
     env_file:
-      - ./apps/api/.env
+      - /opt/config/pnm/api.env
+
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
 
     ports:
       - "3001:3001"
