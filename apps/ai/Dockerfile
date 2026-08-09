@@ -1,21 +1,33 @@
+# syntax=docker/dockerfile:1
+
 # ---------- Base ----------
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PYTHONPATH=/app
 
 WORKDIR /app
 
-# Runtime libraries needed by OCR/PDF/image processing.
-RUN apt-get update \
+# Runtime libraries needed by OCR/PDF processing.
+#   libgomp1      — OpenMP runtime for torch / onnxruntime
+#   poppler-utils — pdf2image's `pdftoppm` backend
+#   tesseract-ocr — OCR engine; -nep is the Nepali traineddata, without which
+#                   TESSERACT_LANG="nep+eng" silently degrades to English-only
+#                   (see the availability filter in app/extractor.py).
+# libgl1/libglib2.0-0 are deliberately absent: they exist only for opencv,
+# which nothing in requirements.txt pulls in.
+#
+# The cache mounts persist apt's archive across rebuilds; the `rm -rf` still
+# runs, so only the *build cache* grows, not the image.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
-        libglib2.0-0 \
-        libgl1 \
         libgomp1 \
         poppler-utils \
         tesseract-ocr \
+        tesseract-ocr-nep \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- Dependencies ----------
@@ -23,20 +35,48 @@ FROM base AS deps
 
 COPY apps/ai/requirements.txt ./requirements.txt
 
-RUN pip install --no-cache-dir --upgrade pip
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip
 
 # This server has no GPU.
-# Install the CPU-only PyTorch build instead of pulling CUDA/NVIDIA packages.
-RUN pip install --no-cache-dir \
+# Install the CPU-only PyTorch build instead of pulling CUDA/NVIDIA packages
+# (CUDA wheels are multiple GB; the CPU wheel is a fraction of that).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
     torch \
     --index-url https://download.pytorch.org/whl/cpu
 
 # Install the remaining AI dependencies.
-RUN pip install --no-cache-dir \
-    -r requirements.txt
+#
+# torch is pinned to the CPU build installed above via a constraints file
+# rather than by adding the PyTorch index as an --extra-index-url: an extra
+# index makes pip query both indexes for every package in the tree, which
+# measurably dominates this step. If some dependency genuinely demands a
+# different torch, pip now fails loudly here instead of silently replacing the
+# CPU wheel with the multi-GB CUDA build from PyPI.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip freeze | grep -i '^torch==' > /tmp/torch-constraint.txt \
+    && pip install \
+    -r requirements.txt \
+    -c /tmp/torch-constraint.txt
 
 # ---------- Production ----------
 FROM base AS runner
+
+# Memory tuning for a 2 vCPU / ~1 GB box. torch and onnxruntime each size
+# their thread pools to the core count and glibc allocates a per-thread malloc
+# arena, so the defaults cost far more RSS than the extra threads buy here.
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    MALLOC_ARENA_MAX=2 \
+    TOKENIZERS_PARALLELISM=false
+
+# Point every model cache at /app/models, which docker-compose backs with the
+# `ai-models` volume. Without this, HuggingFace caches under /root/.cache and
+# the ~1 GB embedding model is re-downloaded on every container recreate.
+ENV HF_HOME=/app/models \
+    SENTENCE_TRANSFORMERS_HOME=/app/models \
+    FASTEMBED_CACHE_PATH=/app/models/fastembed
 
 # Copy installed Python packages and executables.
 COPY --from=deps /usr/local/lib/python3.11/site-packages \

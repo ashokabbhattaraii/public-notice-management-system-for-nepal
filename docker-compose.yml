@@ -22,6 +22,8 @@ services:
       PORT: 3535
       HOSTNAME: 0.0.0.0
 
+    mem_limit: 300m
+
     restart: unless-stopped
 
   api:
@@ -40,6 +42,8 @@ services:
 
     ports:
       - "3001:3001"
+
+    mem_limit: 250m
 
     restart: unless-stopped
 
@@ -63,6 +67,8 @@ services:
     volumes:
       - ai-models:/app/models
       - ai-data:/app/data
+
+    mem_limit: 700m
 
     restart: unless-stopped
 
