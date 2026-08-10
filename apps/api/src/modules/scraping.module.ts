@@ -5,6 +5,7 @@ import { ScrapingService } from '../services/scraping.service';
 import { ScrapingSchedulerService } from '../services/scraping-scheduler.service';
 import { SettingsModule } from './settings.module';
 import { TokenRevocationModule } from '../common/token-revocation.module';
+import { NoticesModule } from './notices.module';
 
 @Module({
   imports: [
@@ -15,6 +16,8 @@ import { TokenRevocationModule } from '../common/token-revocation.module';
     // ScrapingController is guarded by JwtAuthGuard, which is instantiated in
     // this module's injector and needs TokenRevocationService in scope.
     TokenRevocationModule,
+    // For the admin re-extract endpoints.
+    NoticesModule,
   ],
   controllers: [ScrapingController],
   providers: [ScrapingService, ScrapingSchedulerService],

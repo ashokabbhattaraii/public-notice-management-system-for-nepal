@@ -976,6 +976,10 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
         "content_text": text,
         "is_ocr": result.get("is_ocr", False),
         "page_count": result.get("page_count", 0),
+        # How the text was obtained and how plausible it looks, so the API can
+        # log it and the admin UI can show whether a re-extraction helped.
+        "quality": result.get("quality"),
+        "method": result.get("method"),
         "analyzed": analysis is not None,
     }
     if analysis:
@@ -983,8 +987,77 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
     return 200, response
 
 
+def _build_notice_context(data: dict) -> str:
+    """Assemble everything known about one notice into a single prompt block.
+
+    The extracted body text is the least reliable part — scanned notices and
+    legacy-font Nepali PDFs often extract as garbage — so the summary, key
+    facts, metadata and attachment list come first and the raw text last.
+    """
+    sections: list[str] = []
+
+    facts = []
+    if data.get("source_label"):
+        facts.append(f"Issuing source: {data['source_label']}")
+    if data.get("category"):
+        facts.append(f"Category: {data['category']}")
+    if data.get("published_at"):
+        facts.append(f"Published: {data['published_at']}")
+    if data.get("source_url"):
+        facts.append(f"Notice page: {data['source_url']}")
+    if facts:
+        sections.append("NOTICE FACTS:\n" + "\n".join(f"- {f}" for f in facts))
+
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict) and metadata:
+        rows = [f"- {k}: {v}" for k, v in metadata.items() if v not in (None, "", [], {})]
+        if rows:
+            sections.append("STRUCTURED METADATA:\n" + "\n".join(rows))
+
+    attachments = data.get("attachments")
+    if isinstance(attachments, list) and attachments:
+        rows = []
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            bits = [att.get("name") or att.get("url") or "file"]
+            if att.get("mime_type"):
+                bits.append(str(att["mime_type"]))
+            if att.get("size_bytes"):
+                bits.append(f"{round(int(att['size_bytes']) / 1024)} KB")
+            rows.append(f"- {' · '.join(bits)} ({att.get('url', '')})")
+        if rows:
+            sections.append(
+                f"ATTACHED FILES ({len(rows)}) — these are attached to this notice "
+                "and downloadable from the notice page:\n" + "\n".join(rows)
+            )
+    else:
+        sections.append("ATTACHED FILES: none.")
+
+    summary = (data.get("summary") or "").strip()
+    if summary:
+        sections.append(f"AI SUMMARY:\n{summary}")
+    summary_ne = (data.get("summary_ne") or "").strip()
+    if summary_ne:
+        sections.append(f"AI SUMMARY (Nepali):\n{summary_ne}")
+
+    key_facts = data.get("key_facts")
+    if isinstance(key_facts, list) and key_facts:
+        sections.append(
+            "KEY POINTS:\n" + "\n".join(f"- {f}" for f in key_facts if str(f).strip())
+        )
+
+    content = (data.get("content") or "").strip()
+    if content:
+        sections.append(f"NOTICE TEXT (extracted, may be imperfect):\n{content[:6000]}")
+
+    return "\n\n".join(sections)
+
+
 async def _notices_ask(receive) -> tuple[int, dict]:
-    """POST /notices/ask — body: {title, content, question}. Returns {answer}."""
+    """POST /notices/ask — body: {title, content, question} plus optional
+    summary, summary_ne, key_facts, metadata, attachments, category,
+    source_label, source_url, published_at. Returns {answer}."""
     body = await _read_body(receive)
     try:
         data = json.loads(body) if body else {}
@@ -992,15 +1065,33 @@ async def _notices_ask(receive) -> tuple[int, dict]:
         return 400, {"error": "Invalid JSON body"}
 
     title = (data.get("title") or "").strip()
-    content = (data.get("content") or "").strip()
     question = (data.get("question") or "").strip()
     if not question:
         return 400, {"error": "Field 'question' is required"}
-    if not content:
-        return 200, {"answer": "This notice has no captured text content to answer questions about."}
+
+    # "Hello" / "thanks" deserve a reply, not "the content doesn't contain the
+    # answer to your question". Checked before the context is assembled so it
+    # costs no retrieval.
+    if llm.is_small_talk(question):
+        hint = f'the notice "{title}"' if title else "a public notice"
+        return 200, {"answer": await llm.generate_chat(question, context_hint=hint)}
+
+    has_anything = any(
+        [
+            (data.get("content") or "").strip(),
+            (data.get("summary") or "").strip(),
+            data.get("key_facts"),
+            data.get("attachments"),
+            data.get("metadata"),
+        ]
+    )
+    if not has_anything:
+        return 200, {"answer": "This notice has no captured content to answer questions about."}
+
+    context = _build_notice_context(data)
 
     try:
-        answer = await llm.answer_notice_question(title, content, question)
+        answer = await llm.answer_notice_question(title, context, question)
         return 200, {"answer": answer}
     except Exception as e:
         logger.exception("Notice Q&A failed")

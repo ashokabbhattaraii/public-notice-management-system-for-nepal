@@ -466,7 +466,20 @@ export default function RagPage() {
     let cancelled = false
     let ticks = 0
 
+    let timer: ReturnType<typeof setTimeout>
+
     const tick = async () => {
+      try {
+        await pollOnce()
+      } finally {
+        // Schedule the next poll only once this one settled: with setInterval a
+        // slow API queued a request per tick, and the pile-up starved every
+        // other call the page makes (chat queries included).
+        if (!cancelled) timer = setTimeout(tick, 2500)
+      }
+    }
+
+    const pollOnce = async () => {
       ticks += 1
       let result: Record<string, DocumentProgress | null> = {}
       try {
@@ -490,9 +503,8 @@ export default function RagPage() {
       if (anyFinished || ticks % 8 === 0) loadDocs({ silent: true })
     }
 
-    tick()
-    const timer = setInterval(tick, 2500)
-    return () => { cancelled = true; clearInterval(timer) }
+    void tick()
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [processingKey, loadDocs])
 
   const filteredDocs = useMemo(() =>

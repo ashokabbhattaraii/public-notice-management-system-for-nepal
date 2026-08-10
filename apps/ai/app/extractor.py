@@ -1,19 +1,24 @@
-"""Document text extraction with intelligent Unicode validation and OCR fallback.
+"""Document text extraction: several extractors race, the best result wins.
 
-Pipeline:
-1. Extract text via native parsers (pypdf, python-docx, etc.)
-2. Validate extracted text for Unicode quality (detects legacy font encodings)
-3. If text fails validation → OCR the rendered pages (handles ALL legacy fonts)
-4. Auto-detect document language and pick optimal Tesseract languages
-5. Final cleanup and normalization
+Pipeline for a PDF:
+1. Produce candidate texts — pypdf, then poppler's `pdftotext -layout`.
+2. Score each candidate for linguistic plausibility (`_text_quality`).
+3. If the best candidate is weak (scanned page, or a legacy Nepali font whose
+   glyphs decode to Latin noise), OCR the rendered pages.
+4. OCR language is chosen by *measuring*: page one is OCR'd with each available
+   language set and the highest-scoring one is used for the whole document.
+5. The highest-scoring candidate overall is returned, with its score and method.
 
-This approach handles Preeti, Kantipur, PCS Nepali, Sagarmatha, Himalb, and any
-other legacy Nepali font without needing per-font character maps — OCR reads the
-rendered glyphs, producing correct Unicode regardless of the underlying encoding.
+Scoring rather than a single yes/no gate is what makes this reliable: a legacy
+Preeti PDF extracts as confident-looking ASCII ("BXXYRCO ; WREVERE G.4q.959"),
+which no structural check can distinguish from real text — but it contains
+almost no real words in any language, so it scores near zero and loses to OCR.
 """
 
 import re
 import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 from app import config
@@ -22,17 +27,6 @@ from app.logger import get_logger
 logger = get_logger(__name__)
 
 _DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
-_ASCII_ALPHA_RE = re.compile(r"[a-zA-Z]")
-_LEGACY_FONT_INDICATORS = set("{}[]|\\;+=/")
-
-# Language detection patterns
-_LATIN_RE = re.compile(r"[a-zA-Z]")
-_CYRILLIC_RE = re.compile(r"[а-яА-Я]")
-_CHINESE_RE = re.compile(r"[\u4e00-\u9fff]")
-_JAPANESE_RE = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff]")
-_KOREAN_RE = re.compile(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]")
-_ARABIC_RE = re.compile(r"[\u0600-\u06ff]")
-
 _TESSERACT_AVAILABLE: bool | None = None
 _TESSERACT_LANGS_CACHE: dict[str, list[str]] | None = None
 
@@ -58,7 +52,6 @@ def _get_tesseract_langs() -> list[str]:
         return _TESSERACT_LANGS_CACHE
 
     try:
-        import subprocess
         result = subprocess.run(
             ["tesseract", "--list-langs"],
             capture_output=True,
@@ -78,146 +71,60 @@ def _get_tesseract_langs() -> list[str]:
     return _TESSERACT_LANGS_CACHE
 
 
-def _detect_script(text: str) -> str:
+
+
+
+# Function words that saturate any real English document. Legacy-font noise and
+# wrong-language OCR essentially never produce them.
+_EN_STOPWORDS = {
+    "the", "of", "and", "to", "in", "for", "is", "on", "by", "with", "as", "at",
+    "from", "this", "that", "shall", "be", "will", "has", "have", "are", "was",
+    "were", "it", "its", "or", "an", "a", "not", "all", "may", "must", "which",
+    "their", "there", "been", "such", "under", "within", "after", "before",
+    "date", "notice", "office", "ministry", "government", "nepal", "department",
+}
+_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+_MIN_TOKENS_FOR_SCORE = 25
+
+# Below this, a candidate is treated as unusable and OCR is attempted.
+QUALITY_THRESHOLD = 0.55
+
+
+def _text_quality(text: str) -> float:
+    """Rate extracted text 0.0 (noise) → 1.0 (clean) for linguistic plausibility.
+
+    Devanagari content scores on script share alone. Latin-dominant content is
+    scored on how often real English function words appear: genuine prose runs
+    20-35%, whereas legacy-font garbage and Devanagari-OCR'd-as-English sit near
+    zero even though both look superficially like words.
     """
-    Detect the primary script in text.
-
-    Returns: 'devanagari', 'latin', 'cyrillic', 'chinese', 'japanese', 'korean', 'arabic', 'mixed', 'unknown'
-    """
-    if not text or len(text.strip()) < 20:
-        return "unknown"
-
-    sample = text[:5000]
-    non_space = re.sub(r"\s", "", sample)
-    if not non_space:
-        return "unknown"
-
-    total = len(non_space)
-
-    devanagari = len(_DEVANAGARI_RE.findall(non_space)) / total
-    latin = len(_LATIN_RE.findall(non_space)) / total
-    cyrillic = len(_CYRILLIC_RE.findall(non_space)) / total
-    chinese = len(_CHINESE_RE.findall(non_space)) / total
-    japanese = len(_JAPANESE_RE.findall(non_space)) / total
-    korean = len(_KOREAN_RE.findall(non_space)) / total
-    arabic = len(_ARABIC_RE.findall(non_space)) / total
-
-    scores = {
-        "devanagari": devanagari,
-        "latin": latin,
-        "cyrillic": cyrillic,
-        "chinese": chinese,
-        "japanese": japanese,
-        "korean": korean,
-        "arabic": arabic,
-    }
-
-    # Find dominant script
-    max_script = max(scores, key=scores.get)
-    max_score = scores[max_script]
-
-    # Require at least 10% for a confident detection
-    if max_score < 0.1:
-        return "mixed"
-
-    # Check if it's significantly dominant
-    second_max = sorted(scores.values(), reverse=True)[1]
-    if max_score > second_max * 2:
-        return max_script
-
-    return "mixed"
-
-
-def _pick_tesseract_langs(text: str) -> str:
-    """
-    Pick optimal Tesseract language codes based on detected script.
-
-    Returns a '+' joined string of language codes (e.g., 'nep+eng', 'eng', 'chi_sim+eng').
-    """
-    script = _detect_script(text)
-    available = set(_get_tesseract_langs())
-
-    # Map scripts to Tesseract language codes (in order of preference)
-    script_to_langs = {
-        "devanagari": ["nep", "hin", "eng"],
-        "latin": ["eng"],
-        "cyrillic": ["rus", "eng"],
-        "chinese": ["chi_sim", "chi_tra", "eng"],
-        "japanese": ["jpn", "eng"],
-        "korean": ["kor", "eng"],
-        "arabic": ["ara", "eng"],
-        "mixed": ["eng", "nep"],  # Default fallback
-    }
-
-    preferred = script_to_langs.get(script, ["eng"])
-    # Filter to only available languages
-    selected = [lang for lang in preferred if lang in available]
-
-    if not selected:
-        # Ultimate fallback: check if eng is available
-        if "eng" in available:
-            selected = ["eng"]
-        elif available:
-            selected = [list(available)[0]]
-        else:
-            # No languages installed, use default
-            logger.warning("No Tesseract languages available, using default config")
-            return config.TESSERACT_LANG
-
-    lang_str = "+".join(selected)
-    logger.info("Detected script: %s, selected Tesseract langs: %s", script, lang_str)
-    return lang_str
-
-
-def _is_valid_unicode(text: str) -> bool:
-    """
-    Determine whether extracted text contains valid Unicode Devanagari.
-
-    Returns False if the text appears to be from a legacy font encoding
-    (Preeti, Kantipur, etc.) — indicating OCR is needed.
-
-    FIXED: English-only docs with no Devanagari should NOT trigger OCR.
-    Only flag as legacy when there are actual legacy encoding indicators.
-    """
-    if not text or len(text.strip()) < 50:
-        return True
+    if not text or len(text.strip()) < 40:
+        return 0.0
 
     sample = text[:8000]
     non_space = re.sub(r"\s", "", sample)
     if not non_space:
-        return True
+        return 0.0
 
-    total = len(non_space)
+    devanagari_ratio = len(_DEVANAGARI_RE.findall(non_space)) / len(non_space)
+    if devanagari_ratio >= 0.15:
+        # Real Devanagari: the more of it, the better. Nepali notices routinely
+        # mix in Latin digits/abbreviations, so this saturates early.
+        return min(1.0, 0.65 + devanagari_ratio)
 
-    devanagari_count = len(_DEVANAGARI_RE.findall(non_space))
-    devanagari_ratio = devanagari_count / total
+    tokens = [t.lower() for t in _WORD_RE.findall(sample)]
+    if len(tokens) < _MIN_TOKENS_FOR_SCORE:
+        # Too little running text to judge (forms, tables, mostly-numeric pages).
+        # Neutral-but-passing so we don't OCR a perfectly good sparse page.
+        return 0.6
 
-    # If we have meaningful Devanagari, it's valid Unicode
-    if devanagari_ratio > 0.1:
-        return True
+    stopword_ratio = sum(1 for t in tokens if t in _EN_STOPWORDS) / len(tokens)
+    # 12% stopwords ⇒ full marks; real prose clears this comfortably.
+    score = min(1.0, stopword_ratio / 0.12)
 
-    ascii_alpha_count = len(_ASCII_ALPHA_RE.findall(non_space))
-    ascii_ratio = ascii_alpha_count / total
-
-    indicator_count = sum(1 for c in non_space if c in _LEGACY_FONT_INDICATORS)
-    indicator_ratio = indicator_count / total
-
-    # FIXED: Only flag as legacy if BOTH:
-    # 1. High ASCII ratio (looks like encoded text)
-    # 2. High indicator ratio (legacy font artifacts like {}[]|\\;+=/)
-    # Pure English text has high ascii_ratio but LOW indicator_ratio → valid
-    is_legacy = ascii_ratio > 0.3 and indicator_ratio > 0.03
-
-    if is_legacy:
-        logger.info(
-            "Legacy font encoding detected "
-            "(devanagari=%.1f%%, ascii=%.1f%%, indicators=%.1f%%)",
-            devanagari_ratio * 100,
-            ascii_ratio * 100,
-            indicator_ratio * 100,
-        )
-
-    return not is_legacy
+    # A little Devanagari present but below the threshold above still counts for
+    # something — mixed-script documents shouldn't be judged on English alone.
+    return max(score, min(0.6, devanagari_ratio * 4))
 
 
 def _normalize_text(text: str) -> str:
@@ -249,45 +156,153 @@ def extract_text(file_path: str, mime_type: str) -> dict:
         result = _extract_text_file(path)
 
     result["text"] = _normalize_text(result["text"])
+    result.setdefault("method", "native")
+    result.setdefault("quality", round(_text_quality(result["text"]), 3))
 
     logger.info(
-        "Extracted %d chars from %s (ocr=%s, pages=%d)",
+        "Extracted %d chars from %s (method=%s, ocr=%s, pages=%d, quality=%.2f)",
         len(result["text"]),
         path.name,
+        result["method"],
         result["is_ocr"],
         result["page_count"],
+        result["quality"],
     )
+    if result["quality"] < QUALITY_THRESHOLD and result["text"].strip():
+        logger.warning(
+            "Low-quality extraction for %s (quality=%.2f, method=%s) — "
+            "text may be unusable; consider re-running with OCR available",
+            path.name,
+            result["quality"],
+            result["method"],
+        )
     return result
 
 
-def _extract_pdf(path: Path) -> dict:
-    """Smart PDF extraction: native text first, OCR fallback for legacy fonts."""
+def _pypdf_text(path: Path) -> tuple[str, int]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
-    page_count = len(reader.pages)
+    pages = [(page.extract_text() or "") for page in reader.pages]
+    return "\n\n".join(pages), len(pages)
 
-    texts: list[str] = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        texts.append(text)
 
-    full_text = "\n\n".join(texts)
+def _pdftotext(path: Path) -> str:
+    """poppler's extractor. Often recovers text pypdf mangles (and vice versa),
+    so both are scored and the better one wins. Ships with poppler-utils, which
+    pdf2image already requires."""
+    if not shutil.which("pdftotext"):
+        return ""
+    try:
+        result = subprocess.run(
+            ["pdftotext", "-layout", "-enc", "UTF-8", str(path), "-"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return result.stdout if result.returncode == 0 else ""
+    except Exception as e:
+        logger.warning("pdftotext failed: %s", e)
+        return ""
 
-    # Case 1: PDF has almost no embedded text (scanned document)
-    if page_count > 0 and len(full_text.strip()) < 100 * page_count:
-        logger.info("PDF has minimal embedded text — using OCR")
-        return _ocr_pdf(path, page_count)
 
-    # Case 2: Extracted text is legacy-encoded (Preeti, Kantipur, etc.)
-    if not _is_valid_unicode(full_text):
-        logger.info("PDF text is legacy font encoded — using OCR for correct Unicode")
-        ocr_result = _ocr_pdf(path, page_count)
-        if ocr_result["text"].strip():
-            return ocr_result
-        logger.warning("OCR produced no text; falling back to raw extraction")
+def _extract_pdf(path: Path) -> dict:
+    """Score every extractor's output and return the best one."""
+    try:
+        native_text, page_count = _pypdf_text(path)
+    except Exception as e:
+        logger.warning("pypdf failed on %s: %s", path.name, e)
+        native_text, page_count = "", 0
 
-    return {"text": full_text, "is_ocr": False, "page_count": page_count}
+    candidates: list[tuple[float, str, str, bool]] = []  # (score, method, text, is_ocr)
+    for method, text in (("pypdf", native_text), ("pdftotext", _pdftotext(path))):
+        if text.strip():
+            candidates.append((_text_quality(text), method, text, False))
+
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    best = candidates[0] if candidates else (0.0, "none", "", False)
+
+    # Too little text for the page count means a scanned document; a low score
+    # means the bytes decoded into noise (legacy Nepali fonts). Both need OCR.
+    sparse = page_count > 0 and len(best[2].strip()) < 100 * page_count
+    if sparse or best[0] < QUALITY_THRESHOLD:
+        logger.info(
+            "Native extraction insufficient (best=%s score=%.2f sparse=%s) — running OCR",
+            best[1],
+            best[0],
+            sparse,
+        )
+        ocr = _ocr_pdf(path, page_count or 1)
+        if ocr["text"].strip():
+            ocr_score = _text_quality(ocr["text"])
+            logger.info("OCR scored %.2f vs native %.2f", ocr_score, best[0])
+            if ocr_score >= best[0]:
+                return {
+                    "text": ocr["text"],
+                    "is_ocr": True,
+                    "page_count": ocr["page_count"],
+                    "quality": round(ocr_score, 3),
+                    "method": f"ocr:{ocr.get('langs', '?')}",
+                }
+        else:
+            logger.warning("OCR produced no text; keeping native extraction")
+
+    return {
+        "text": best[2],
+        "is_ocr": False,
+        "page_count": page_count,
+        "quality": round(best[0], 3),
+        "method": best[1],
+    }
+
+
+def _candidate_lang_sets() -> list[str]:
+    """Tesseract language sets to try, best-supported first.
+
+    The configured default (nep+eng) leads: these are Nepali government
+    notices, and running the English model over Devanagari is precisely what
+    produced pages of "BXXYRCO ; WREVERE" noise.
+    """
+    available = set(_get_tesseract_langs())
+    if not available:
+        return [config.TESSERACT_LANG]
+
+    ordered = [config.TESSERACT_LANG, "nep+eng", "nep", "hin+eng", "eng"]
+    candidates: list[str] = []
+    for spec in ordered:
+        langs = spec.split("+")
+        if all(lang in available for lang in langs) and spec not in candidates:
+            candidates.append(spec)
+    return candidates or [config.TESSERACT_LANG]
+
+
+def _choose_ocr_langs(first_page, pytesseract) -> str:
+    """Pick the language set by OCR'ing page one with each and scoring the text.
+
+    Measuring beats guessing: the previous implementation inferred the language
+    from a probe that silently crashed, defaulted to English, and then OCR'd
+    Nepali documents with the English model.
+    """
+    candidates = _candidate_lang_sets()
+    if len(candidates) == 1:
+        return candidates[0]
+
+    best_lang, best_score = candidates[0], -1.0
+    for lang in candidates:
+        try:
+            text = _ocr_image(first_page, pytesseract, lang)
+        except Exception as e:
+            logger.warning("OCR probe failed for lang=%s: %s", lang, e)
+            continue
+        score = _text_quality(text)
+        logger.info("OCR probe lang=%s score=%.2f chars=%d", lang, score, len(text))
+        if score > best_score:
+            best_lang, best_score = lang, score
+        if score >= 0.9:
+            break  # already clean, no need to try the rest
+
+    logger.info("Selected OCR languages: %s (score=%.2f)", best_lang, best_score)
+    return best_lang
 
 
 def _ocr_pdf(path: Path, page_count: int) -> dict:
@@ -310,26 +325,13 @@ def _ocr_pdf(path: Path, page_count: int) -> dict:
 
     logger.info("Starting OCR: %d pages at %d DPI (batch=%d)", page_count, dpi, batch_size)
 
-    # Extract first page to detect language
-    first_page_text = ""
+    ocr_langs = config.TESSERACT_LANG
     try:
-        images = convert_from_path(str(path), dpi=dpi, first_page=1, last_page=1)
-        if images:
-            # Quick extraction to detect language
-            import pytesseract
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-                images[0].save(f, format="PNG")
-                tmp_path = f.name
-            try:
-                first_page_text = pytesseract.image_to_string(tmp_path, lang=config.TESSERACT_LANG)
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-    except Exception:
-        pass
-
-    # Detect optimal languages
-    ocr_langs = _pick_tesseract_langs(first_page_text)
-    logger.info("Using Tesseract languages for PDF OCR: %s", ocr_langs)
+        first = convert_from_path(str(path), dpi=dpi, first_page=1, last_page=1)
+        if first:
+            ocr_langs = _choose_ocr_langs(first[0], pytesseract)
+    except Exception as e:
+        logger.warning("Language probe failed (%s); using configured %s", e, ocr_langs)
 
     for start in range(1, page_count + 1, batch_size):
         end = min(start + batch_size - 1, page_count)
@@ -349,22 +351,52 @@ def _ocr_pdf(path: Path, page_count: int) -> dict:
             logger.info("OCR progress: %d/%d pages", end, page_count)
 
     logger.info("OCR complete: %d pages processed", len(texts))
-    return {"text": "\n\n".join(texts), "is_ocr": True, "page_count": page_count}
+    return {
+        "text": "\n\n".join(texts),
+        "is_ocr": True,
+        "page_count": page_count,
+        "langs": ocr_langs,
+    }
+
+
+# --oem 1: LSTM engine only (far better on Devanagari than the legacy engine).
+# --psm 3: full automatic page segmentation, right for whole scanned pages.
+# preserve_interword_spaces keeps word boundaries in Devanagari intact.
+_TESSERACT_CONFIG = "--oem 1 --psm 3 -c preserve_interword_spaces=1"
+
+
+def _preprocess_for_ocr(img):
+    """Grayscale + autocontrast, and upscale small renders.
+
+    Nepali scans are often faint photocopies; Tesseract's Devanagari model is
+    noticeably more accurate on a normalized, sufficiently large image.
+    """
+    try:
+        from PIL import ImageOps
+
+        img = ImageOps.grayscale(img)
+        img = ImageOps.autocontrast(img)
+        if min(img.size) < 1000:
+            factor = max(2, 1000 // max(1, min(img.size)))
+            img = img.resize((img.width * factor, img.height * factor))
+    except Exception as e:
+        logger.warning("OCR preprocessing skipped: %s", e)
+    return img
 
 
 def _ocr_image(img, pytesseract, lang: str | None = None) -> str:
     """Run Tesseract on a PIL image via a temp file (avoids stdin/pipe bugs)."""
-    import tempfile
-
     if lang is None:
         lang = config.TESSERACT_LANG
+
+    img = _preprocess_for_ocr(img)
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         img.save(f, format="PNG")
         tmp_path = f.name
 
     try:
-        text = pytesseract.image_to_string(tmp_path, lang=lang)
+        text = pytesseract.image_to_string(tmp_path, lang=lang, config=_TESSERACT_CONFIG)
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
@@ -381,23 +413,26 @@ def _extract_docx(path: Path) -> dict:
 
 
 def _extract_image(path: Path) -> dict:
-    """OCR an image file directly with auto-detected language."""
+    """OCR an image file, choosing the language set by measured quality."""
     if not _check_tesseract():
         logger.error("Cannot OCR image: Tesseract is not installed")
         return {"text": "", "is_ocr": False, "page_count": 1}
 
     import pytesseract
+    from PIL import Image
 
-    # Detect language from a quick OCR pass
-    try:
-        quick_text = pytesseract.image_to_string(str(path), lang=config.TESSERACT_LANG)
-        ocr_langs = _pick_tesseract_langs(quick_text)
-    except Exception:
-        ocr_langs = config.TESSERACT_LANG
+    with Image.open(str(path)) as img:
+        img.load()
+        ocr_langs = _choose_ocr_langs(img, pytesseract)
+        text = _ocr_image(img, pytesseract, ocr_langs)
 
-    logger.info("Using Tesseract languages for image OCR: %s", ocr_langs)
-    text = pytesseract.image_to_string(str(path), lang=ocr_langs)
-    return {"text": text, "is_ocr": True, "page_count": 1}
+    return {
+        "text": text,
+        "is_ocr": True,
+        "page_count": 1,
+        "quality": round(_text_quality(text), 3),
+        "method": f"ocr:{ocr_langs}",
+    }
 
 
 def _extract_text_file(path: Path) -> dict:

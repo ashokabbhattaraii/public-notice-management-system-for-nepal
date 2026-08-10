@@ -81,8 +81,31 @@ function mapUser(u: ApiUser): User {
   }
 }
 
+/**
+ * In-flight GETs, keyed by path. A browser only opens a handful of connections
+ * per host, so a poll timer that fires again before its previous request came
+ * back (slow API, backgrounded tab) queues duplicates until nothing else — a
+ * chat query, a page load — can get through. Identical GETs therefore share
+ * one request instead of stacking.
+ */
+const inFlightGets = new Map<string, Promise<unknown>>()
+
 /** Authenticated fetch - attaches the bearer token when present. */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase()
+  // Callers that pass their own signal manage cancellation themselves, so they
+  // must not be handed a shared promise someone else can abort.
+  if (method !== "GET" || init.signal) return requestJson<T>(path, init)
+
+  const pending = inFlightGets.get(path) as Promise<T> | undefined
+  if (pending) return pending
+
+  const request = requestJson<T>(path, init).finally(() => inFlightGets.delete(path))
+  inFlightGets.set(path, request)
+  return request
+}
+
+async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   const token = tokenStore.get()
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -361,6 +384,46 @@ export async function fetchScrapedItems(
 
 export async function deleteScrapedItem(id: string): Promise<void> {
   await apiFetch(`/admin/scraping/items/${id}`, { method: "DELETE" })
+}
+
+export interface ReextractResult {
+  id: string
+  updated: boolean
+  chars?: number
+  isOcr?: boolean
+  method?: string | null
+  qualityBefore?: number
+  qualityAfter?: number
+  reason?: string
+}
+
+/** Admin: re-run attachment text extraction for one notice. */
+export async function reextractNotice(id: string): Promise<ReextractResult> {
+  return apiFetch(`/admin/scraping/items/${id}/reextract`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+export interface BulkReextractResult {
+  scope: "garbled" | "all"
+  scanned: number
+  queued: number
+  message: string
+}
+
+/**
+ * Admin: re-extract many notices at once. "garbled" (default) only touches
+ * notices whose stored text scores as unreadable.
+ */
+export async function reextractNotices(
+  scope: "garbled" | "all" = "garbled",
+  limit = 200,
+): Promise<BulkReextractResult> {
+  return apiFetch("/admin/scraping/items/reextract", {
+    method: "POST",
+    body: JSON.stringify({ scope, limit }),
+  })
 }
 
 export interface ScrapeRunFilters {

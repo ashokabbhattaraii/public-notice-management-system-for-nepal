@@ -221,7 +221,8 @@ function AdminScrapingPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
   const [progressBySource, setProgressBySource] = useState<Record<string, ScrapeRunProgress>>({})
-  const pollTimers = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  // sourceId -> stop function for its progress poller.
+  const pollTimers = useRef<Record<string, () => void>>({})
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<SourceFormState>(emptyForm)
@@ -308,17 +309,31 @@ function AdminScrapingPageContent() {
 
   // Live refresh: while anything is scraping and the Logs tab is open, silently
   // re-fetch the current page so RUNNING rows resolve into their final status.
+  // Self-scheduling (not setInterval) so a slow response can't queue a second
+  // request, and paused while the tab is hidden — nobody is reading it.
   useEffect(() => {
     if (activeTab !== "logs") return
     if (!(runningIds.size > 0 || runningAll || hasLiveRunsRef.current)) return
-    const timer = setInterval(() => void loadLogs(true), 4000)
-    return () => clearInterval(timer)
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+
+    const tick = async () => {
+      if (!document.hidden) await loadLogs(true)
+      if (!cancelled) timer = setTimeout(tick, 4000)
+    }
+
+    timer = setTimeout(tick, 4000)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [activeTab, runningIds, runningAll, loadLogs])
 
   useEffect(() => {
     // Stop all pollers on unmount.
+    const timers = pollTimers.current
     return () => {
-      Object.values(pollTimers.current).forEach(clearInterval)
+      Object.values(timers).forEach((stop) => stop())
     }
   }, [])
 
@@ -441,18 +456,28 @@ function AdminScrapingPageContent() {
   }
 
   function stopPolling(sourceId: string) {
-    const timer = pollTimers.current[sourceId]
-    if (timer) {
-      clearInterval(timer)
+    const stop = pollTimers.current[sourceId]
+    if (stop) {
+      stop()
       delete pollTimers.current[sourceId]
     }
   }
 
+  /**
+   * Poll one run's progress. The next request is scheduled only after the
+   * previous one settles — with setInterval, a slow API meant every tick
+   * queued another request, and when the backlog finally drained each of them
+   * saw "done" and fired its own full reload.
+   */
   function pollProgress(sourceId: string, runId: string) {
     stopPolling(sourceId)
-    pollTimers.current[sourceId] = setInterval(async () => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+
+    const tick = async () => {
       try {
         const progress = await fetchScrapeRunProgress(runId)
+        if (cancelled) return
         setProgressBySource((prev) => ({ ...prev, [sourceId]: progress }))
         if (progress.stage === "done" || progress.stage === "failed") {
           stopPolling(sourceId)
@@ -462,11 +487,19 @@ function AdminScrapingPageContent() {
             return next
           })
           await loadAll()
+          return
         }
       } catch {
-        // Transient poll failure — keep trying until the interval is cleared.
+        // Transient poll failure — keep trying until polling is stopped.
       }
-    }, PROGRESS_POLL_MS)
+      if (!cancelled) timer = setTimeout(tick, PROGRESS_POLL_MS)
+    }
+
+    pollTimers.current[sourceId] = () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    timer = setTimeout(tick, PROGRESS_POLL_MS)
   }
 
   async function handleRun(id: string) {

@@ -10,9 +10,11 @@ import {
   Paperclip, FileImage, Download, Sparkles,
   CheckCircle, Tag, MessageSquare, Send, ArrowRight,
   AlertTriangle, Clock, Timer, ChevronDown, ChevronUp,
+  RefreshCw,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
-import { fetchNotice, askNoticeQuestion } from "@/lib/api"
+import { fetchNotice, askNoticeQuestion, reextractNotice } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
 import type { PublicNoticeDetail } from "@/lib/types"
@@ -455,6 +457,47 @@ export default function NoticeDetailPage() {
   const [answering, setAnswering] = useState(false)
   const [extracting, setExtracting] = useState(false)
 
+  // Admin-only re-extraction of this notice's attachment text.
+  const { user } = useAuth()
+  const isAdmin = user?.role === "admin"
+  const [reextracting, setReextracting] = useState(false)
+  const [reextractNote, setReextractNote] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null)
+
+  async function handleReextract() {
+    if (reextracting) return
+    setReextracting(true)
+    setReextractNote(null)
+    try {
+      const result = await reextractNotice(noticeId)
+      const fresh = await fetchNotice(noticeId)
+      setNotice(fresh)
+      if (!result.updated) {
+        setReextractNote({ tone: "info", text: result.reason ?? "No text could be extracted." })
+      } else {
+        const improved =
+          typeof result.qualityAfter === "number" && typeof result.qualityBefore === "number"
+            ? result.qualityAfter > result.qualityBefore
+            : null
+        setReextractNote({
+          tone: improved === false ? "info" : "ok",
+          text:
+            `Extracted ${result.chars?.toLocaleString()} characters` +
+            (result.method ? ` via ${result.method}` : "") +
+            (typeof result.qualityAfter === "number"
+              ? ` · quality ${Math.round((result.qualityBefore ?? 0) * 100)}% → ${Math.round(result.qualityAfter * 100)}%`
+              : ""),
+        })
+      }
+    } catch (err) {
+      setReextractNote({
+        tone: "error",
+        text: err instanceof Error ? err.message : "Re-extraction failed",
+      })
+    } finally {
+      setReextracting(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -776,6 +819,45 @@ export default function NoticeDetailPage() {
                       </div>
                     ))}
                 </div>
+              </section>
+            )}
+
+            {/* Admin: fix a bad extraction without leaving the page */}
+            {isAdmin && (notice.attachments?.length > 0 || notice.attachmentUrl) && (
+              <section className="rounded-[16px] border border-vez-line bg-vez-surface/50 px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-vez-ink">Admin: extraction</p>
+                    <p className="mt-0.5 text-xs text-vez-mute">
+                      Re-run text extraction on the attachment — OCRs the document again and
+                      refreshes the summary and key facts.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleReextract}
+                    disabled={reextracting}
+                    className="flex shrink-0 items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-xs text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {reextracting ? (
+                      <><Loader2 className="size-3.5 animate-spin" /> Re-extracting…</>
+                    ) : (
+                      <><RefreshCw className="size-3.5" /> Re-extract content</>
+                    )}
+                  </button>
+                </div>
+                {reextractNote && (
+                  <p
+                    className={`mt-2.5 text-xs ${
+                      reextractNote.tone === "error"
+                        ? "text-red-600"
+                        : reextractNote.tone === "ok"
+                          ? "text-vez-ink"
+                          : "text-vez-mute"
+                    }`}
+                  >
+                    {reextractNote.text}
+                  </p>
+                )}
               </section>
             )}
 

@@ -105,6 +105,12 @@ async def _detect_chat_intent(question: str, query_embedding: list[float]) -> bo
     if len(question) > _INTENT_MAX_LEN:
         return False
 
+    # Unambiguous pleasantries skip the embedding comparison (and its possible
+    # LLM tiebreak) entirely — same verdict, no compute.
+    if llm.is_small_talk(question):
+        logger.info("Intent (small talk): chat for %.40r", question)
+        return True
+
     global _chat_vecs, _doc_vecs
     if _chat_vecs is None:
         _chat_vecs = np.array(embeddings.get_embeddings(_CHAT_EXAMPLES, kind="query"))

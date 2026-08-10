@@ -17,6 +17,7 @@ import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 import { ScrapingService } from '../services/scraping.service';
 import { ScrapingSchedulerService } from '../services/scraping-scheduler.service';
+import { NoticesService } from '../services/notices.service';
 import { CreateScrapeSourceDto, UpdateScrapeSourceDto } from '../dto/scrape-source.dto';
 import { ScrapedItemCategory } from '@prisma/client';
 
@@ -27,6 +28,7 @@ export class ScrapingController {
   constructor(
     private readonly scrapingService: ScrapingService,
     private readonly scheduler: ScrapingSchedulerService,
+    private readonly noticesService: NoticesService,
   ) {}
 
   /** Effective scheduler configuration + last tick, for the admin UI. */
@@ -126,6 +128,28 @@ export class ScrapingController {
   @Delete('items/:id')
   async deleteItem(@Param('id', ParseUUIDPipe) id: string) {
     return this.scrapingService.deleteItem(id);
+  }
+
+  /**
+   * Re-run attachment text extraction for every notice whose stored text looks
+   * unusable (`scope=garbled`, the default) or for all of them (`scope=all`).
+   * Returns as soon as the work is queued; extraction continues in background.
+   */
+  @Post('items/reextract')
+  async reextractItems(
+    @Body('scope') scope?: 'garbled' | 'all',
+    @Body('limit') limit?: number,
+  ) {
+    if (scope && scope !== 'garbled' && scope !== 'all') {
+      throw new BadRequestException("scope must be 'garbled' or 'all'");
+    }
+    return this.noticesService.reextractBulk(scope ?? 'garbled', limit ?? 200);
+  }
+
+  /** Re-run extraction for a single notice, overwriting its stored text. */
+  @Post('items/:id/reextract')
+  async reextractItem(@Param('id', ParseUUIDPipe) id: string) {
+    return this.noticesService.reextract(id);
   }
 
   @Get('runs')

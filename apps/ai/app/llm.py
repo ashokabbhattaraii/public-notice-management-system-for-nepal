@@ -24,6 +24,7 @@ Rules:
 - Ground every claim in the context. Never invent facts, numbers, dates, or names.
 - Cite sources inline with bracketed numbers matching the context blocks, e.g. [1] or [2][3]. Cite after the specific claim, not in a list at the end.
 - Format the answer in Markdown. Use short paragraphs; use bullet points for enumerations (requirements, steps, allocations) and **bold** for key figures, dates, and names.
+- Use a Markdown table when the answer covers several items sharing the same fields — schedules, fee or salary scales, per-category eligibility, comparisons, deadline lists. Only when there are at least two rows and two columns; a single fact never gets a table.
 - Match the answer length to the question: a factual lookup gets 1-2 sentences; "explain"/"summarize" questions get a structured answer, still under ~200 words.
 - Answer in the same language the question is asked in, unless instructed otherwise.
 - IMPORTANT: When the source context is in Nepali (Devanagari) but the question is in English, TRANSLATE and explain the content fully in English. Do NOT leave raw Nepali/Devanagari text inline. You may include the original Nepali term in parentheses for proper nouns or official titles, but the main answer must be fluent in the question's language.
@@ -79,6 +80,59 @@ _CANNED_GREETINGS_NE = [
     "नमस्कार! म तपाईंलाई कसरी सहयोग गर्न सक्छु? कुनै पनि कागजातबारे सोध्न सक्नुहुन्छ।",
 ]
 
+# Greetings, thanks, farewells and filler — English, Devanagari and romanized
+# Nepali, plus the textspeak people actually type.
+_SMALL_TALK_WORDS = {
+    "hi", "hii", "hiii", "hello", "helo", "hellow", "hey", "heya", "yo", "hola",
+    "greetings", "sup", "wassup", "howdy", "morning", "afternoon", "evening",
+    "night", "good", "gud", "mrng", "gm", "gn",
+    "thanks", "thank", "thankyou", "thx", "tnx", "ty", "cheers",
+    "bye", "goodbye", "byee", "cya", "later",
+    "ok", "okay", "okey", "k", "kk", "cool", "nice", "great", "awesome", "wow",
+    "please", "plz", "sorry", "yes", "no", "yeah", "yep", "nope",
+    "how", "are", "you", "u", "r", "there", "doing", "up",
+    "a", "lot", "much", "very", "so", "again", "welcome", "fine", "help",
+    "friend", "buddy", "i", "im", "am",
+    "namaste", "namaskar", "dhanyabad", "dhanyawad", "kasto", "cha", "xa",
+    "chha", "sanchai", "hajur", "ji", "sir", "madam", "maam", "dai", "didi",
+    "नमस्ते", "नमस्कार", "धन्यवाद", "कस्तो", "छ", "हजुर", "ठिक", "है",
+}
+
+# Whole-message patterns that are about the assistant rather than any content.
+_SMALL_TALK_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"^(who|what)\s+(are|r)\s+(you|u)\b",
+        r"^what\s+(can|do)\s+(you|u)\s+(do|can)\b",
+        r"^(can|what)\s+you\s+help\b",
+        r"^how\s+(are|r)\s+(you|u)\b",
+        r"^(tapai|timi)\s+ko\s+ho",
+        r"^ke\s+(garna|gar)\s+sak",
+    )
+]
+
+_SMALL_TALK_MAX_WORDS = 5
+
+
+def is_small_talk(message: str) -> bool:
+    """True for greetings/thanks/pleasantries that carry no content question.
+
+    Deterministic and free — it runs before any retrieval so "Hello" gets a
+    hello back instead of "the content doesn't contain the answer". A message
+    is only small talk when EVERY word is pleasantry vocabulary, so
+    "hello, what is the deadline?" still goes to the normal answer path.
+    """
+    text = (message or "").strip()
+    if not text:
+        return False
+    if any(p.search(text) for p in _SMALL_TALK_PATTERNS):
+        return True
+
+    words = [w for w in re.split(r"[^\wऀ-ॿ]+", text.lower()) if w]
+    if not words or len(words) > _SMALL_TALK_MAX_WORDS:
+        return False
+    return all(w in _SMALL_TALK_WORDS for w in words)
+
 
 async def generate_answer(
     question: str, context_chunks: list[dict], language: str = "en"
@@ -112,12 +166,23 @@ async def generate_answer(
     return answer
 
 
-async def generate_chat(message: str, language: str = "en") -> str:
+async def generate_chat(
+    message: str, language: str = "en", context_hint: str | None = None
+) -> str:
+    """Conversational reply. `context_hint` names what the user is looking at
+    (e.g. a notice title) so the invitation to ask something fits the screen
+    they're on."""
     if config.GEMINI_API_KEY or config.GROQ_API_KEY:
+        hint = (
+            f"\n\nThe user is currently viewing {context_hint}. If you invite a "
+            "question, make it about that."
+            if context_hint
+            else ""
+        )
         messages = [
             {
                 "role": "system",
-                "content": f"{CHAT_SYSTEM_PROMPT}\n\n{random.choice(_STYLE_HINTS)}",
+                "content": f"{CHAT_SYSTEM_PROMPT}{hint}\n\n{random.choice(_STYLE_HINTS)}",
             },
             {"role": "user", "content": message},
         ]
@@ -418,13 +483,19 @@ Rules:
 - category_confidence: how confident you are in the classification (0.0-1.0).
 - Ground everything in the provided content. Never invent facts."""
 
-_ASK_PROMPT = """You are Suchana AI, answering a question about ONE specific Nepalese public notice/news item using ONLY its content below.
+_ASK_PROMPT = """You are Suchana AI, answering a question about ONE specific Nepalese public notice/news item using ONLY the context below.
+
+The context may contain several labelled sections — NOTICE FACTS, STRUCTURED METADATA, ATTACHED FILES, AI SUMMARY, KEY POINTS and NOTICE TEXT. Every section is factual information about this same notice; use whichever ones answer the question.
 
 Rules:
-- Ground every claim in the content. Never invent facts, dates, or numbers not present.
+- Ground every claim in the context. Never invent facts, dates, or numbers not present.
+- Questions about attachments, PDFs, documents or downloads are answered from the ATTACHED FILES section — list the file names. Only say there is no attachment when that section says "none".
+- NOTICE TEXT is machine-extracted and is sometimes garbled or empty (scanned pages, legacy Nepali fonts). When it is unusable, answer from the summary, key points and metadata instead. Never describe encoding or formatting problems to the user, and never call the notice unreadable while other sections still have content.
 - Answer in Markdown, short paragraphs or bullet points, under ~150 words.
+- Use a Markdown table when the answer covers several items sharing the same fields (dates, fees, eligibility per category, a list of attachments with their types). At least two rows and two columns, otherwise prose or bullets.
+- Match the shape of the answer to the question: a yes/no or lookup question gets a direct short answer, an "explain"/"summarize" question gets structure.
 - Answer in the same language the question is asked in. If the notice content is in Nepali but the question is in English, translate/explain in English.
-- If the content doesn't contain the answer, say so plainly in one sentence — do not guess.
+- If none of the sections contain the answer, say so plainly in one sentence — do not guess.
 - Answer directly, no filler like "Based on the notice...\""""
 
 
@@ -475,15 +546,19 @@ async def analyze_notice(title: str, content: str) -> dict | None:
 
 
 async def answer_notice_question(title: str, content: str, question: str) -> str:
+    """`content` is the assembled context block built by the API layer — it may
+    hold labelled sections (facts, attachments, summary, key points, text)."""
     if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
         return _extractive_fallback(question, [{"content": content, "title": title}])
 
-    trimmed_content = content[:8000]
+    # Generous cap: the block leads with the reliable sections, so a long
+    # extracted body is what gets cut, not the summary or attachment list.
+    trimmed_content = content[:12000]
     messages = [
         {"role": "system", "content": _ASK_PROMPT},
         {
             "role": "user",
-            "content": f"Notice title: {title}\n\nNotice content:\n{trimmed_content}\n\nQuestion: {question}",
+            "content": f"Notice title: {title}\n\nContext:\n{trimmed_content}\n\nQuestion: {question}",
         },
     ]
 

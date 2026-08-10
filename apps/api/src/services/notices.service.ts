@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -182,6 +187,36 @@ export class NoticesService {
     return notice;
   }
 
+  /**
+   * Attachment list for the Q&A context, including the legacy single
+   * `attachmentUrl` column when it isn't already represented in the
+   * attachments table.
+   */
+  private attachmentContext(notice: {
+    attachmentUrl: string | null;
+    attachments: { url: string; label: string | null; mimeType: string | null; sizeBytes: number | null }[];
+  }): { name: string; url: string; mime_type: string | null; size_bytes: number | null }[] {
+    const nameOf = (url: string, label: string | null) =>
+      label?.trim() || decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? url);
+
+    const list = notice.attachments.map((a) => ({
+      name: nameOf(a.url, a.label),
+      url: a.url,
+      mime_type: a.mimeType,
+      size_bytes: a.sizeBytes,
+    }));
+
+    if (notice.attachmentUrl && !list.some((a) => a.url === notice.attachmentUrl)) {
+      list.push({
+        name: nameOf(notice.attachmentUrl, null),
+        url: notice.attachmentUrl,
+        mime_type: null,
+        size_bytes: null,
+      });
+    }
+    return list;
+  }
+
   private findPdfUrl(notice: { attachmentUrl: string | null; attachments: { url: string; mimeType: string | null }[] }): string | null {
     // Check attachments table first
     const pdfAtt = notice.attachments?.find(
@@ -213,15 +248,23 @@ export class NoticesService {
         this.logger.warn(`PDF extraction failed for notice ${id}: ${err.message}`);
         throw err;
       }
+      const meta = {
+        chars: String(response.data?.content_text ?? '').length,
+        quality: typeof response.data?.quality === 'number' ? response.data.quality : null,
+        method: response.data?.method ?? null,
+        isOcr: Boolean(response.data?.is_ocr),
+      };
+
       if (!response.data?.content_text) {
         // Stamp the sentinel anyway so a PDF with genuinely no extractable
         // text (e.g. image-only scan with no OCR output) isn't re-extracted
         // on every single view. Real failures (timeout/5xx) reject above and
         // go through the single-flight backoff instead.
-        return this.prisma.scrapedItem.update({
+        await this.prisma.scrapedItem.update({
           where: { id },
           data: { aiAnalyzedAt: new Date() },
         });
+        return meta;
       }
 
       const data: any = {
@@ -237,8 +280,164 @@ export class NoticesService {
         if (response.data.category_confidence !== undefined) data.aiCategoryConfidence = response.data.category_confidence;
       }
 
-      return this.prisma.scrapedItem.update({ where: { id }, data });
+      await this.prisma.scrapedItem.update({ where: { id }, data });
+      this.logger.log(
+        `Extracted notice ${id}: ${meta.chars} chars, quality=${meta.quality ?? 'n/a'}, method=${meta.method ?? 'n/a'}`,
+      );
+      return meta;
     });
+  }
+
+  /**
+   * Rough mirror of the AI service's `_text_quality` scorer, used only to pick
+   * re-extraction candidates without shipping every notice's text over HTTP.
+   * Devanagari share decides it outright; otherwise English function-word
+   * density separates prose from legacy-font noise ("BXXYRCO ; WREVERE …").
+   */
+  private textQuality(text: string | null): number {
+    if (!text || text.trim().length < 40) return 0;
+    const sample = text.slice(0, 8000);
+    const nonSpace = sample.replace(/\s/g, '');
+    if (!nonSpace) return 0;
+
+    const devanagari = (nonSpace.match(/[ऀ-ॿ]/g) ?? []).length / nonSpace.length;
+    if (devanagari >= 0.15) return Math.min(1, 0.65 + devanagari);
+
+    const tokens = (sample.toLowerCase().match(/[a-z]{2,}/g) ?? []);
+    if (tokens.length < 25) return 0.6;
+    const hits = tokens.filter((t) => NoticesService.EN_STOPWORDS.has(t)).length;
+    return Math.max(Math.min(1, hits / tokens.length / 0.12), Math.min(0.6, devanagari * 4));
+  }
+
+  private static readonly EN_STOPWORDS = new Set(
+    ('the of and to in for is on by with as at from this that shall be will has have are was were ' +
+      'it its or an a not all may must which their there been such under within after before date ' +
+      'notice office ministry government nepal department').split(' '),
+  );
+
+  /** Quality score of a notice's stored text — surfaced so admins can see why. */
+  contentQuality(text: string | null): number {
+    return Math.round(this.textQuality(text) * 100) / 100;
+  }
+
+  /**
+   * Admin action: re-run attachment extraction for one notice, overwriting the
+   * stored text. Bypasses both the "already analyzed" sentinel and the
+   * single-flight failure cooldown — this is a deliberate retry, not the
+   * opportunistic background pass triggered by a page view.
+   */
+  async reextract(id: string) {
+    const notice = await this.prisma.scrapedItem.findUnique({
+      where: { id },
+      include: { attachments: { select: { url: true, mimeType: true } } },
+    });
+    if (!notice) throw new NotFoundException(`Notice ${id} not found`);
+
+    const pdfUrl = this.findPdfUrl(notice);
+    if (!pdfUrl) {
+      return {
+        id,
+        updated: false,
+        reason: 'This notice has no PDF attachment to extract text from.',
+      };
+    }
+
+    this.aiSingleFlight.reset(`pdf:${id}`);
+    const before = this.contentQuality(notice.contentText);
+
+    try {
+      const meta = await this.extractPdfAndCache(id, notice.title, pdfUrl);
+      const fresh = await this.prisma.scrapedItem.findUnique({
+        where: { id },
+        select: { contentText: true },
+      });
+      const after = this.contentQuality(fresh?.contentText ?? null);
+
+      // The stored text changed, so any memoized answer about it is stale.
+      this.qaCache.clear();
+      this.listCache.clear();
+
+      return {
+        id,
+        updated: meta.chars > 0,
+        chars: meta.chars,
+        isOcr: meta.isOcr,
+        method: meta.method,
+        qualityBefore: before,
+        qualityAfter: after,
+        reason:
+          meta.chars > 0
+            ? undefined
+            : 'Extraction produced no text — the attachment may be unreadable.',
+      };
+    } catch (err: any) {
+      if (err instanceof SingleFlightCooldownError) {
+        throw new ServiceUnavailableException('An extraction for this notice is already running.');
+      }
+      this.logger.warn(`Admin re-extract failed for ${id}: ${err.message}`);
+      throw new ServiceUnavailableException(`Extraction failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Admin action: re-extract many notices in the background.
+   *
+   * `scope: 'garbled'` (default) only touches notices whose stored text scores
+   * below the quality bar — the ones showing noise today. `'all'` re-runs every
+   * notice that has an attachment. Runs with a small concurrency so the AI
+   * service (OCR is CPU-heavy) isn't swamped, and returns immediately.
+   */
+  async reextractBulk(scope: 'garbled' | 'all' = 'garbled', limit = 200) {
+    const cappedLimit = Math.min(Math.max(1, limit), 1000);
+    const candidates = await this.prisma.scrapedItem.findMany({
+      where: { OR: [{ attachments: { some: {} } }, { attachmentUrl: { not: null } }] },
+      select: { id: true, title: true, contentText: true },
+      orderBy: { scrapedAt: 'desc' },
+      take: cappedLimit,
+    });
+
+    const selected =
+      scope === 'all'
+        ? candidates
+        : candidates.filter((n) => this.textQuality(n.contentText) < 0.55);
+
+    void this.runBulkReextract(selected.map((n) => n.id));
+
+    return {
+      scope,
+      scanned: candidates.length,
+      queued: selected.length,
+      message:
+        selected.length > 0
+          ? `Re-extracting ${selected.length} notice(s) in the background. Refresh in a few minutes.`
+          : 'No notices need re-extraction.',
+    };
+  }
+
+  /** Background worker for `reextractBulk` — bounded concurrency, never throws. */
+  private async runBulkReextract(ids: string[], concurrency = 2) {
+    let done = 0;
+    let improved = 0;
+
+    const worker = async () => {
+      for (;;) {
+        const id = ids[done++];
+        if (id === undefined) return;
+        try {
+          const result = await this.reextract(id);
+          if (result.updated && (result.qualityAfter ?? 0) > (result.qualityBefore ?? 0)) {
+            improved++;
+          }
+        } catch (err: any) {
+          this.logger.warn(`Bulk re-extract failed for ${id}: ${err.message}`);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
+    if (ids.length > 0) {
+      this.logger.log(`Bulk re-extract finished: ${ids.length} processed, ${improved} improved`);
+    }
   }
 
   private async analyzeAndCache(id: string, title: string, content: string) {
@@ -283,7 +482,14 @@ export class NoticesService {
   }
 
   async askQuestion(id: string, question: string): Promise<{ answer: string }> {
-    const notice = await this.prisma.scrapedItem.findUnique({ where: { id } });
+    const notice = await this.prisma.scrapedItem.findUnique({
+      where: { id },
+      include: {
+        attachments: {
+          select: { url: true, label: true, mimeType: true, sizeBytes: true },
+        },
+      },
+    });
     if (!notice) throw new NotFoundException(`Notice ${id} not found`);
 
     // Identical questions on the same notice share one LLM call (memoized in
@@ -297,7 +503,25 @@ export class NoticesService {
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.aiServiceUrl}/notices/ask`,
-          { title: notice.title, content: notice.contentText ?? '', question },
+          {
+            title: notice.title,
+            content: notice.contentText ?? '',
+            question,
+            // Everything the notice page itself shows. Sending only
+            // contentText meant the model couldn't answer "is there a PDF?"
+            // (it never saw the attachments) and had nothing to fall back on
+            // when a scanned/legacy-font PDF extracts as garbled text.
+            summary: notice.aiSummary ?? notice.summary ?? '',
+            summary_ne: notice.aiSummaryNe ?? '',
+            key_facts: Array.isArray(notice.keyFacts) ? notice.keyFacts : [],
+            metadata:
+              notice.metadata && typeof notice.metadata === 'object' ? notice.metadata : {},
+            category: notice.category,
+            source_label: notice.sourceLabel,
+            source_url: notice.sourceUrl,
+            published_at: notice.publishedAt?.toISOString() ?? null,
+            attachments: this.attachmentContext(notice),
+          },
           { timeout: 30000 },
         ),
       );

@@ -51,6 +51,15 @@ export class SingleFlight {
     return promise;
   }
 
+  /**
+   * Clear one key's failure cooldown so the next call runs immediately.
+   * For deliberate admin retries, which shouldn't wait out a backoff meant
+   * for automatic view-triggered work.
+   */
+  reset(key: string): void {
+    this.retryAt.delete(key);
+  }
+
   /** Drop all in-flight state and cooldowns (tests, admin "reset" actions). */
   clear(): void {
     this.inflight.clear();

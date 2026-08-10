@@ -17,6 +17,7 @@ Rules:
 - Ground every claim in the context. Never invent facts, numbers, dates, or names.
 - If multiple notices are relevant, synthesize the key information from each.
 - Use Markdown formatting: short paragraphs, bullet points for lists, **bold** for key facts/dates.
+- When several notices are relevant, or the answer lists items sharing the same fields (deadlines, categories, sources, fees), present them as a Markdown table with a header row. At least two rows and two columns, otherwise prose or bullets.
 - Keep answers concise (under 200 words for factual lookups, up to 300 for broader questions).
 - Answer in the same language the question is asked in. If the content is in Nepali but the question is in English, translate and explain in English.
 - If the context doesn't contain the answer, say so plainly — do not guess.
@@ -56,6 +57,17 @@ async def search_and_answer(
         top_k,
         question,
     )
+
+    # Greetings and thanks get a conversational reply — searching the notice
+    # corpus for "hello" only ever produced a "nothing found" message.
+    if llm.is_small_talk(question):
+        return {
+            "answer": await llm.generate_chat(
+                question, language, context_hint="Nepalese public notices"
+            ),
+            "sources": [],
+            "model_used": _model_name(),
+        }
 
     sources = []
 

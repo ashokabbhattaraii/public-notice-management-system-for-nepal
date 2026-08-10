@@ -2,10 +2,16 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { Search, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, X, SlidersHorizontal, Edit, RotateCcw, BadgeCheck, Tag, ShieldCheck } from "lucide-react"
+import { Search, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, X, SlidersHorizontal, Edit, RotateCcw, BadgeCheck, Tag, ShieldCheck, RefreshCw } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
-import { fetchScrapedItems, deleteScrapedItem, fetchScrapeSources, correctScrapedItem } from "@/lib/api"
+import {
+  fetchScrapedItems,
+  deleteScrapedItem,
+  fetchScrapeSources,
+  correctScrapedItem,
+  reextractNotices,
+} from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
 import type { ScrapedItem, ScrapedItemCategory, ScrapeSource } from "@/lib/types"
 
@@ -68,6 +74,34 @@ function AdminNoticesPageContent() {
   const [page, setPage] = useState(() => Number(searchParams.get(QP.page)) || 1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Bulk re-extraction. The API queues the work and returns immediately, so
+  // this reports what was queued rather than waiting for OCR to finish.
+  const [bulkReextracting, setBulkReextracting] = useState(false)
+  const [bulkNote, setBulkNote] = useState<{ tone: "info" | "error"; text: string } | null>(null)
+
+  async function handleBulkReextract(scope: "garbled" | "all") {
+    if (bulkReextracting) return
+    if (
+      scope === "all" &&
+      !confirm("Re-extract every notice with an attachment? This re-runs OCR and can take a while.")
+    ) {
+      return
+    }
+    setBulkReextracting(true)
+    setBulkNote(null)
+    try {
+      const result = await reextractNotices(scope)
+      setBulkNote({ tone: "info", text: result.message })
+    } catch (err) {
+      setBulkNote({
+        tone: "error",
+        text: err instanceof Error ? err.message : "Bulk re-extraction failed",
+      })
+    } finally {
+      setBulkReextracting(false)
+    }
+  }
 
   const [search, setSearch] = useState(() => searchParams.get(QP.search) ?? storedPrefs.search)
   const [debouncedSearch, setDebouncedSearch] = useState(
@@ -280,6 +314,36 @@ function AdminNoticesPageContent() {
               Notice management.
             </h1>
             <p className="mt-2 text-sm text-vez-mute">{total.toLocaleString()} scraped notices &amp; news</p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleBulkReextract("garbled")}
+                disabled={bulkReextracting}
+                className="flex items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Re-run extraction on notices whose stored text is unreadable"
+              >
+                {bulkReextracting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                Fix unreadable extractions
+              </button>
+              <button
+                onClick={() => handleBulkReextract("all")}
+                disabled={bulkReextracting}
+                className="rounded-full border border-vez-line px-4 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface disabled:cursor-not-allowed disabled:opacity-50"
+                title="Re-run extraction on every notice that has an attachment"
+              >
+                Re-extract all
+              </button>
+            </div>
+            {bulkNote && (
+              <p className={`text-xs ${bulkNote.tone === "error" ? "text-red-600" : "text-vez-mute"}`}>
+                {bulkNote.text}
+              </p>
+            )}
           </div>
         </div>
 
