@@ -1,4 +1,4 @@
-import { Module, Global } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -6,19 +6,12 @@ import { UsersModule } from './users.module';
 import { AuthController } from '../controllers/auth.controller';
 import { AuthService } from '../services/auth.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
-import { TokenRevocationService } from '../common/token-revocation.service';
+import { TokenRevocationModule } from '../common/token-revocation.module';
 
-/**
- * Global: JwtAuthGuard/OptionalJwtAuthGuard inject TokenRevocationService and
- * are used by controllers in other modules (documents, scraping, rag,
- * settings) that don't import AuthModule. Without @Global(), Nest can't
- * resolve that dependency there and silently leaves it undefined instead of
- * failing at boot, which crashes every guarded route at request time.
- */
-@Global()
 @Module({
   imports: [
     ConfigModule,
+    TokenRevocationModule,
     UsersModule,
     PassportModule,
     JwtModule.registerAsync({
@@ -32,7 +25,7 @@ import { TokenRevocationService } from '../common/token-revocation.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, TokenRevocationService],
-  exports: [AuthService, TokenRevocationService],
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService, TokenRevocationModule],
 })
 export class AuthModule {}
