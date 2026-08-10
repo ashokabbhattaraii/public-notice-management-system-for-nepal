@@ -622,12 +622,93 @@ export class ScrapingService {
    * notices that received a fresh AI summary this run — callers embed only
    * those into the vector store instead of re-embedding the whole corpus.
    */
+  /**
+   * Whether a scraped row deserves a catalogue entry.
+   *
+   * This product aggregates one thing: notices, news and press releases
+   * published by government bodies. A row with no real title is markup the
+   * extractor misread — navigation, a "read more" link, a category index —
+   * and storing it is what produced pages of "(untitled) / Other / —".
+   */
+  private isStorableItem(item: { title?: string | null; source_url?: string | null }): boolean {
+    if (!item?.source_url) return false;
+
+    const title = (item.title ?? '').replace(/\s+/g, ' ').trim();
+    if (title.length < 8) return false;
+    if (/^\(?untitled\)?$/i.test(title)) return false;
+
+    // Must contain real words in either script, not just digits/punctuation.
+    const letters = title.match(/[A-Za-zऀ-ॿ]/g)?.length ?? 0;
+    return letters >= 5;
+  }
+
+  /**
+   * Find (and optionally delete) catalogue rows that are not real notices —
+   * the "(untitled)" placeholders stored before admission control existed.
+   *
+   * Dry run by default: deletion is irreversible, so the caller must ask for
+   * it explicitly after seeing the count and a sample.
+   */
+  async cleanupJunkItems(opts: { deleteThem?: boolean; limit?: number } = {}) {
+    const limit = Math.min(Math.max(1, opts.limit ?? 5000), 20000);
+
+    // Cheap pre-filter in SQL (short or literally "(untitled)"), then apply
+    // the same predicate used on ingest so the two can never disagree.
+    const candidates = await this.prisma.scrapedItem.findMany({
+      where: { OR: [{ title: { contains: 'untitled' } }, { title: '' }] },
+      select: { id: true, title: true, sourceUrl: true, sourceLabel: true },
+      take: limit,
+    });
+    const junk = candidates.filter(
+      (row) => !this.isStorableItem({ title: row.title, source_url: row.sourceUrl }),
+    );
+
+    if (!opts.deleteThem) {
+      return {
+        deleted: 0,
+        found: junk.length,
+        dryRun: true,
+        sample: junk.slice(0, 5).map((r) => ({ title: r.title, source: r.sourceLabel })),
+        message:
+          junk.length > 0
+            ? `${junk.length} unusable row(s) found. Re-run with deleteThem=true to remove them.`
+            : 'No unusable rows found.',
+      };
+    }
+
+    const result = await this.prisma.scrapedItem.deleteMany({
+      where: { id: { in: junk.map((r) => r.id) } },
+    });
+    this.logger.warn(`Admin cleanup deleted ${result.count} unusable scraped row(s)`);
+    return {
+      deleted: result.count,
+      found: junk.length,
+      dryRun: false,
+      sample: [],
+      message: `Deleted ${result.count} unusable row(s).`,
+    };
+  }
+
   private async persistItems(
     runId: string,
     source: ScrapeSource,
     items: RawScrapedItem[],
     schemas: Record<string, unknown>,
   ): Promise<string[]> {
+    /* eslint-disable-next-line no-param-reassign */
+    // Defence in depth: the scraper already rejects non-notice rows, but a
+    // regression there must never refill the catalogue with "(untitled)"
+    // placeholders. Filtering here also keeps rejected rows out of the
+    // existence lookup below, so they cost no database work at all.
+    const rejected = items.filter((item) => !this.isStorableItem(item));
+    if (rejected.length > 0) {
+      this.logger.warn(
+        `Discarded ${rejected.length} unusable scraped row(s) (no usable title): ` +
+          rejected.slice(0, 3).map((i) => i.source_url).join(', '),
+      );
+      items = items.filter((item) => this.isStorableItem(item));
+    }
+
     // One batch lookup instead of one findUnique per item — the dedup
     // check itself shouldn't be N database round-trips.
     const existingItems = await this.prisma.scrapedItem.findMany({

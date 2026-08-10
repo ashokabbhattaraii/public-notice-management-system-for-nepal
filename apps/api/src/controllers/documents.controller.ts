@@ -13,8 +13,15 @@ import {
   ParseUUIDPipe,
   BadRequestException,
   ForbiddenException,
+  PayloadTooLargeException,
+  Catch,
+  ArgumentsHost,
+  ExceptionFilter,
+  UseFilters,
+  HttpException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { MulterError } from 'multer';
 import { diskStorage } from 'multer';
 import { Response } from 'express';
 import { User } from '@prisma/client';
@@ -37,7 +44,33 @@ const ALLOWED_MIME_TYPES = [
   'image/jpeg',
 ];
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+/**
+ * Embeddable document ceiling. Every uploaded file is chunked and embedded
+ * (CPU-bound, and the AI container runs under a hard memory limit), so the cap
+ * is a capacity decision, not a storage one. Override with MAX_UPLOAD_MB.
+ */
+export const MAX_FILE_SIZE_MB = Number(process.env.MAX_UPLOAD_MB ?? 5);
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+/**
+ * Multer aborts an oversized upload with a raw `MulterError`, which Nest would
+ * surface as an opaque 500. Translate it into the same 413 the explicit size
+ * check returns, so the UI always shows one clear message.
+ */
+@Catch(MulterError)
+class MulterExceptionFilter implements ExceptionFilter {
+  catch(error: MulterError, host: ArgumentsHost) {
+    const response = host.switchToHttp().getResponse();
+    const exception =
+      error.code === 'LIMIT_FILE_SIZE'
+        ? new PayloadTooLargeException(
+            `File is larger than the ${MAX_FILE_SIZE_MB} MB limit.`,
+          )
+        : new BadRequestException(`Upload failed: ${error.message}`);
+    const status = (exception as HttpException).getStatus();
+    response.status(status).json(exception.getResponse());
+  }
+}
 
 const storage = diskStorage({
   destination: path.resolve(__dirname, '..', '..', 'uploads'),
@@ -54,6 +87,7 @@ export class DocumentsController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @UseFilters(MulterExceptionFilter)
   @UseInterceptors(
     FileInterceptor('file', {
       storage,
@@ -79,6 +113,15 @@ export class DocumentsController {
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
+    }
+
+    // Multer truncates at the limit rather than rejecting, so verify the size
+    // that actually landed on disk and remove the partial file.
+    if (file.size > MAX_FILE_SIZE) {
+      fs.unlink(file.path, () => undefined);
+      throw new PayloadTooLargeException(
+        `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_FILE_SIZE_MB} MB.`,
+      );
     }
 
     // Compute SHA-256 hash for deduplication

@@ -270,6 +270,11 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 
+// Must match MAX_UPLOAD_MB on the API — every uploaded file is chunked and
+// embedded, so the ceiling is about embedding capacity, not storage.
+const MAX_UPLOAD_MB = 5
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+
 function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState("")
@@ -293,20 +298,32 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     }
   }
 
+  /** Reject oversized files here rather than after a long upload that 413s. */
+  const acceptFile = (candidate: File | null) => {
+    if (!candidate) {
+      setFile(null)
+      return
+    }
+    if (candidate.size > MAX_UPLOAD_BYTES) {
+      setFile(null)
+      setError(
+        `"${candidate.name}" is ${(candidate.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_UPLOAD_MB} MB.`,
+      )
+      return
+    }
+    setError("")
+    setFile(candidate)
+    if (!title) setTitle(candidate.name.replace(/\.[^.]+$/, ""))
+  }
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    const dropped = e.dataTransfer.files[0]
-    if (dropped) {
-      setFile(dropped)
-      if (!title) setTitle(dropped.name.replace(/\.[^.]+$/, ""))
-    }
+    acceptFile(e.dataTransfer.files[0] ?? null)
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0] ?? null
-    setFile(selected)
-    if (selected && !title) setTitle(selected.name.replace(/\.[^.]+$/, ""))
+    acceptFile(e.target.files?.[0] ?? null)
   }
 
   return (
@@ -364,7 +381,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                   </div>
                   <div className="text-center">
                     <p className="text-base font-medium text-vez-ink">Drop file here or click to browse</p>
-                    <p className="mt-1 text-sm text-vez-mute">PDF, DOCX, TXT, PNG, JPEG - up to 50 MB</p>
+                    <p className="mt-1 text-sm text-vez-mute">PDF, DOCX, TXT, PNG, JPEG - up to {MAX_UPLOAD_MB} MB</p>
                   </div>
                 </>
               )}

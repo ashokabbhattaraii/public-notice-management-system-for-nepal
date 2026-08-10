@@ -1,4 +1,5 @@
 import re
+import time
 from typing import Optional
 
 import numpy as np
@@ -6,6 +7,7 @@ import numpy as np
 from app import config
 from app import embeddings
 from app import llm
+from app.metrics import metrics  # the registry instance, not the module
 from app import store
 from app.logger import get_logger
 

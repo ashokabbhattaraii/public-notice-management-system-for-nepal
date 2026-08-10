@@ -60,12 +60,20 @@ export class RagService {
         model_used: response.data.model_used ?? 'unknown',
       };
     } catch (err: any) {
-      this.logger.error(`RAG query failed: ${err.message}`);
+      // axios reduces an upstream failure to "Request failed with status code
+      // 500". The AI service puts the real cause in the body, and without it
+      // there is no way to tell an embedding-model failure from a Qdrant
+      // outage from a bad query.
+      const upstream = err.response?.data?.error;
+      const status = err.response?.status;
+      this.logger.error(
+        `RAG query failed${status ? ` (AI service ${status})` : ''}: ${upstream ?? err.message}`,
+      );
 
-      if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+      if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || upstream) {
         return {
           answer:
-            'The AI service is currently unavailable. Please try again later.',
+            'The AI service could not answer right now. Please try again in a moment.',
           sources: [],
           model_used: 'none',
         };

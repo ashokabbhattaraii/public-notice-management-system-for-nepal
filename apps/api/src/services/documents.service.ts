@@ -289,8 +289,14 @@ export class DocumentsService {
 
       this.logger.log(`Document ${document.id} processed successfully`);
     } catch (err: any) {
+      // The AI service reports why it failed in the response body ("Failed to
+      // embed document: …", "No text could be extracted", …). Logging only
+      // axios's "Request failed with status code 500" hides all of it.
+      const upstream = err.response?.data?.error;
+      const status = err.response?.status;
       this.logger.error(
-        `Document processing failed for ${document.id}: ${err.message}`,
+        `Document processing failed for ${document.id}` +
+          `${status ? ` (AI service ${status})` : ''}: ${upstream ?? err.message}`,
       );
 
       await this.prisma.document.update({

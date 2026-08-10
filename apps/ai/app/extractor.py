@@ -84,6 +84,7 @@ _EN_STOPWORDS = {
     "date", "notice", "office", "ministry", "government", "nepal", "department",
 }
 _WORD_RE = re.compile(r"[A-Za-z]{2,}")
+_LATIN_ALPHA_RE = re.compile(r"[A-Za-z]")
 _MIN_TOKENS_FOR_SCORE = 25
 
 # Below this, a candidate is treated as unusable and OCR is attempted.
@@ -110,7 +111,18 @@ def _text_quality(text: str) -> float:
     if devanagari_ratio >= 0.15:
         # Real Devanagari: the more of it, the better. Nepali notices routinely
         # mix in Latin digits/abbreviations, so this saturates early.
-        return min(1.0, 0.65 + devanagari_ratio)
+        score = min(1.0, 0.65 + devanagari_ratio)
+
+        # In a document that is overwhelmingly Devanagari, stray Latin letters
+        # are almost always OCR mis-reads — the English model winning on a
+        # damaged glyph and turning "ने.सं." into "Aa:". Penalising them lets a
+        # clean nep-only pass outrank a noisier nep+eng one. The 0.6 floor
+        # keeps genuinely bilingual notices out of it.
+        if devanagari_ratio >= 0.6:
+            latin_ratio = len(_LATIN_ALPHA_RE.findall(non_space)) / len(non_space)
+            score -= min(0.5, latin_ratio * 3.0)
+
+        return max(0.0, score)
 
     tokens = [t.lower() for t in _WORD_RE.findall(sample)]
     if len(tokens) < _MIN_TOKENS_FOR_SCORE:
@@ -125,6 +137,85 @@ def _text_quality(text: str) -> float:
     # A little Devanagari present but below the threshold above still counts for
     # something — mixed-script documents shouldn't be judged on English alone.
     return max(score, min(0.6, devanagari_ratio * 4))
+
+
+def _scrub_latin_fragments(line: str) -> str:
+    """Remove short non-word Latin tokens from a Devanagari line.
+
+    Length 5 is the cut-off: it catches the debris seen in production ("Se",
+    "eh", "eS", "aa", "Ste", "Bay", "fafa") while leaving real words like
+    "Website", "Ministry" or "COVID" intact.
+    """
+    def replace(match: re.Match) -> str:
+        token = match.group(0)
+        if len(token) > 5 or token.lower() in _EN_STOPWORDS:
+            return token
+        # Acronyms are real content: COVID, WHO, PCR, SMS, IT.
+        if token.isupper() and len(token) >= 2:
+            return token
+        # Attached to a number ("COVID-19", "Ward-5", "3M") — real content.
+        start, end = match.span()
+        before = match.string[max(0, start - 1) : start]
+        after = match.string[end : end + 1]
+        # NB: `"" in "-/"` is True, so the emptiness checks are load-bearing —
+        # without them every token at a line boundary was treated as attached.
+        if (before and (before in "-/" or before.isdigit())) or (
+            after and (after in "-/" or after.isdigit())
+        ):
+            return token
+        return ""
+
+    cleaned = _WORD_RE.sub(replace, line)
+    # Collapse the gaps and any punctuation left stranded by the removal.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip(" |") if cleaned.strip(" |") else line
+
+
+def _strip_ocr_noise(text: str) -> str:
+    """Drop lines that are pure OCR debris from a Nepali scan.
+
+    Stamps, seals, signatures and letterhead graphics make Tesseract emit short
+    Latin fragments on their own lines ("Se eh eS", "arene", "Ste"). Only lines
+    that have *no* Devanagari, *no* digits, no URL/email, and consist solely of
+    short non-word Latin tokens are removed — so addresses, reference numbers
+    and any real English sentence survive.
+    """
+    if len(_DEVANAGARI_RE.findall(text)) < 40:
+        return text  # not a Devanagari document; leave it alone
+
+    kept: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            kept.append(line)
+            continue
+
+        has_link = "@" in stripped or "http" in stripped.lower() or "www." in stripped.lower()
+
+        if _DEVANAGARI_RE.search(stripped):
+            # A Devanagari line: keep it, but scrub the short Latin fragments
+            # OCR sprinkles in from stamps and seals ("… बोर्ड, aa |").
+            kept.append(line if has_link else _scrub_latin_fragments(line))
+            continue
+
+        if any(ch.isdigit() for ch in stripped) or has_link:
+            kept.append(line)
+            continue
+
+        tokens = _WORD_RE.findall(stripped)
+        letters = _LATIN_ALPHA_RE.findall(stripped)
+        if not letters:
+            kept.append(line)  # punctuation-only separator lines
+            continue
+
+        # Junk = every Latin token is short and not a recognisable word.
+        junk = all(len(t) <= 5 and t.lower() not in _EN_STOPWORDS for t in tokens)
+        if tokens and junk:
+            logger.debug("Dropping OCR noise line: %r", stripped[:60])
+            continue
+        kept.append(line)
+
+    return "\n".join(kept)
 
 
 def _normalize_text(text: str) -> str:
@@ -156,6 +247,8 @@ def extract_text(file_path: str, mime_type: str) -> dict:
         result = _extract_text_file(path)
 
     result["text"] = _normalize_text(result["text"])
+    if result.get("is_ocr"):
+        result["text"] = _normalize_text(_strip_ocr_noise(result["text"]))
     result.setdefault("method", "native")
     result.setdefault("quality", round(_text_quality(result["text"]), 3))
 
@@ -267,7 +360,10 @@ def _candidate_lang_sets() -> list[str]:
     if not available:
         return [config.TESSERACT_LANG]
 
-    ordered = [config.TESSERACT_LANG, "nep+eng", "nep", "hin+eng", "eng"]
+    # Single-language sets first: on a degraded Nepali scan, adding `eng` lets
+    # the English model win damaged glyphs ("ने.सं." → "Aa:"), so nep-only must
+    # get a fair hearing. Ties go to the earlier — i.e. the more specific — set.
+    ordered = ["nep", "eng", config.TESSERACT_LANG, "nep+eng", "hin+eng"]
     candidates: list[str] = []
     for spec in ordered:
         langs = spec.split("+")
@@ -296,10 +392,11 @@ def _choose_ocr_langs(first_page, pytesseract) -> str:
             continue
         score = _text_quality(text)
         logger.info("OCR probe lang=%s score=%.2f chars=%d", lang, score, len(text))
+        # Strictly greater, so an equal-scoring later candidate never displaces
+        # the more specific one. Every candidate is probed: the differences
+        # between them only show up on the noisy pages that matter.
         if score > best_score:
             best_lang, best_score = lang, score
-        if score >= 0.9:
-            break  # already clean, no need to try the rest
 
     logger.info("Selected OCR languages: %s (score=%.2f)", best_lang, best_score)
     return best_lang

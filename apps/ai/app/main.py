@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -20,7 +21,7 @@ from app import scraper
 from app import scrape_progress
 from app import secure_http
 from app import store
-from app import metrics
+from app.metrics import metrics  # the registry instance, not the module
 from app.logger import get_logger, set_request_id, setup_logging
 
 logger = get_logger(__name__)

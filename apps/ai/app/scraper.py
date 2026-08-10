@@ -26,7 +26,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -755,6 +755,136 @@ def _infer_category_from_slug(url: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+# ---------------------------------------------------------------------------
+# Item admission control
+#
+# This site aggregates ONE kind of thing: notices, news and press releases
+# published by government bodies. Everything a listing page also contains —
+# navigation, "read more" links, category/tag indexes, logins, social buttons —
+# used to be stored as "(untitled) / Other" rows with no date. The gates below
+# decide what earns a row.
+# ---------------------------------------------------------------------------
+
+# Path segments that are never an individual notice.
+_NON_ARTICLE_PATH_SEGMENTS = {
+    "category", "categories", "tag", "tags", "author", "search", "login",
+    "signin", "signup", "register", "logout", "contact", "about", "about-us",
+    "privacy", "terms", "sitemap", "feed", "rss", "gallery", "photo", "photos",
+    "video", "videos", "faq", "help", "cart", "checkout", "account", "profile",
+    "page", "pages", "wp-admin", "wp-login", "admin", "user", "users",
+    "organization", "staff", "team", "downloads-page",
+}
+
+# Link text that marks a navigation affordance rather than a document title.
+_NON_TITLE_PHRASES = {
+    "read more", "readmore", "view more", "view all", "see more", "see all",
+    "more", "details", "detail", "view detail", "view details", "click here",
+    "download", "downloads", "open", "next", "previous", "prev", "first",
+    "last", "home", "back", "continue", "learn more", "show more",
+    "थप", "थप पढ्नुहोस्", "विस्तृत", "हेर्नुहोस्", "डाउनलोड", "अगाडि", "पछाडि",
+    "सबै हेर्नुहोस्", "थप जानकारी",
+}
+
+_MIN_TITLE_CHARS = 8
+
+# Hosts we never follow — a government listing page linking to Facebook does
+# not make that Facebook post a public notice.
+_OFFSITE_HOST_HINTS = (
+    "facebook.", "twitter.", "x.com", "instagram.", "youtube.", "youtu.be",
+    "linkedin.", "tiktok.", "whatsapp.", "telegram.", "google.com/maps",
+)
+
+
+def _looks_like_title(text: str | None) -> bool:
+    """True when the string reads like a document title rather than a control."""
+    if not text:
+        return False
+    cleaned = " ".join(text.split()).strip(" .:-–—|")
+    if len(cleaned) < _MIN_TITLE_CHARS:
+        return False
+    if cleaned.lower() in _NON_TITLE_PHRASES:
+        return False
+    # Bare dates, numbers or reference codes are not titles.
+    if not re.search(r"[A-Za-zऀ-ॿ]", cleaned):
+        return False
+    letters = len(re.findall(r"[A-Za-zऀ-ॿ]", cleaned))
+    if letters < 5:
+        return False
+    return True
+
+
+def _is_probable_article_url(url: str, base_url: str, listing_urls: set[str]) -> bool:
+    """True when the URL plausibly points at one notice/news/press release."""
+    try:
+        parsed = urlparse(url)
+        base = urlparse(base_url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if any(hint in (parsed.netloc or "").lower() for hint in _OFFSITE_HOST_HINTS):
+        return False
+
+    # Stay on the source's own site: a government portal's own domain is the
+    # authority we aggregate. Sibling subdomains count (bfr.nrb.org.np belongs
+    # to www.nrb.org.np), so compare with the "www." prefix removed.
+    def registrable(netloc: str) -> str:
+        host = (netloc or "").lower().split(":")[0]
+        return host[4:] if host.startswith("www.") else host
+
+    host, base_host = registrable(parsed.netloc), registrable(base.netloc)
+    if host and base_host and not (
+        host == base_host
+        or host.endswith("." + base_host)
+        or base_host.endswith("." + host)
+    ):
+        return False
+
+    normalized = url.split("#")[0].rstrip("/")
+    if not normalized or normalized in {u.split("#")[0].rstrip("/") for u in listing_urls}:
+        return False
+    if normalized.rstrip("/") == base_url.rstrip("/"):
+        return False
+
+    path = (parsed.path or "").lower()
+    segments = [s for s in path.strip("/").split("/") if s]
+    if not segments and not parsed.query:
+        return False  # the site root
+
+    # A direct document link is a legitimate notice on many portals.
+    if path.endswith(_FILE_EXTENSIONS):
+        return True
+
+    if any(seg in _NON_ARTICLE_PATH_SEGMENTS for seg in segments):
+        return False
+
+    return True
+
+
+def _title_from_attachment(url: str | None) -> str | None:
+    """Humanised filename, used when a portal links a PDF with no link text."""
+    if not url:
+        return None
+    name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
+    name = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", name)
+    name = re.sub(r"[_\-+]+", " ", name)
+    name = re.sub(r"\s{2,}", " ", name).strip()
+
+    # Drop a trailing upload-id like "paripatra1_kjf9zr" → letters AND digits
+    # mixed in one short token. Real words ("statement") are kept.
+    words = name.split()
+    if words and len(words[-1]) <= 8 and re.search(r"\d", words[-1]) and re.search(r"[a-z]", words[-1], re.I):
+        words = words[:-1]
+    name = " ".join(words)
+
+    # One bare token ("paripatra1") is a filename, not a title — better to fall
+    # through to the detail page's heading than to store noise.
+    if len(words) < 2:
+        return None
+    return name if _looks_like_title(name) else None
+
+
 def _sitemap_section(urls: list[str]) -> str:
     """The most common leading path segment across sitemap URLs (e.g.
     /content/), used as a category-inference fallback when individual URLs
@@ -1304,6 +1434,10 @@ async def scrape_source(
 
     browser_config = BrowserConfig(headless=True, verbose=False)
 
+    # Listing pages themselves are never items — a "Notices" link inside the
+    # notices page is pagination/self-reference, not a notice.
+    listing_urls = {u for u in category_urls.values() if u}
+
     async with AsyncWebCrawler(config=browser_config) as crawler:
         for category, listing_url in category_urls.items():
             if not listing_url:
@@ -1333,16 +1467,34 @@ async def scrape_source(
 
                 new_rows_on_page = 0
                 unknown_rows_on_page = 0
+                rejected_on_page = 0
                 for row in rows:
                     source_url = _absolute_url(base_url, row.get("detail_href"))
                     if not source_url or source_url in seen_urls:
                         continue
+
+                    # Admission control: only individual notices/news/press
+                    # releases from this government site become items.
+                    if not _is_probable_article_url(source_url, base_url, listing_urls):
+                        rejected_on_page += 1
+                        continue
+
                     seen_urls.add(source_url)
                     new_rows_on_page += 1
                     if source_url not in known_urls:
                         unknown_rows_on_page += 1
 
-                    title = _clean_text(row.get("title")) or "(untitled)"
+                    title = _clean_text(row.get("title"))
+                    if not _looks_like_title(title):
+                        # Listing markup often has the real title in a sibling
+                        # attribute or only on the detail page.
+                        title = (
+                            _clean_text(row.get("title_attr"))
+                            or _title_from_attachment(
+                                _absolute_url(base_url, row.get("attachment_href"))
+                            )
+                            or title
+                        )
                     published_at = _parse_published(row.get("published_raw"))
                     attachment_url = _absolute_url(base_url, row.get("attachment_href"))
 
@@ -1357,16 +1509,19 @@ async def scrape_source(
                     content_text = None
                     content_html = None
                     detail_attachments = []
-                    if fetch_detail and source_url not in known_urls:
-                        report(f"Fetching detail: {title[:60]}")
+                    # Fetch the detail page when we need content OR still lack a
+                    # usable title — the detail page's <h1> is the last and most
+                    # reliable source of one.
+                    if fetch_detail and (source_url not in known_urls or not _looks_like_title(title)):
+                        report(f"Fetching detail: {(title or source_url)[:60]}")
                         detail = await _crawl_detail_generic(crawler, source_url, base_url)
                         if detail:
                             content_text = detail.get("content_text")
                             content_html = detail.get("content_html")
                             if not published_at:
                                 published_at = _parse_published(detail.get("published_raw"))
-                            if title == "(untitled)" and detail.get("title"):
-                                title = detail["title"]
+                            if not _looks_like_title(title) and _looks_like_title(detail.get("title")):
+                                title = _clean_text(detail["title"])
                             if not attachment_url and detail.get("attachment_url"):
                                 attachment_url = detail["attachment_url"]
                             detail_attachments = detail.get("attachments") or []
@@ -1381,6 +1536,29 @@ async def scrape_source(
                         if att["url"] not in seen_att_urls:
                             attachments.append(AttachmentInfo(url=att["url"], label=att.get("label")))
                             seen_att_urls.add(att["url"])
+
+                    # Last chance: a document filename beats no title at all.
+                    # Many portals link the PDF directly from the listing, so
+                    # the document may be the row's own URL.
+                    if not _looks_like_title(title):
+                        title = (
+                            _title_from_attachment(attachment_url)
+                            or _title_from_attachment(
+                                source_url if source_url.lower().endswith(_FILE_EXTENSIONS) else None
+                            )
+                            or title
+                        )
+
+                    # Final gate. A row with no recoverable title is markup we
+                    # misread, not a notice — storing it produced the pages of
+                    # "(untitled) / Other / —" the admin table was full of.
+                    if not _looks_like_title(title):
+                        logger.debug("Skipping untitled row: %s", source_url)
+                        rejected_on_page += 1
+                        new_rows_on_page -= 1
+                        if source_url not in known_urls:
+                            unknown_rows_on_page -= 1
+                        continue
 
                     # Extract metadata
                     meta = _extract_metadata(title, content_text)
@@ -1412,6 +1590,7 @@ async def scrape_source(
                 report(
                     f"{category.title()} page {page_index + 1}: {new_rows_on_page} row(s) — "
                     f"{unknown_rows_on_page} new, {already_known_on_page} already scraped"
+                    + (f", {rejected_on_page} rejected (not a notice)" if rejected_on_page else "")
                 )
 
                 if new_rows_on_page == 0:
@@ -1467,6 +1646,7 @@ async def scrape_sitemap_urls(
     items: list[ScrapedItem] = []
     summarize_tasks: list[asyncio.Task] = []
     seen_urls: set[str] = set()
+    rejected = 0
     semaphore = _summarize_semaphore(summarize_concurrency)
 
     # Sitemap URLs often share a "section" path segment (e.g. /content/, or a
@@ -1482,9 +1662,14 @@ async def scrape_sitemap_urls(
             if source_url in known_urls:
                 report(f"Skipping already-scraped: {source_url[:80]}")
                 continue
+            # Same admission control as the listing crawl: a sitemap lists
+            # every page a site has, including contact and category pages.
+            if not _is_probable_article_url(source_url, base_url, set()):
+                rejected += 1
+                continue
             seen_urls.add(source_url)
 
-            title = "(untitled)"
+            title = None
             published_at = None
             attachment_url = None
             content_text = None
@@ -1495,7 +1680,8 @@ async def scrape_sitemap_urls(
             report(f"Fetching detail ({index + 1}/{len(urls)}): {source_url[:90]}")
             detail = await _crawl_detail_generic(crawler, source_url, base_url)
             if detail:
-                title = detail.get("title") or title
+                if _looks_like_title(detail.get("title")):
+                    title = _clean_text(detail["title"])
                 published_at = _parse_published(detail.get("published_raw"))
                 content_text = detail.get("content_text")
                 content_html = detail.get("content_html")
@@ -1508,9 +1694,16 @@ async def scrape_sitemap_urls(
                     if att["url"] not in seen_att_urls:
                         attachments.append(AttachmentInfo(url=att["url"], label=att.get("label")))
                         seen_att_urls.add(att["url"])
-                meta = _extract_metadata(title, content_text)
+                meta = _extract_metadata(title or "", content_text)
                 if meta:
                     meta["sitemapUrl"] = source_url
+
+            if not _looks_like_title(title):
+                title = _title_from_attachment(attachment_url)
+            if not _looks_like_title(title):
+                logger.debug("Skipping untitled sitemap URL: %s", source_url)
+                rejected += 1
+                continue
 
             slug_category, source_slug = _infer_category_from_slug(source_url)
             resolved_category = slug_category or default_category or "OTHER"
@@ -1543,7 +1736,10 @@ async def scrape_sitemap_urls(
         failed = len(results) - succeeded
         report(f"Summarization complete: {succeeded} succeeded, {failed} failed/skipped")
 
-    report(f"Sitemap scrape complete — {len(items)} item(s) total")
+    report(
+        f"Sitemap scrape complete — {len(items)} item(s) total"
+        + (f", {rejected} URL(s) rejected (not a notice)" if rejected else "")
+    )
     logger.info(
         "Sitemap scrape produced %d item(s) from %d URL(s) for base_url=%s",
         len(items),

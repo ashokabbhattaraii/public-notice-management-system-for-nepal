@@ -8,6 +8,7 @@ Provides a hardened AsyncClient that:
 - Validates response Content-Type for expected types
 """
 
+import asyncio
 import ipaddress
 import logging
 from typing import Optional
@@ -45,6 +46,20 @@ _ALLOWED_CONTENT_TYPES = {
     "application/vnd.adobe.pdf",
 }
 
+# Nepali government portals routinely serve PDFs as a generic download stream
+# (or with no Content-Type at all). Rejecting those loses real documents, so
+# they are accepted here and the bytes are checked for the %PDF- signature
+# instead — verifying the content is strictly safer than trusting the header.
+_PERMISSIVE_PDF_CONTENT_TYPES = {
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/download",
+    "application/force-download",
+    "application/x-download",
+}
+
+_PDF_MAGIC = b"%PDF-"
+
 
 def _is_blocked_ip(host: str) -> bool:
     """Check if hostname resolves to a blocked IP address."""
@@ -81,6 +96,39 @@ def _validate_url(url: str) -> tuple[bool, Optional[str]]:
     return True, None
 
 
+async def _host_resolves_to_blocked(host: str) -> tuple[bool, Optional[str]]:
+    """Resolve a hostname and check every address against the blocked ranges.
+
+    The literal-IP check can't catch `internal.example.com → 10.0.0.5`, and
+    following redirects means an external host can hand us an internal one.
+    Resolution failures are not treated as blocking — the request will fail on
+    its own if the host genuinely doesn't resolve.
+    """
+    try:
+        ipaddress.ip_address(host)
+        return False, None  # literal IP, already covered by _is_blocked_ip
+    except ValueError:
+        pass
+
+    try:
+        loop = asyncio.get_running_loop()
+        infos = await loop.getaddrinfo(host, None)
+    except Exception as e:
+        logger.debug("DNS check skipped for %s: %s", host, e)
+        return False, None
+
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if any(ip in net for net in _BLOCKED_NETWORKS) or addr in _METADATA_IPS:
+            return True, f"{host} resolves to blocked address {addr}"
+
+    return False, None
+
+
 async def _validate_response(response: httpx.Response, expected_content_types: set[str]) -> tuple[bool, Optional[str]]:
     """Validate response headers after request completes."""
     # Check Content-Type
@@ -99,9 +147,11 @@ async def _validate_response(response: httpx.Response, expected_content_types: s
                 if any(ip in net for net in _BLOCKED_NETWORKS) or parsed.hostname in _METADATA_IPS:
                     return False, f"Redirect to blocked IP: {parsed.hostname}"
             except ValueError:
-                # Hostname, not IP literal — would need DNS resolution to fully validate
-                # For now, allow but log
-                pass
+                # Hostname: resolve it. Matters most after a redirect, where
+                # the final host was chosen by the remote server.
+                blocked, reason = await _host_resolves_to_blocked(parsed.hostname)
+                if blocked:
+                    return False, f"Redirect to blocked host: {reason}"
     except Exception:
         pass
 
@@ -158,6 +208,12 @@ class SecureHttpClient:
         if not ok:
             raise ValueError(f"URL validation failed: {err}")
 
+        host = urlparse(url).hostname
+        if host:
+            blocked, reason = await _host_resolves_to_blocked(host)
+            if blocked:
+                raise ValueError(f"URL validation failed: {reason}")
+
         if not self._client:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
@@ -192,14 +248,20 @@ async def secure_download_pdf(
 
     Returns the raw PDF bytes.
     """
+    accepted_types = _ALLOWED_CONTENT_TYPES | _PERMISSIVE_PDF_CONTENT_TYPES
+
     async with SecureHttpClient(
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
         total_timeout=read_timeout + connect_timeout + 5,
-        max_redirects=0,  # No redirects for PDFs
-        allowed_content_types=_ALLOWED_CONTENT_TYPES,
+        # Government portals redirect constantly (http→https, /files→CDN). With
+        # redirects disabled the 302 itself was returned, its HTML body failed
+        # the Content-Type check, and the download died with a confusing 400.
+        # Each hop's final URL is still validated against the blocked ranges.
+        max_redirects=3,
+        allowed_content_types=accepted_types,
     ) as client:
-        response = await client.get(url, expected_content_types=_ALLOWED_CONTENT_TYPES)
+        response = await client.get(url, expected_content_types=accepted_types)
 
         # Enforce size limit while streaming
         content_length = response.headers.get("content-length")
@@ -215,4 +277,17 @@ async def secure_download_pdf(
                 raise ValueError(f"File exceeds size limit ({max_size_bytes} bytes)")
             chunks.append(chunk)
 
-        return b"".join(chunks)
+        data = b"".join(chunks)
+
+        # Content check: the bytes must actually be a PDF. This is what makes
+        # the relaxed Content-Type allowlist safe — an HTML error page or a
+        # login redirect served as octet-stream is rejected here.
+        if _PDF_MAGIC not in data[:1024]:
+            preview = data[:64].decode("utf-8", errors="replace").strip()
+            raise ValueError(
+                f"Downloaded file is not a PDF (no %PDF- signature; "
+                f"content-type={response.headers.get('content-type', 'none')}, "
+                f"{len(data)} bytes, starts with: {preview!r})"
+            )
+
+        return data

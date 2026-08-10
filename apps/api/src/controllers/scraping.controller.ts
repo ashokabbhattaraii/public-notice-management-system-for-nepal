@@ -146,6 +146,19 @@ export class ScrapingController {
     return this.noticesService.reextractBulk(scope ?? 'garbled', limit ?? 200);
   }
 
+  /**
+   * Report (and with `deleteThem: true`, remove) catalogue rows that are not
+   * real notices — the "(untitled)" placeholders stored before the scraper
+   * had admission control. Dry run unless deletion is explicitly requested.
+   */
+  @Post('items/cleanup-junk')
+  async cleanupJunk(
+    @Body('deleteThem') deleteThem?: boolean,
+    @Body('limit') limit?: number,
+  ) {
+    return this.scrapingService.cleanupJunkItems({ deleteThem: deleteThem === true, limit });
+  }
+
   /** Re-run extraction for a single notice, overwriting its stored text. */
   @Post('items/:id/reextract')
   async reextractItem(@Param('id', ParseUUIDPipe) id: string) {

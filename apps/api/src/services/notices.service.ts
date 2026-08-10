@@ -245,6 +245,11 @@ export class NoticesService {
           ),
         );
       } catch (err: any) {
+        // axios reduces an upstream 4xx to "Request failed with status code
+        // 400", which says nothing. The AI service puts the actual reason
+        // (bad URL, not a PDF, download blocked) in the response body.
+        const upstream = err.response?.data?.error;
+        if (upstream) err.message = upstream;
         this.logger.warn(`PDF extraction failed for notice ${id}: ${err.message}`);
         throw err;
       }

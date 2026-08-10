@@ -123,7 +123,19 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
       tokenStore.clear()
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
     }
-    throw new Error((await res.text()) || `Request failed: ${res.status}`)
+    // Nest error bodies are JSON ({statusCode, message, error}); surface the
+    // message so UI toasts read "Downloaded file is not a PDF …" instead of a
+    // dump of the whole envelope.
+    const body = await res.text()
+    let message = body
+    try {
+      const parsed = JSON.parse(body)
+      const raw = parsed?.message ?? parsed?.error
+      if (raw) message = Array.isArray(raw) ? raw.join(", ") : String(raw)
+    } catch {
+      // not JSON — use the raw body
+    }
+    throw new Error(message || `Request failed: ${res.status}`)
   }
   return res.json() as Promise<T>
 }
