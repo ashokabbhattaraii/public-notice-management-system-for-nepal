@@ -225,9 +225,20 @@ class SecureHttpClient:
             response = await self._client.get(url, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise ValueError(f"HTTP {e.response.status_code}: {e.response.reason_phrase}") from e
+            reason = e.response.reason_phrase or "no reason given"
+            raise ValueError(f"HTTP {e.response.status_code} ({reason}) from {url}") from e
         except httpx.RequestError as e:
-            raise ValueError(f"Request failed: {e}") from e
+            # httpx timeout/connect errors frequently stringify to "", which
+            # produced the useless "Request failed: " admins were seeing. The
+            # exception class is the actual diagnosis (ConnectTimeout = the host
+            # never answered; ConnectError = DNS/refused), so always name it.
+            detail = str(e).strip()
+            raise ValueError(
+                f"Request failed: {type(e).__name__}"
+                + (f" — {detail}" if detail else "")
+                + f" (url={url}, connect timeout {self.connect_timeout}s,"
+                + f" read timeout {self.read_timeout}s)"
+            ) from e
 
         # Post-flight validation
         ok, err = await _validate_response(response, expected_content_types or self.allowed_content_types)
@@ -240,8 +251,11 @@ class SecureHttpClient:
 async def secure_download_pdf(
     url: str,
     *,
-    connect_timeout: float = 5.0,
-    read_timeout: float = 30.0,
+    # Nepali government hosts are frequently slow to complete a TLS handshake;
+    # 5s was tight enough to time out on healthy-but-sluggish servers. The API
+    # allows 90s for the whole extract call, so there is room.
+    connect_timeout: float = 15.0,
+    read_timeout: float = 45.0,
     max_size_bytes: int = 50 * 1024 * 1024,  # 50 MB
 ) -> bytes:
     """Download a PDF with full SSRF protection and size limit.

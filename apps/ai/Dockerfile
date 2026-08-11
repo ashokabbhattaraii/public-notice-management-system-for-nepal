@@ -30,6 +30,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         tesseract-ocr-nep \
     && rm -rf /var/lib/apt/lists/*
 
+# Fixed, user-independent browser location. Playwright otherwise resolves it
+# from $HOME (~/.cache/ms-playwright), so a browser downloaded as one user is
+# invisible to the process that launches it — one of the ways scrape runs end
+# up with "Executable doesn't exist".
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # ---------- Dependencies ----------
 FROM base AS deps
 
@@ -84,6 +90,18 @@ COPY --from=deps /usr/local/lib/python3.11/site-packages \
 
 COPY --from=deps /usr/local/bin \
     /usr/local/bin
+
+# The browser crawl4ai drives. Installed here, in the final stage, for two
+# reasons: apt packages from `deps` are not copied forward (only site-packages
+# and /usr/local/bin are), and `--with-deps` needs its shared libraries to land
+# in the image that actually launches Chromium. Doing it at build time also
+# keeps scrape runs off the network and turns a broken browser into a build
+# failure rather than a failed run.
+#
+# Ordered before the app COPY so code changes don't re-download the browser.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # Application code.
 COPY apps/ai/app ./app
