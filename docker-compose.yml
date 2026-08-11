@@ -61,8 +61,8 @@ services:
       HOSTNAME: 0.0.0.0
       UPLOAD_DIR: /app/data/uploads
 
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
 
     volumes:
       - ai-models:/app/models
