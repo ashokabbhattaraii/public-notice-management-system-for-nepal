@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from app import config
@@ -29,6 +30,12 @@ logger = get_logger(__name__)
 _DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
 _TESSERACT_AVAILABLE: bool | None = None
 _TESSERACT_LANGS_CACHE: dict[str, list[str]] | None = None
+
+# extract_text() runs in a worker thread (asyncio.to_thread) — from document
+# uploads and from scraping's per-notice PDF extraction alike — so this must
+# be a threading.Semaphore, not an asyncio one, to actually serialize access
+# across those threads. See config.OCR_MAX_CONCURRENCY.
+_OCR_SEMAPHORE = threading.Semaphore(config.OCR_MAX_CONCURRENCY)
 
 
 def _check_tesseract() -> bool:
@@ -89,6 +96,42 @@ _MIN_TOKENS_FOR_SCORE = 25
 
 # Below this, a candidate is treated as unusable and OCR is attempted.
 QUALITY_THRESHOLD = 0.55
+
+
+def is_readable_text(text: str, threshold: float = QUALITY_THRESHOLD) -> bool:
+    """Public wrapper for callers outside this module deciding whether stored
+    text is safe to hand to an LLM/user (e.g. main.py excluding a garbled
+    legacy-font extraction from a Q&A prompt).
+
+    _text_quality() alone isn't strict enough here: its "too little running
+    text to judge" branch deliberately gives short/sparse pages (forms,
+    tables) the benefit of the doubt so they aren't needlessly OCR'd — but
+    that same leniency lets pure symbol noise ("O:12(3.5A" style legacy-font
+    garbage, which is short on real words but not actually sparse) through
+    as "readable". A caller *displaying this to a human* needs a stricter
+    bar, so Latin-dominant text must also be mostly letters.
+
+    That letter-ratio test is deliberately NOT applied to Devanagari-dominant
+    text: real Nepali reports are full of tables, Devanagari digits and
+    punctuation, so a genuine 190-page progress report can sit at ~35%
+    letters and would be wrongly rejected. Devanagari presence is itself
+    strong evidence of real extracted text, which _text_quality already
+    scores on directly.
+    """
+    if _text_quality(text) < threshold:
+        return False
+
+    sample = text[:2000]
+    non_space = [c for c in sample if not c.isspace()]
+    if len(non_space) < 20:
+        return True  # too short for the letter-ratio check to mean anything
+
+    devanagari = sum(1 for c in non_space if "ऀ" <= c <= "ॿ")
+    if devanagari / len(non_space) >= 0.15:
+        return True  # real Nepali script — tables/digits shouldn't disqualify it
+
+    letters = sum(1 for c in non_space if c.isalpha())
+    return (letters / len(non_space)) >= 0.5
 
 
 def _text_quality(text: str) -> float:
@@ -218,9 +261,17 @@ def _strip_ocr_noise(text: str) -> str:
     return "\n".join(kept)
 
 
+_ZERO_WIDTH_RE = re.compile("[\u200B-\u200F\uFEFF]")
+
+
 def _normalize_text(text: str) -> str:
     """Light normalization: fix common OCR artifacts and normalize whitespace."""
     text = text.replace("\x0c", "\n\n")
+    # Zero-width space/ZWNJ/ZWJ/LRM/RLM + BOM — glyph-shaping artifacts from
+    # legacy Devanagari PDF fonts that read as literal invisible characters
+    # once extracted, breaking words apart visually (e.g. "सङ्‍घीय" showing
+    # as "सङ्‍ घीय").
+    text = _ZERO_WIDTH_RE.sub("", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -325,7 +376,10 @@ def _extract_pdf(path: Path) -> dict:
             best[0],
             sparse,
         )
-        ocr = _ocr_pdf(path, page_count or 1)
+        if _OCR_SEMAPHORE._value <= 0:  # noqa: SLF001 — best-effort log only
+            logger.info("OCR queue full (max %d concurrent) — waiting for a slot", config.OCR_MAX_CONCURRENCY)
+        with _OCR_SEMAPHORE:
+            ocr = _ocr_pdf(path, page_count or 1)
         if ocr["text"].strip():
             ocr_score = _text_quality(ocr["text"])
             logger.info("OCR scored %.2f vs native %.2f", ocr_score, best[0])

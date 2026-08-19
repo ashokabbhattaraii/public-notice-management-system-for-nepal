@@ -4,7 +4,6 @@ import React, { useState } from "react"
 import {
   Mail,
   MessageCircle,
-  Phone,
   CheckCircle,
   XCircle,
   Loader2,
@@ -13,6 +12,7 @@ import {
   Save,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
+import { AdminWhatsappCard } from "@/components/admin/admin-whatsapp-card"
 import { Header } from "@/components/layout/header"
 
 interface AlertChannel {
@@ -43,19 +43,6 @@ export default function AdminAlertChannelsPage() {
         { key: "username", label: "Username", value: "notices@suchana.ai", placeholder: "user@example.com" },
         { key: "password", label: "Password", value: "••••••••", placeholder: "App password" },
         { key: "from", label: "From Address", value: "notices@suchana.ai", placeholder: "noreply@example.com" },
-      ],
-    },
-    {
-      id: "whatsapp",
-      name: "WhatsApp",
-      icon: Phone,
-      enabled: false,
-      status: "not_configured",
-      lastTested: null,
-      fields: [
-        { key: "api_key", label: "API Key / Token", value: "", placeholder: "Meta Cloud API or Twilio token" },
-        { key: "phone_id", label: "Phone Number ID", value: "", placeholder: "Business phone number ID" },
-        { key: "sender", label: "Sender Phone Number", value: "", placeholder: "+977XXXXXXXXXX" },
       ],
     },
     {
@@ -149,6 +136,8 @@ export default function AdminAlertChannelsPage() {
         </div>
 
         <div className="space-y-6">
+          <AdminWhatsappCard />
+
           {channels.map((channel) => {
             const Icon = channel.icon
             return (

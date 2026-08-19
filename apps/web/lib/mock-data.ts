@@ -1,4 +1,4 @@
-import { Notice, User, ScrapingSource, AlertRule, Activity } from "./types"
+import { Notice, User, ScrapingSource, Activity } from "./types"
 
 interface MockRagDocument {
   id: string; title: string; category: string; uploadedAt: string
@@ -430,39 +430,6 @@ export const mockScrapingSources: ScrapingSource[] = [
     status: "error",
     lastRun: "2026-05-30T12:00:00Z",
     itemsScraped: 456,
-  },
-]
-
-export const mockAlertRules: AlertRule[] = [
-  {
-    id: "a1",
-    userId: "2",
-    type: "keyword",
-    name: "Section Officer Updates",
-    conditions: ["section officer", "lok sewa", "PSC"],
-    enabled: true,
-    createdAt: "2026-04-01T10:00:00Z",
-    matchCount: 12,
-  },
-  {
-    id: "a2",
-    userId: "2",
-    type: "category",
-    name: "All Exam Notices",
-    conditions: ["exams"],
-    enabled: true,
-    createdAt: "2026-03-15T08:00:00Z",
-    matchCount: 34,
-  },
-  {
-    id: "a3",
-    userId: "2",
-    type: "organization",
-    name: "NRB Policy Updates",
-    conditions: ["Nepal Rastra Bank"],
-    enabled: false,
-    createdAt: "2026-05-01T14:00:00Z",
-    matchCount: 5,
   },
 ]
 

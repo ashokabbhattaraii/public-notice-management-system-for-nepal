@@ -33,9 +33,125 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
-  documents   Document[]
+  // WhatsApp alert channel — a verified number opts a user into WhatsApp
+  // delivery for their AlertRules. The otp/pending fields hold a single
+  // in-flight verification attempt (one at a time per user).
+  whatsappNumber         String?   @map("whatsapp_number")
+  whatsappVerified       Boolean   @default(false) @map("whatsapp_verified")
+  whatsappAlertsEnabled  Boolean   @default(false) @map("whatsapp_alerts_enabled")
+  whatsappPendingNumber  String?   @map("whatsapp_pending_number")
+  whatsappOtpCode        String?   @map("whatsapp_otp_code")
+  whatsappOtpExpiresAt   DateTime? @map("whatsapp_otp_expires_at")
+  whatsappOtpRequestedAt DateTime? @map("whatsapp_otp_requested_at")
+  // Delivery cadence for matched alerts: instant (one WhatsApp message per
+  // match) or a batched digest. HIGH-priority AlertRules always bypass this
+  // and send instantly regardless (see AlertMatchingService).
+  digestFrequency  DigestFrequency @default(INSTANT) @map("digest_frequency")
+  lastDigestSentAt DateTime?       @map("last_digest_sent_at")
+
+  documents         Document[]
+  alertRules        AlertRule[]
+  alertNotifications AlertNotification[]
+
+  // Membership. A user with no row is treated as FREE (see PlansService), so
+  // signup needs no billing write and existing accounts keep working.
+  subscription   Subscription?
+  usageCounters  UsageCounter[]
+  usageEvents    UsageEvent[]
 
   @@map("users")
+}
+
+enum AlertPriority {
+  NORMAL
+  HIGH
+}
+
+enum AlertUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DigestFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+}
+
+// A user-defined rule matched against newly scraped notices. Categories and
+// tags are the required primary basis for a rule — at least one of the two
+// must be set (see AlertsService.assertHasPrimaryDimension). Every other
+// dimension (keywords, excludeKeywords, organizations, minUrgency,
+// deadlineWithinDays) is an optional refinement layered on top; none of them
+// may be used as the sole basis of a rule. Every non-empty dimension is
+// AND'd together; values within a single dimension (e.g. multiple keywords)
+// are OR'd. Matches for users with whatsappAlertsEnabled trigger a WhatsApp
+// message, instantly or batched into a digest depending on
+// User.digestFrequency (see AlertMatchingService / AlertDigestService).
+model AlertRule {
+  id       String        @id @default(uuid()) @db.Uuid
+  userId   String        @map("user_id") @db.Uuid
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name     String
+  enabled  Boolean       @default(true)
+  // HIGH bypasses the user's digest setting and always sends instantly —
+  // for rules the user considers time-sensitive (e.g. deadline alerts).
+  priority AlertPriority @default(NORMAL)
+
+  // Primary basis (required — at least one of the two): notice's category
+  // must be one of these, and/or notice's AI-assigned tags must include at
+  // least one of these.
+  categories ScrapedItemCategory[] @default([])
+  tags       String[]              @default([])
+
+  // Optional refinements — layered on top of category/tags, never usable alone.
+  // Include: notice must contain at least one of these (title/summary/content).
+  keywords        String[] @default([])
+  // Exclude: if the notice contains ANY of these, the rule never fires,
+  // even if every other dimension matches.
+  excludeKeywords String[] @default([]) @map("exclude_keywords")
+  // Notice's organization/source must contain at least one of these.
+  organizations   String[] @default([])
+  // Notice's AI-assessed urgency must be at or above this level.
+  minUrgency      AlertUrgency? @map("min_urgency")
+  // Notice must have an extracted deadline within this many days from now.
+  deadlineWithinDays Int? @map("deadline_within_days")
+
+  matchCount Int      @default(0) @map("match_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  notifications AlertNotification[]
+
+  @@index([userId])
+  @@map("alert_rules")
+}
+
+enum AlertNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// One (user, scrapedItem) delivery record — the unique constraint is what
+// prevents a user being messaged twice for the same notice even if several
+// of their rules match it.
+model AlertNotification {
+  id            String                   @id @default(uuid()) @db.Uuid
+  userId        String                   @map("user_id") @db.Uuid
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alertRuleId   String                   @map("alert_rule_id") @db.Uuid
+  alertRule     AlertRule                @relation(fields: [alertRuleId], references: [id], onDelete: Cascade)
+  scrapedItemId String                   @map("scraped_item_id") @db.Uuid
+  scrapedItem   ScrapedItem              @relation(fields: [scrapedItemId], references: [id], onDelete: Cascade)
+  status        AlertNotificationStatus
+  error         String?
+  sentAt        DateTime                 @default(now()) @map("sent_at")
+
+  @@unique([userId, scrapedItemId])
+  @@index([alertRuleId])
+  @@map("alert_notifications")
 }
 
 enum DocumentStatus {
@@ -174,6 +290,7 @@ model ScrapedItem {
   updatedAt     DateTime            @updatedAt @map("updated_at")
 
   attachments   Attachment[]
+  alertNotifications AlertNotification[]
 
   @@index([category])
   @@index([publishedAt])
@@ -224,4 +341,146 @@ model AppSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("app_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Membership & billing
+//
+// Three tiers (FREE / PRO / MAX) whose *definitions* live in the database, not
+// in code, so an admin can retune prices, limits and marketing copy without a
+// deploy. Stripe holds the payment catalogue; `stripePriceId` is the join
+// between a row here and a recurring Price over there.
+// ---------------------------------------------------------------------------
+
+enum PlanTier {
+  FREE
+  PRO
+  MAX
+}
+
+model Plan {
+  id          String   @id @default(uuid()) @db.Uuid
+  tier        PlanTier @unique
+  name        String
+  tagline     String?
+  description String?
+
+  // Pricing. Cents avoids float drift; `interval` is informational because
+  // Stripe's Price is the source of truth for what actually gets charged.
+  priceMonthlyCents Int     @default(0) @map("price_monthly_cents")
+  priceYearlyCents  Int?    @map("price_yearly_cents")
+  currency          String  @default("usd")
+
+  // Stripe catalogue links. Null on FREE (nothing to charge for).
+  stripeProductId        String? @map("stripe_product_id")
+  stripePriceId          String? @map("stripe_price_id")
+  stripeYearlyPriceId    String? @map("stripe_yearly_price_id")
+
+  // ---- Limits. NULL means unlimited; 0 means the feature is unavailable. ----
+  // Embedded documents a user may keep at once (storage + embedding cost).
+  maxDocuments           Int?    @map("max_documents")
+  // AI questions per calendar month, across RAG chat and per-notice Q&A.
+  maxAiQuestionsPerMonth Int?    @map("max_ai_questions_per_month")
+  // Saved alert rules.
+  maxAlertRules          Int?    @map("max_alert_rules")
+  // WhatsApp alert deliveries per calendar month (real per-message cost).
+  maxWhatsappPerMonth    Int?    @map("max_whatsapp_per_month")
+  // Largest single upload, in megabytes.
+  maxUploadMb            Int     @default(5) @map("max_upload_mb")
+  // Instant alert delivery; when false the user is held to digest cadence.
+  allowInstantAlerts     Boolean @default(false) @map("allow_instant_alerts")
+
+  // Marketing bullets rendered on the pricing page, in order.
+  features  Json?
+  // Hidden plans still work for existing subscribers but aren't sold.
+  isPublic  Boolean @default(true) @map("is_public")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+model Subscription {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId String @map("plan_id") @db.Uuid
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  status SubscriptionStatus @default(ACTIVE)
+
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
+
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  cancelAtPeriodEnd  Boolean   @default(false) @map("cancel_at_period_end")
+  canceledAt         DateTime? @map("canceled_at")
+
+  // Set when an admin grants a plan by hand; such a subscription is never
+  // downgraded by Stripe webhooks.
+  grantedByAdmin Boolean @default(false) @map("granted_by_admin")
+  grantNote      String? @map("grant_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([planId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+enum UsageMetric {
+  AI_QUESTION
+  DOCUMENT_UPLOAD
+  WHATSAPP_NOTIFICATION
+  ALERT_RULE
+}
+
+// Fast path for quota checks: one row per user/metric/month.
+model UsageCounter {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metric      UsageMetric
+  // First instant of the UTC month this counter covers.
+  periodStart DateTime    @map("period_start")
+  count       Int         @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, metric, periodStart])
+  @@index([periodStart])
+  @@map("usage_counters")
+}
+
+// Append-only detail behind the counters, for the admin's per-user drill-down.
+// Pruned on a schedule so it can't grow without bound.
+model UsageEvent {
+  id       String      @id @default(uuid()) @db.Uuid
+  userId   String      @map("user_id") @db.Uuid
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metric   UsageMetric
+  quantity Int         @default(1)
+  // Free-form context: which document, which notice, which alert rule.
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([metric, createdAt])
+  @@map("usage_events")
 }

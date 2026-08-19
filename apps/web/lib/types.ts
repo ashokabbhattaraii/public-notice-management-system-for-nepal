@@ -14,6 +14,15 @@ export interface User {
   avatarUrl?: string | null
 }
 
+export type DigestFrequency = "INSTANT" | "DAILY" | "WEEKLY"
+
+export interface WhatsappStatus {
+  connected: boolean
+  alertsEnabled: boolean
+  phoneNumberMasked: string | null
+  digestFrequency: DigestFrequency
+}
+
 export interface Notice {
   id: string
   title: string
@@ -42,15 +51,34 @@ export interface Notice {
 
 export type NoticeCategory = "exams" | "vacancies" | "tenders" | "policy" | "announcements"
 
+export type AlertPriority = "NORMAL" | "HIGH"
+export type AlertUrgency = "LOW" | "MEDIUM" | "HIGH"
+
+// Categories and/or tags are the required primary basis for a rule (the
+// "easy" alert setup — e.g. "notify me about all Vacancy notices" or
+// "anything tagged scholarship"). Every other field is an optional
+// refinement layered on top for users who want advanced tuning; none of
+// them may be the sole basis of a rule. Every non-empty dimension is AND'd
+// together; values within one dimension (e.g. multiple keywords) are OR'd.
 export interface AlertRule {
   id: string
   userId: string
-  type: "keyword" | "category" | "organization"
   name: string
-  conditions: string[]
   enabled: boolean
-  createdAt: string
+  /** HIGH always delivers instantly, bypassing the account's digest setting. */
+  priority: AlertPriority
+  // Primary (required — at least one of the two):
+  categories: ScrapedItemCategory[]
+  tags: string[]
+  // Optional advanced refinements:
+  keywords: string[]
+  excludeKeywords: string[]
+  organizations: string[]
+  minUrgency: AlertUrgency | null
+  deadlineWithinDays: number | null
   matchCount: number
+  createdAt: string
+  updatedAt: string
 }
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "INDEXED" | "UNEMBEDDED" | "FAILED"

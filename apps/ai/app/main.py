@@ -271,6 +271,9 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
     if method == "POST" and path == "/scrape/check":
         return await _scrape_check(receive)
 
+    if method == "POST" and path == "/scrape/listing/check":
+        return await _scrape_listing_check(receive)
+
     if method == "POST" and path == "/scrape/sitemap-crawl":
         return await _scrape_sitemap_crawl(receive)
 
@@ -299,7 +302,11 @@ async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dic
 async def _health() -> tuple[int, dict]:
     qdrant_ok = False
     try:
-        qdrant_ok = store.is_connected()
+        # is_connected() is a blocking network call — off the event loop, so
+        # a slow/unreachable Qdrant degrades this one health check instead of
+        # freezing every other request this single-worker process is serving
+        # (progress polls, queries, other uploads) for the same duration.
+        qdrant_ok = await asyncio.to_thread(store.is_connected)
     except Exception:
         logger.exception("Health check: Qdrant probe raised")
 
@@ -403,16 +410,6 @@ async def _upload_document(scope: dict, receive) -> tuple[int, dict]:
 
     progress.start(doc_id, filename)
 
-    try:
-        return await asyncio.to_thread(
-            _ingest_document, doc_id, save_path, filename, mime_type, metadata
-        )
-    except Exception as e:
-        progress.fail(doc_id, str(e))
-        raise
-
-    progress.start(doc_id, filename)
-
     # The pipeline (OCR, embedding) is CPU-bound and synchronous. Run it in a
     # worker thread so the event loop stays free to serve progress polls and
     # queries while a large document is being processed.
@@ -491,10 +488,10 @@ def _ingest_document(
         **metadata,
     }
 
-    progress.update(doc_id, "indexing", "Writing vectors to Qdrant (transactional)...", 0, total)
+    progress.update(doc_id, "indexing", "Writing vectors to Qdrant...", 0, total)
     try:
         idx_start = time.perf_counter()
-        chunk_count = store.index_document_transactional(
+        chunk_count = store.index_document(
             doc_id,
             chunks,
             chunk_embeddings,
@@ -590,7 +587,11 @@ async def _document_progress_sse(scope, send) -> None:
 
 async def _document_status(doc_id: str) -> tuple[int, dict]:
     try:
-        chunk_count = store.get_document_chunks(doc_id)
+        # Blocking Qdrant call — off the event loop for the same reason as
+        # the health check above (this is also what the API polls to
+        # reconcile a document's status after giving up waiting on a slow
+        # ingest, so it must stay responsive even while Qdrant is degraded).
+        chunk_count = await asyncio.to_thread(store.get_document_chunks, doc_id)
         return 200, {
             "doc_id": doc_id,
             "chunk_count": chunk_count,
@@ -603,7 +604,7 @@ async def _document_status(doc_id: str) -> tuple[int, dict]:
 
 async def _delete_document(doc_id: str) -> tuple[int, dict]:
     try:
-        store.delete_document(doc_id)
+        await asyncio.to_thread(store.delete_document, doc_id)
         return 200, {"doc_id": doc_id, "deleted": True}
     except Exception as e:
         logger.exception("Delete failed for doc_id=%s", doc_id)
@@ -766,6 +767,57 @@ async def _scrape_sitemap_detect(receive) -> tuple[int, dict]:
     return 200, {
         "base_url": base_url,
         "sitemap_url": sitemap_url,
+        "checked_at": _now_iso(),
+    }
+
+
+async def _scrape_listing_check(receive) -> tuple[int, dict]:
+    """POST /scrape/listing/check — the sitemap fast-path's equivalent for
+    sources that have no usable sitemap.
+
+    Body: {base_url, category_urls, cached_schemas?, known_urls?, pagination?}.
+    Fetches only page 1 of each listing and returns the detail URLs not
+    already known — no detail pages, no OCR, no LLM. Cheap enough to run on
+    a short interval, so an HTML-only source pays for a full crawl only when
+    something new actually appears.
+    Returns {new_urls, total_seen, checked_at}.
+    """
+    body = await _read_body(receive)
+    try:
+        data = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        return 400, {"error": "Invalid JSON body"}
+
+    base_url = (data.get("base_url") or "").strip()
+    if not base_url:
+        return 400, {"error": "Field 'base_url' is required"}
+
+    category_urls = data.get("category_urls") or {}
+    if not category_urls:
+        return 400, {"error": "Field 'category_urls' must map at least one category to a URL"}
+
+    pagination_data = data.get("pagination") or {}
+    pagination = scraper.PaginationConfig(
+        pagination_type=pagination_data.get("type", "QUERY_PARAM"),
+        param=pagination_data.get("param", "page"),
+        start_page=int(pagination_data.get("start_page", 1)),
+    )
+
+    try:
+        new_urls, total_seen = await scraper.check_listing(
+            base_url=base_url,
+            category_urls=category_urls,
+            cached_schemas=data.get("cached_schemas") or {},
+            known_urls=data.get("known_urls") or [],
+            pagination=pagination,
+        )
+    except Exception as e:
+        logger.exception("Listing check failed for %s", base_url)
+        return 502, {"error": f"Listing check failed: {str(e)}"}
+
+    return 200, {
+        "new_urls": new_urls,
+        "total_seen": total_seen,
         "checked_at": _now_iso(),
     }
 
@@ -1050,7 +1102,18 @@ def _build_notice_context(data: dict) -> str:
 
     content = (data.get("content") or "").strip()
     if content:
-        sections.append(f"NOTICE TEXT (extracted, may be imperfect):\n{content[:6000]}")
+        # A legacy-font PDF (Preeti and friends) can extract as confident-
+        # looking symbol noise that no structural check distinguishes from
+        # real text — passing that straight into the prompt (or into the
+        # extractive fallback if every LLM call fails) means the "answer"
+        # ends up being that noise, or the prompt scaffolding around it,
+        # echoed back verbatim. If it doesn't look like real text, leave it
+        # out entirely — the summary/key-facts sections above are already
+        # LLM-cleaned and don't have this problem.
+        if extractor.is_readable_text(content):
+            sections.append(f"NOTICE TEXT (extracted, may be imperfect):\n{content[:6000]}")
+        else:
+            logger.info("Excluding unreadable notice text from Q&A context (garbled extraction)")
 
     return "\n\n".join(sections)
 

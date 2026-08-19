@@ -279,9 +279,9 @@ export class ScrapingSchedulerService implements OnModuleInit {
         `Sitemap detection for ${source.name}: ${detected.sitemapUrl ?? 'none — HTML-poll only'}`,
       );
       if (!detected.sitemapUrl) {
-        // No fast-path available; the source's regular interval starts now
-        // with a full crawl (same as a manual "Run now").
-        return this.enqueueFullScrape(source.id);
+        // No sitemap — fall back to the listing probe, which is nearly as
+        // cheap and works on any site.
+        return this.pollListing(source);
       }
       // Fall through to the sitemap fast-path with the fresh URL.
       return this.pollSitemap(source.id);
@@ -291,8 +291,38 @@ export class ScrapingSchedulerService implements OnModuleInit {
       return this.pollSitemap(source.id);
     }
 
-    // HTML-only source, polled on its own interval.
-    return this.enqueueFullScrape(source.id);
+    // HTML-only source: probe the listing page cheaply rather than paying for
+    // a full crawl on every interval.
+    return this.pollListing(source);
+  }
+
+  /**
+   * Cheap listing poll for sources with no sitemap — the HTML equivalent of
+   * pollSitemap. One listing-page fetch per category (no detail pages, OCR or
+   * LLM); a crawl is enqueued only for URLs that are genuinely new. This is
+   * what lets HTML-only sources be polled every couple of minutes instead of
+   * every 15, without the load a full crawl would imply.
+   *
+   * Falls back to a full crawl if the probe itself fails, so a broken probe
+   * degrades to the old behaviour rather than silently starving the source.
+   */
+  private async pollListing(source: ScrapeSource) {
+    try {
+      const result = await this.scrapingService.checkListing(source.id);
+      const newCount = result.new_urls?.length ?? 0;
+      if (newCount > 0) {
+        this.logger.log(
+          `Listing for ${source.name} shows ${newCount} new URL(s) — crawling them directly`,
+        );
+        return this.enqueueUrlScrape(source.id, result.new_urls);
+      }
+      await this.scrapingService.markSourcePolled(source.id);
+    } catch (err: any) {
+      this.logger.warn(
+        `Listing probe failed for ${source.name} (${err.message}) — falling back to full crawl`,
+      );
+      return this.enqueueFullScrape(source.id);
+    }
   }
 
   /**

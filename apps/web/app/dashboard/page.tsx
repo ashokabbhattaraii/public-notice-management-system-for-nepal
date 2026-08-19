@@ -4,14 +4,15 @@ import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
   Eye, Bookmark, Bell, TrendingUp, FileText, Search,
-  ArrowRight, AlertCircle, Zap, CheckCircle, FolderOpen,
-  Building2, CalendarClock, Activity, BarChart3,
+  ArrowRight, AlertCircle, Zap, CheckCircle,
+  CalendarClock, Activity, BarChart3,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
 import { useAlerts } from "@/lib/alerts-context"
 import { mockNotices, mockActivities } from "@/lib/mock-data"
+import { CATEGORY_ORDER, categoryLabel, ScrapedItemCategory } from "@/lib/types"
 import gsap from "gsap"
 
 function StatCard({
@@ -49,10 +50,7 @@ const inputClass =
 export default function DashboardPage() {
   const { user } = useAuth()
   const { alerts, addAlert } = useAlerts()
-  const [wizardStep, setWizardStep] = useState(0)
-  const [wizardData, setWizardData] = useState({
-    name: "", type: "keyword" as "keyword" | "category" | "organization", conditions: "",
-  })
+  const [wizardData, setWizardData] = useState({ name: "", categories: [] as ScrapedItemCategory[] })
   const gridRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -92,17 +90,28 @@ export default function DashboardPage() {
   const urgentNotices = mockNotices.filter(n => n.priority === "high").slice(0, 2)
   const recentActivities = mockActivities.slice(0, 6)
 
-  const handleWizardSubmit = () => {
-    if (!wizardData.name || !wizardData.conditions) return
-    addAlert({
-      userId: user.id,
-      type: wizardData.type,
+  const handleWizardSubmit = async () => {
+    if (!wizardData.name || wizardData.categories.length === 0) return
+    const ok = await addAlert({
       name: wizardData.name,
-      conditions: wizardData.conditions.split(",").map(s => s.trim()),
+      categories: wizardData.categories,
+      tags: [],
+      keywords: [],
+      excludeKeywords: [],
+      organizations: [],
+      minUrgency: null,
+      deadlineWithinDays: null,
+      priority: "NORMAL",
       enabled: true,
     })
-    setWizardData({ name: "", type: "keyword", conditions: "" })
-    setWizardStep(0)
+    if (ok) setWizardData({ name: "", categories: [] })
+  }
+
+  const toggleWizardCategory = (cat: ScrapedItemCategory) => {
+    setWizardData((w) => ({
+      ...w,
+      categories: w.categories.includes(cat) ? w.categories.filter((c) => c !== cat) : [...w.categories, cat],
+    }))
   }
 
   return (
@@ -208,64 +217,44 @@ export default function DashboardPage() {
                       <p className="mt-0.5 text-sm text-vez-mute">Get notified the moment relevant notices are published</p>
                     </div>
                   </div>
-                  {wizardStep === 0 && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      {[
-                        { id: "keyword" as const, label: "Keywords", icon: Search, desc: "Match by text" },
-                        { id: "category" as const, label: "Category", icon: FolderOpen, desc: "Filter by type" },
-                        { id: "organization" as const, label: "Organization", icon: Building2, desc: "By ministry" },
-                      ].map((t) => {
-                        const Icon = t.icon
-                        return (
-                          <button key={t.id}
-                            onClick={() => { setWizardData({ ...wizardData, type: t.id }); setWizardStep(1) }}
-                            className="group rounded-[16px] bg-white p-5 text-left transition-transform duration-300 hover:-translate-y-1"
-                          >
-                            <div className="mb-3 flex size-9 items-center justify-center rounded-full bg-vez-sky/30 transition-colors group-hover:bg-vez-sky/50">
-                              <Icon className="size-4 text-vez-navy" />
-                            </div>
-                            <p className="text-sm text-vez-ink">{t.label}</p>
-                            <p className="mt-1 text-xs text-vez-mute">{t.desc}</p>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {wizardStep === 1 && (
-                    <div className="space-y-3">
-                      <input
-                        placeholder="Alert name (e.g. Section Officer Updates)"
-                        value={wizardData.name}
-                        onChange={(e) => setWizardData({ ...wizardData, name: e.target.value })}
-                        className={inputClass}
-                      />
-                      <input
-                        placeholder={
-                          wizardData.type === "keyword" ? "Keywords: section officer, PSC, loksewa"
-                          : wizardData.type === "category" ? "Categories: exams, vacancies, tenders"
-                          : "Orgs: Nepal Rastra Bank, MoE"
-                        }
-                        value={wizardData.conditions}
-                        onChange={(e) => setWizardData({ ...wizardData, conditions: e.target.value })}
-                        className={inputClass}
-                      />
-                      <div className="flex gap-2.5">
+                  <div className="space-y-3">
+                    <input
+                      placeholder="Alert name (e.g. Vacancy Updates)"
+                      value={wizardData.name}
+                      onChange={(e) => setWizardData({ ...wizardData, name: e.target.value })}
+                      className={inputClass}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORY_ORDER.map((cat) => (
                         <button
-                          onClick={handleWizardSubmit}
-                          disabled={!wizardData.name || !wizardData.conditions}
-                          className="rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                          key={cat}
+                          onClick={() => toggleWizardCategory(cat)}
+                          className={`rounded-full px-3.5 py-1.5 text-xs transition-colors ${
+                            wizardData.categories.includes(cat)
+                              ? "bg-vez-navy text-white"
+                              : "bg-white text-vez-mute hover:text-vez-navy"
+                          }`}
                         >
-                          Create alert
+                          {categoryLabel(cat)}
                         </button>
-                        <button
-                          onClick={() => setWizardStep(0)}
-                          className="rounded-full px-5 py-2.5 text-sm text-vez-mute transition-colors hover:bg-white hover:text-vez-navy"
-                        >
-                          Back
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  )}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <button
+                        onClick={handleWizardSubmit}
+                        disabled={!wizardData.name || wizardData.categories.length === 0}
+                        className="rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        Create alert
+                      </button>
+                      <Link
+                        href="/dashboard/alerts"
+                        className="rounded-full px-5 py-2.5 text-sm text-vez-mute transition-colors hover:bg-white hover:text-vez-navy"
+                      >
+                        Want tags, keywords, or other advanced filters? Open the full alert builder →
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="dash-card rounded-[20px] bg-vez-surface p-6">
@@ -287,7 +276,16 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2.5">
                           <span className="size-2 rounded-full bg-vez-navy" />
                           <span className="text-sm text-vez-ink">{alert.name}</span>
-                          <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] capitalize text-vez-navy">{alert.type}</span>
+                          <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy">
+                            {[
+                              alert.categories.length && `${alert.categories.length} categor${alert.categories.length > 1 ? "ies" : "y"}`,
+                              alert.tags.length && `${alert.tags.length} tag${alert.tags.length > 1 ? "s" : ""}`,
+                              alert.keywords.length && `${alert.keywords.length} keyword${alert.keywords.length > 1 ? "s" : ""}`,
+                              alert.organizations.length && `${alert.organizations.length} org${alert.organizations.length > 1 ? "s" : ""}`,
+                              alert.minUrgency && "urgency",
+                              alert.deadlineWithinDays != null && "deadline",
+                            ].filter(Boolean).join(" + ") || "no filters"}
+                          </span>
                         </div>
                         <span className="text-xs text-vez-mute">{alert.matchCount} matches</span>
                       </div>

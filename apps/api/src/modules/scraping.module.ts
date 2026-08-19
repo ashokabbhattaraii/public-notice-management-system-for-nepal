@@ -6,6 +6,7 @@ import { ScrapingSchedulerService } from '../services/scraping-scheduler.service
 import { SettingsModule } from './settings.module';
 import { TokenRevocationModule } from '../common/token-revocation.module';
 import { NoticesModule } from './notices.module';
+import { AlertsModule } from './alerts.module';
 
 @Module({
   imports: [
@@ -18,6 +19,8 @@ import { NoticesModule } from './notices.module';
     TokenRevocationModule,
     // For the admin re-extract endpoints.
     NoticesModule,
+    // For AlertMatchingService, called after each new ScrapedItem is saved.
+    AlertsModule,
   ],
   controllers: [ScrapingController],
   providers: [ScrapingService, ScrapingSchedulerService],

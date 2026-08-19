@@ -50,10 +50,20 @@ EMBEDDING_BATCH_SIZE: int = _env_int("EMBEDDING_BATCH_SIZE", 32)
 
 GROQ_API_KEY: str = _env("GROQ_API_KEY")
 GROQ_API_KEYS: list[str] = [k.strip() for k in _env("GROQ_API_KEYS", "").split(",") if k.strip()] or ([GROQ_API_KEY] if GROQ_API_KEY else [])
-GROQ_MODEL: str = _env("GROQ_MODEL", "llama-3.3-70b-versatile")
+# llama-3.3-70b-versatile was retired from Groq's catalog (404 model_not_found).
+# gpt-oss-120b is the closest replacement in scale/quality.
+GROQ_MODEL: str = _env("GROQ_MODEL", "openai/gpt-oss-120b")
 
 GEMINI_API_KEY: str = _env("GEMINI_API_KEY")
-GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-2.0-flash")
+# gemini-2.0-flash was retired; Google's own 404 response names the successor.
+GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-3.6-flash")
+
+# OpenCode Zen — free-tier OpenAI-compatible chat completions gateway. Third
+# fallback tier, tried after Gemini and Groq both fail (e.g. Gemini's billing
+# is exhausted, or Groq is rate-limited across all rotated keys).
+OPENCODE_ZEN_API_KEY: str = _env("OPENCODE_ZEN_API_KEY")
+OPENCODE_ZEN_BASE_URL: str = _env("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1/chat/completions")
+OPENCODE_ZEN_MODEL: str = _env("OPENCODE_ZEN_MODEL", "deepseek-v4-flash-free")
 
 # Retrieval tuning: hits scoring below the threshold are dropped from context.
 # E5-family models compress cosine similarity into ~0.7-0.9; observed in
@@ -61,6 +71,15 @@ GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-2.0-flash")
 RAG_SCORE_THRESHOLD: float = float(_env("RAG_SCORE_THRESHOLD", "0.78"))
 
 TESSERACT_LANG: str = _env("TESSERACT_LANG", "nep+eng")
+
+# Process-wide cap on concurrent OCR jobs (Tesseract + page rendering), shared
+# across every caller — document uploads AND scraping's per-notice PDF
+# extraction. Each OCR job is already close to 100% CPU on its own; without
+# this, concurrent scrape sources (each triggering their own OCR calls
+# independently) stack multiple full-CPU Tesseract processes at once, which
+# is what pegs/heats a dev machine and can look like a crash. Conservative
+# default since the AI service usually runs on a small 2 vCPU box in prod.
+OCR_MAX_CONCURRENCY: int = _env_int("OCR_MAX_CONCURRENCY", 1)
 
 # Fallback default for max concurrent LLM summarization calls during a scrape
 # run. The live value is the admin `scraping.summarizeConcurrency` setting,

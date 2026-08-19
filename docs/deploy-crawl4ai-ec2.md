@@ -1,4 +1,14 @@
-# Deploy Crawl4AI on AWS EC2 (Step-by-Step)
+You will likely have something similar to:
+
+RUN pip install ...
+
+After the Python dependencies are installed, add:
+
+RUN playwright install --with-deps chromium
+
+For your existing Python image, I'd recommend:
+
+RUN playwright install --with-deps chromium# Deploy Crawl4AI on AWS EC2 (Step-by-Step)
 
 This guide deploys the Crawl4AI web UI on an EC2 instance in your existing AWS account (`274955213317`, region `us-east-1`).
 

@@ -17,7 +17,9 @@ async function bootstrap() {
   // the structured JSON logger (Nest 11 supports Logger.overrideLogger).
   Logger.overrideLogger(new StructuredLogger());
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: Stripe signs the exact bytes it sent, so the webhook handler must
+  // see the untouched body. Nest keeps `req.rawBody` alongside the parsed one.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
 
   app.useLogger(new StructuredLogger());
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Bot, User, Sparkles, Minimize2, ExternalLink, FileText } from "lucide-react"
+import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Button } from "@/components/ui/button"
@@ -186,16 +186,24 @@ export function FloatingChat() {
 
   return (
     <>
-      {/* Chat Panel */}
+      {/* Chat Panel — full-width bottom sheet on mobile, floating card from sm: up */}
       {open && (
         <div
           ref={chatRef}
-          className="fixed bottom-24 right-6 z-[60] w-[400px] max-w-[calc(100vw-2rem)] h-[540px] max-h-[75vh] rounded-2xl border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
+          className={cn(
+            "fixed z-[60] flex flex-col overflow-hidden border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl",
+            "inset-x-0 bottom-0 h-[85vh] rounded-t-2xl",
+            // Smaller footprint than before (was 400x540, ~75vh) — it was
+            // covering page controls (action buttons, title) on narrower or
+            // shorter desktop viewports. max-h keeps it well clear of the
+            // top of the page even on short windows.
+            "sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[65vh] sm:max-h-[480px] sm:w-[360px] sm:rounded-2xl",
+          )}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border/60 bg-primary/5">
-            <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <Bot className="size-4 text-primary" />
               </div>
               <div className="min-w-0">
@@ -203,14 +211,15 @@ export function FloatingChat() {
                 <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{subtitle}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="size-7" onClick={() => setOpen(false)}>
-                <Minimize2 className="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="size-7" onClick={() => setOpen(false)}>
-                <X className="size-3.5" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              onClick={() => setOpen(false)}
+              aria-label="Close chat"
+            >
+              <X className="size-4" />
+            </Button>
           </div>
 
           {/* Context badge */}
@@ -321,7 +330,7 @@ export function FloatingChat() {
           </div>
 
           {/* Input */}
-          <div className="p-3 border-t border-border/60">
+          <div className="p-3 border-t border-border/60" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
             <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex gap-2">
               <input
                 type="text"
@@ -339,25 +348,24 @@ export function FloatingChat() {
         </div>
       )}
 
-      {/* FAB Button */}
-      <button
-        ref={fabRef}
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "fixed bottom-6 right-6 z-[60] size-16 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95",
-          open
-            ? "bg-white text-gray-900 ring-4 ring-white/20"
-            : "bg-white text-gray-900 ring-4 ring-white/30"
-        )}
-        style={{ boxShadow: "0 0 20px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.4)" }}
-      >
-        {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
-        {!open && (
+      {/* FAB Button — only shown when the panel is closed; the panel's own
+          header X handles closing, so a second floating close button
+          hovering over page content underneath (a confusing, cramped look
+          especially on mobile) is unnecessary. */}
+      {!open && (
+        <button
+          ref={fabRef}
+          onClick={() => setOpen(true)}
+          aria-label="Open chat"
+          className="fixed bottom-6 right-6 z-[60] size-16 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-white text-gray-900 ring-4 ring-white/30"
+          style={{ boxShadow: "0 0 20px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.4)" }}
+        >
+          <MessageCircle className="size-6" />
           <span className="absolute -top-1 -right-1 size-5 rounded-full bg-green-400 border-2 border-white flex items-center justify-center animate-pulse">
             <span className="size-2.5 rounded-full bg-white" />
           </span>
-        )}
-      </button>
+        </button>
+      )}
     </>
   )
 }

@@ -187,7 +187,7 @@ def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
         if same_doc and adjacent and same_section:
             # Merge: concatenate content, update ranges
             current["content"] += "\n\n" + next_chunk["content"]
-            current["char_end"] = next_chunk.get("char_end", current["char_end"])
+            current["char_end"] = next_chunk.get("char_end") or current.get("char_end")
             current["chunk_index"] = current["chunk_index"]  # keep first index
             # Track page range
             if "page_range" not in current:

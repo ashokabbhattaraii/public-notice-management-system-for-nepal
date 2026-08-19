@@ -241,15 +241,24 @@ async def classify_intent(message: str) -> str | None:
 async def _llm_chat(
     messages: list[dict], max_tokens: int, temperature: float
 ) -> str | None:
-    """Try Gemini first, fall back to Groq on failure."""
+    """Try Gemini, then Groq, then OpenCode Zen (free tier) — first non-empty
+    answer wins. gpt-oss/deepseek-style reasoning models can return HTTP 200
+    with empty `content` if max_tokens is exhausted mid-reasoning, which must
+    count as a failure here, not a blank "successful" answer."""
     if config.GEMINI_API_KEY:
         result = await _gemini_chat(messages, max_tokens, temperature)
-        if result is not None:
+        if result:
             return result
-        logger.warning("Gemini failed; falling back to Groq")
+        logger.warning("Gemini failed or returned empty; falling back to Groq")
 
     if config.GROQ_API_KEY:
-        return await _groq_chat(messages, max_tokens, temperature)
+        result = await _groq_chat(messages, max_tokens, temperature)
+        if result:
+            return result
+        logger.warning("Groq failed or returned empty; falling back to OpenCode Zen")
+
+    if config.OPENCODE_ZEN_API_KEY:
+        return await _opencode_chat(messages, max_tokens, temperature)
 
     return None
 
@@ -401,6 +410,63 @@ async def _groq_chat(
             return None
 
         logger.debug("Groq answer generated with model=%s", config.GROQ_MODEL)
+        return _clean_answer(content)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# OpenCode Zen provider (free-tier fallback, tried after Gemini + Groq)
+# ---------------------------------------------------------------------------
+
+
+async def _opencode_chat(
+    messages: list[dict], max_tokens: int, temperature: float
+) -> str | None:
+    """Call OpenCode Zen (OpenAI-compatible). Returns None on any failure."""
+    payload = {
+        "model": config.OPENCODE_ZEN_MODEL,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(
+                    config.OPENCODE_ZEN_BASE_URL,
+                    headers={
+                        "Authorization": f"Bearer {config.OPENCODE_ZEN_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+        except httpx.HTTPError as e:
+            logger.error("OpenCode Zen request failed (attempt %d): %s", attempt + 1, e)
+            if attempt == 0:
+                await asyncio.sleep(1.0)
+                continue
+            return None
+
+        if response.status_code in (429, 500, 502, 503) and attempt == 0:
+            logger.warning("OpenCode Zen returned %d; retrying once", response.status_code)
+            await asyncio.sleep(1.5)
+            continue
+
+        if response.status_code != 200:
+            logger.error(
+                "OpenCode Zen returned %d: %.200s", response.status_code, response.text
+            )
+            return None
+
+        try:
+            content = response.json()["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            logger.error("OpenCode Zen response missing choices: %.200s", response.text)
+            return None
+
+        logger.debug("OpenCode Zen answer generated with model=%s", config.OPENCODE_ZEN_MODEL)
         return _clean_answer(content)
 
     return None

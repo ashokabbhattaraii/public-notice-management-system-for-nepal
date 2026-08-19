@@ -31,6 +31,7 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { DocumentsService } from '../services/documents.service';
+import { QuotaService } from '../services/quota.service';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
 import { ListDocumentsDto } from '../dto/list-documents.dto';
 import * as crypto from 'crypto';
@@ -83,7 +84,10 @@ const storage = diskStorage({
 
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly quota: QuotaService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -124,6 +128,17 @@ export class DocumentsController {
       );
     }
 
+    // Plan enforcement: document count and the per-tier upload size. Checked
+    // before any work so a refused upload doesn't leave a file on disk or
+    // consume allowance. Throws 402 with a `quota` body the UI turns into a
+    // targeted upgrade prompt.
+    try {
+      await this.quota.assertCanAddDocument(user.id, file.size);
+    } catch (err) {
+      fs.unlink(file.path, () => undefined);
+      throw err;
+    }
+
     // Compute SHA-256 hash for deduplication
     const fileBuffer = fs.readFileSync(file.path);
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
@@ -137,8 +152,13 @@ export class DocumentsController {
       };
     }
 
-    // Stable doc_id from content hash (first 32 chars = 128 bits)
-    const docId = fileHash.substring(0, 32);
+    // A real UUID — not a truncated content hash. That used to produce a
+    // technically-hex-valid-but-not-RFC4122-compliant string (random bits in
+    // the version/variant nibbles), which silently failed strict `@IsUUID()`
+    // validation on ~75% of uploads the moment a query referenced the
+    // document (e.g. "documentId must be a UUID" in RAG chat). Dedup by
+    // content already works independently via the fileHash column below.
+    const docId = uuidv4();
 
     const document = await this.documentsService.create({
       id: docId,
@@ -149,6 +169,14 @@ export class DocumentsController {
       filePath: file.path,
       uploadedBy: user.id,
       fileHash: fileHash,
+    });
+
+    // Recorded only once the document exists — a deduplicated or rejected
+    // upload must not spend allowance.
+    await this.quota.recordDocumentUpload(user.id, {
+      documentId: document.id,
+      filename: file.originalname,
+      sizeBytes: file.size,
     });
 
     return document;
@@ -217,52 +245,7 @@ export class DocumentsController {
   @Get(':id/progress/stream')
   @UseGuards(OptionalJwtAuthGuard)
   async progressStream(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    const sendEvent = (data: any) => {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    const sendError = (error: string) => {
-      res.write(`event: error\ndata: ${JSON.stringify({ error })}\n\n`);
-    };
-
-    const sendDone = () => {
-      res.write('event: done\ndata: {}\n\n');
-      res.end();
-    };
-
-    const intervalRef = { current: null as NodeJS.Timeout | null };
-
-    const checkProgress = async () => {
-      try {
-        const progress = await this.documentsService.getProgress(id);
-        sendEvent(progress);
-        if (progress.stage === 'done' || progress.stage === 'failed') {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          sendDone();
-        }
-      } catch (error) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        sendError(error.message || 'Failed to get progress');
-        res.end();
-      }
-    };
-
-    // Initial send
-    checkProgress();
-
-    // Poll every second
-    intervalRef.current = setInterval(checkProgress, 1000);
-
-    // Cleanup on disconnect
-    res.on('close', () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    });
+    await this.documentsService.streamProgress(id, res);
   }
 
   @Delete(':id')

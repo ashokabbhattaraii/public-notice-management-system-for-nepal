@@ -1,11 +1,17 @@
-import {Controller, Post,Logger, Body,Headers} from '@nestjs/common'
-import {WhatsappService} from './whatsapp-webhook.service'
+import { Controller, Post, Logger, Body, Headers } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * Passive receiver for Evolution API instance events (set via
+ * POST /webhook/set/:instanceName on the Evolution API side). We only care
+ * about connection lifecycle here — inbound chat messages are not acted on;
+ * this app sends alerts one-way, it isn't a chatbot.
+ */
 @Controller('webhooks')
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
 
-  constructor(private readonly whatsappService: WhatsappService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   @Post('whatsapp')
   async handleWebhook(
@@ -18,16 +24,15 @@ export class WhatsappWebhookController {
     }
     this.logger.log(`Webhook received: ${body.event} from instance: ${instanceName}`);
 
-    // Handle different event types
     switch (body.event) {
-      case 'messages.upsert':
-        await this.handleIncomingMessage(body.data);
-        break;
       case 'connection.update':
-        this.logger.log(`Connection status: ${JSON.stringify(body.data)}`);
+        await this.cacheConnectionState(body.data);
         break;
-      case 'messages.update':
-        this.logger.log(`Message updated: ${JSON.stringify(body.data)}`);
+      case 'qrcode.updated':
+        this.logger.log('QR code updated on Evolution API instance');
+        break;
+      case 'messages.upsert':
+        // Inbound message — logged only, no auto-reply (one-way alert sender).
         break;
       default:
         this.logger.debug(`Unhandled event: ${body.event}`);
@@ -36,24 +41,13 @@ export class WhatsappWebhookController {
     return { received: true };
   }
 
-  private async handleIncomingMessage(data: any) {
-    // Skip messages sent by us
-    if (data.key?.fromMe) return;
-
-    const sender = data.key?.remoteJid?.replace('@s.whatsapp.net', '');
-    const messageText =
-      data.message?.conversation ||
-      data.message?.extendedTextMessage?.text ||
-      '';
-
-    if (!sender || !messageText) return;
-
-    this.logger.log(`Message from ${sender}: ${messageText}`);
-
-    // Example: Auto-reply (customize your logic here)
-    await this.whatsappService.sendMessage(
-      sender,
-      `✅ Received your message: "${messageText}"\n\nWe'll get back to you soon!`,
-    );
+  private async cacheConnectionState(data: any) {
+    const state = data?.state ?? data?.status ?? 'unknown';
+    this.logger.log(`Connection status: ${state}`);
+    await this.prisma.appSetting.upsert({
+      where: { key: 'whatsapp.connectionState' },
+      create: { key: 'whatsapp.connectionState', value: state },
+      update: { value: state },
+    });
   }
 }

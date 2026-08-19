@@ -272,8 +272,23 @@ export class NoticesService {
         return meta;
       }
 
+      // Legacy Nepali fonts (Preeti and friends) decode to confident-looking
+      // symbol noise — `S Ñ ! ."$% &'( )*(` — which is worse than no text:
+      // it renders as garbage on the notice page, pollutes the RAG index, and
+      // gets echoed back as chatbot "answers". The AI summary is still kept
+      // (the LLM reads the rendered pages, so it stays usable); only the body
+      // text is withheld.
+      const usableText =
+        meta.quality === null || meta.quality >= NoticesService.EXTRACTION_QUALITY_FLOOR;
+      if (!usableText) {
+        this.logger.warn(
+          `Discarding unreadable extracted text for notice ${id} ` +
+            `(quality ${meta.quality} < ${NoticesService.EXTRACTION_QUALITY_FLOOR}, method=${meta.method ?? 'unknown'})`,
+        );
+      }
+
       const data: any = {
-        contentText: response.data.content_text,
+        ...(usableText ? { contentText: response.data.content_text } : {}),
         aiAnalyzedAt: new Date(),
       };
       if (response.data.analyzed) {
@@ -313,6 +328,13 @@ export class NoticesService {
     const hits = tokens.filter((t) => NoticesService.EN_STOPWORDS.has(t)).length;
     return Math.max(Math.min(1, hits / tokens.length / 0.12), Math.min(0.6, devanagari * 4));
   }
+
+  /**
+   * Minimum quality score (0-1) for extracted PDF text to be stored as a
+   * notice's body. Mirrors the AI service's extractor.QUALITY_THRESHOLD —
+   * below this the "text" is legacy-font/OCR noise rather than language.
+   */
+  private static readonly EXTRACTION_QUALITY_FLOOR = 0.55;
 
   private static readonly EN_STOPWORDS = new Set(
     ('the of and to in for is on by with as at from this that shall be will has have are was were ' +

@@ -1,12 +1,19 @@
-import { Controller, Get, Post, Param, ParseUUIDPipe, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseUUIDPipe, Query, Body, UseGuards } from '@nestjs/common';
+import { User } from '@prisma/client';
 import { NoticesService } from '../services/notices.service';
+import { QuotaService } from '../services/quota.service';
+import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
+import { CurrentUser } from '../decorators/current-user.decorator';
 import { AskNoticeDto } from '../dto/ask-notice.dto';
 
 // Public read-only endpoints for browsing scraped notices/news — no auth
 // required. Admin CRUD/trigger endpoints live under /admin/scraping.
 @Controller('notices')
 export class NoticesController {
-  constructor(private readonly noticesService: NoticesService) {}
+  constructor(
+    private readonly noticesService: NoticesService,
+    private readonly quota: QuotaService,
+  ) {}
 
   @Get()
   async findAll(
@@ -60,8 +67,26 @@ export class NoticesController {
     return this.noticesService.findOne(id);
   }
 
+  /**
+   * Per-notice Q&A. Signed-in users spend their monthly AI allowance; the
+   * guard is Optional so signed-out visitors can still try the assistant on
+   * public notices (they have no account to meter).
+   */
   @Post(':id/ask')
-  async ask(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AskNoticeDto) {
-    return this.noticesService.askQuestion(id, dto.question);
+  @UseGuards(OptionalJwtAuthGuard)
+  async ask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AskNoticeDto,
+    @CurrentUser() user: User | null,
+  ) {
+    if (user) await this.quota.assertCanAskAi(user.id);
+
+    const answer = await this.noticesService.askQuestion(id, dto.question);
+
+    if (user) {
+      await this.quota.recordAiQuestion(user.id, { surface: 'notice_ask', noticeId: id });
+    }
+
+    return answer;
   }
 }

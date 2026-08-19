@@ -12,6 +12,7 @@ import { ListDocumentsDto } from '../dto/list-documents.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { firstValueFrom } from 'rxjs';
+import type { Response } from 'express';
 import FormData = require('form-data');
 
 @Injectable()
@@ -236,6 +237,92 @@ export class DocumentsService {
     }
   }
 
+  /**
+   * Streams live ingestion progress to the browser by directly piping the AI
+   * service's own SSE stream through, instead of the API re-polling
+   * getProgress() on its own 1s timer (which was a full HTTP round-trip to
+   * the AI service *inside* another poll loop, on top of the AI service's
+   * own internal 1s tick — doubling latency and request volume for no
+   * benefit). This is a straight pass-through, so updates reach the browser
+   * as fast as the AI service emits them.
+   */
+  async streamProgress(id: string, res: Response): Promise<void> {
+    const document = await this.findOne(id);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      res.end();
+    };
+
+    // AI service unreachable, or the stream drops mid-flight — fall back to
+    // a single DB-status snapshot rather than leaving the client hanging.
+    const sendFallbackAndFinish = () => {
+      if (finished) return;
+      res.write(
+        `data: ${JSON.stringify({ doc_id: id, stage: null, percent: null, status: document.status })}\n\n`,
+      );
+      res.write('event: done\ndata: {}\n\n');
+      finish();
+    };
+
+    let upstream;
+    try {
+      upstream = await this.httpService.axiosRef.get(
+        `${this.aiServiceUrl}/documents/${id}/progress/stream`,
+        { responseType: 'stream', timeout: 10000 },
+      );
+    } catch {
+      sendFallbackAndFinish();
+      return;
+    }
+
+    const upstreamStream = upstream.data as NodeJS.ReadableStream;
+    let buffer = '';
+
+    // Re-emit each upstream SSE event, merging in the DB-authoritative
+    // status (fetched once above — cheap, and this connection's whole
+    // purpose is watching one document finish, so it's not going stale
+    // mid-stream in practice).
+    const forwardEvent = (rawEvent: string) => {
+      if (rawEvent.startsWith('event: done') || rawEvent.startsWith('event: error')) {
+        res.write(`${rawEvent}\n\n`);
+        return;
+      }
+      const dataLine = rawEvent.split('\n').find((line) => line.startsWith('data: '));
+      if (!dataLine) return;
+      try {
+        const payload = JSON.parse(dataLine.slice('data: '.length));
+        res.write(`data: ${JSON.stringify({ ...payload, status: document.status })}\n\n`);
+      } catch {
+        res.write(`${rawEvent}\n\n`);
+      }
+    };
+
+    upstreamStream.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString('utf8');
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        forwardEvent(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+      }
+    });
+    upstreamStream.on('end', finish);
+    upstreamStream.on('error', sendFallbackAndFinish);
+
+    res.on('close', () => {
+      upstreamStream.removeAllListeners();
+      (upstreamStream as any).destroy?.();
+    });
+  }
+
   getFilePath(document: Document): string {
     const fullPath = path.resolve(document.filePath);
     if (!fs.existsSync(fullPath)) {
@@ -294,6 +381,7 @@ export class DocumentsService {
       // axios's "Request failed with status code 500" hides all of it.
       const upstream = err.response?.data?.error;
       const status = err.response?.status;
+      const isTimeout = err.code === 'ECONNABORTED' || /timeout/i.test(err.message ?? '');
       this.logger.error(
         `Document processing failed for ${document.id}` +
           `${status ? ` (AI service ${status})` : ''}: ${upstream ?? err.message}`,
@@ -303,6 +391,62 @@ export class DocumentsService {
         where: { id: document.id },
         data: { status: DocumentStatus.FAILED },
       });
+
+      // A timeout means WE gave up waiting — the AI service's worker thread
+      // is not cancelled and keeps running the (CPU-bound) pipeline to
+      // completion in the background. Without this, a large document that
+      // actually finishes indexing 30s after our timeout would be stuck
+      // showing FAILED forever, while its vectors are really sitting in
+      // Qdrant. Reconcile against ground truth once it's likely done.
+      if (isTimeout) {
+        this.scheduleReconciliation(document.id);
+      }
     }
+  }
+
+  /**
+   * Polls the AI service's /documents/:id/status (which checks Qdrant
+   * directly, not the AI service's fragile in-memory progress dict) after a
+   * client-side timeout, to catch a late-arriving success and correct a
+   * stale FAILED status. Bounded: gives up after ~10 extra minutes, matching
+   * the original processing budget.
+   */
+  private scheduleReconciliation(documentId: string, attempt = 0): void {
+    const maxAttempts = 20;
+    const intervalMs = 30_000;
+    if (attempt >= maxAttempts) {
+      this.logger.warn(`Reconciliation for document ${documentId} gave up after ${maxAttempts} attempts`);
+      return;
+    }
+
+    setTimeout(() => {
+      void this.reconcileOnce(documentId, attempt);
+    }, intervalMs);
+  }
+
+  private async reconcileOnce(documentId: string, attempt: number): Promise<void> {
+    try {
+      const current = await this.prisma.document.findUnique({ where: { id: documentId } });
+      // Someone already resolved this (retry, manual re-embed, etc.) — stop.
+      if (!current || current.status !== DocumentStatus.FAILED) return;
+
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.aiServiceUrl}/documents/${documentId}/status`, { timeout: 5000 }),
+      );
+      const { indexed, chunk_count: chunkCount } = response.data ?? {};
+
+      if (indexed && chunkCount > 0) {
+        await this.prisma.document.update({
+          where: { id: documentId },
+          data: { status: DocumentStatus.INDEXED, chunkCount, indexedAt: new Date() },
+        });
+        this.logger.log(`Reconciled document ${documentId}: late success, ${chunkCount} chunks`);
+        return;
+      }
+    } catch {
+      // AI service unreachable this attempt — retry below rather than give up.
+    }
+
+    this.scheduleReconciliation(documentId, attempt + 1);
   }
 }

@@ -1,13 +1,22 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from "react"
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { AlertRule } from "./types"
-import { mockAlertRules } from "./mock-data"
+import { useAuth } from "./auth-context"
+import { fetchAlertRules, createAlertRule, updateAlertRule, deleteAlertRule, NewAlertRuleInput } from "./api"
+
+// userId/id/matchCount/createdAt/updatedAt are server-owned — the API
+// rejects unexpected fields (ValidationPipe forbidNonWhitelisted), so only
+// NewAlertRuleInput's fields may be sent on create.
+type NewAlert = NewAlertRuleInput
 
 interface AlertsContextType {
   alerts: AlertRule[]
-  addAlert: (alert: Omit<AlertRule, "id" | "createdAt" | "matchCount">) => void
-  updateAlert: (id: string, updates: Partial<AlertRule>) => void
+  isLoading: boolean
+  error: string | null
+  /** Resolves true on success, false on failure (error is set on the context either way). */
+  addAlert: (alert: NewAlert) => Promise<boolean>
+  updateAlert: (id: string, updates: Partial<NewAlertRuleInput>) => void
   deleteAlert: (id: string) => void
   toggleAlert: (id: string) => void
 }
@@ -15,47 +24,68 @@ interface AlertsContextType {
 const AlertsContext = createContext<AlertsContextType | undefined>(undefined)
 
 export function AlertsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
   const [alerts, setAlerts] = useState<AlertRule[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const stored = localStorage.getItem("pnm_alerts")
-    if (stored) {
-      setAlerts(JSON.parse(stored))
-    } else {
-      setAlerts(mockAlertRules)
-      localStorage.setItem("pnm_alerts", JSON.stringify(mockAlertRules))
+    if (!user) {
+      setAlerts([])
+      return
+    }
+    setIsLoading(true)
+    fetchAlertRules()
+      .then(setAlerts)
+      .catch((e) => setError(e.message))
+      .finally(() => setIsLoading(false))
+  }, [user])
+
+  const addAlert = useCallback(async (alert: NewAlert): Promise<boolean> => {
+    setError(null)
+    try {
+      const created = await createAlertRule(alert)
+      setAlerts((prev) => [created, ...prev])
+      return true
+    } catch (e: any) {
+      setError(e.message)
+      return false
     }
   }, [])
 
-  const save = (newAlerts: AlertRule[]) => {
-    setAlerts(newAlerts)
-    localStorage.setItem("pnm_alerts", JSON.stringify(newAlerts))
-  }
+  const updateAlert = useCallback((id: string, updates: Partial<NewAlertRuleInput>) => {
+    setError(null)
+    // Optimistic update — reverted if the request fails.
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
+    updateAlertRule(id, updates)
+      .then((updated) => setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a))))
+      .catch((e) => {
+        setError(e.message)
+        fetchAlertRules().then(setAlerts).catch(() => undefined)
+      })
+  }, [])
 
-  const addAlert = (alert: Omit<AlertRule, "id" | "createdAt" | "matchCount">) => {
-    const newAlert: AlertRule = {
-      ...alert,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      matchCount: 0,
-    }
-    save([...alerts, newAlert])
-  }
+  const deleteAlert = useCallback((id: string) => {
+    setError(null)
+    const previous = alerts
+    setAlerts((prev) => prev.filter((a) => a.id !== id))
+    deleteAlertRule(id).catch((e) => {
+      setError(e.message)
+      setAlerts(previous)
+    })
+  }, [alerts])
 
-  const updateAlert = (id: string, updates: Partial<AlertRule>) => {
-    save(alerts.map((a) => (a.id === id ? { ...a, ...updates } : a)))
-  }
-
-  const deleteAlert = (id: string) => {
-    save(alerts.filter((a) => a.id !== id))
-  }
-
-  const toggleAlert = (id: string) => {
-    save(alerts.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)))
-  }
+  const toggleAlert = useCallback(
+    (id: string) => {
+      const target = alerts.find((a) => a.id === id)
+      if (!target) return
+      updateAlert(id, { enabled: !target.enabled })
+    },
+    [alerts, updateAlert],
+  )
 
   return (
-    <AlertsContext.Provider value={{ alerts, addAlert, updateAlert, deleteAlert, toggleAlert }}>
+    <AlertsContext.Provider value={{ alerts, isLoading, error, addAlert, updateAlert, deleteAlert, toggleAlert }}>
       {children}
     </AlertsContext.Provider>
   )

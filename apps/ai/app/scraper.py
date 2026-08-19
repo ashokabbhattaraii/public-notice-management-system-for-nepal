@@ -562,12 +562,66 @@ _CONTENT_SELECTORS = [
 ]
 
 
-def _extract_main_content(soup: BeautifulSoup):
+# Class/id substrings identifying page furniture that sits *inside* the main
+# content container on many gov/university sites — cookie banners, mega-menus,
+# sidebars, event calendars, "related notices" rails. These are removed before
+# the text is taken so they can't be captured as notice body text.
+_BOILERPLATE_HINTS = (
+    "cookie", "consent", "gdpr", "nav", "menu", "navbar", "breadcrumb",
+    "sidebar", "side-bar", "widget", "footer", "header", "masthead",
+    "pagination", "pager", "calendar", "datepicker", "search", "social",
+    "share", "related", "recent-post", "popular", "subscribe", "newsletter",
+    "banner", "advert", "skip-link", "offcanvas", "dropdown", "modal",
+)
+
+
+def _strip_boilerplate(el) -> None:
+    """Remove page-furniture descendants (cookie notices, menus, calendars,
+    sidebars) from a content element, in place.
+
+    Guards against removing the content itself: a matching element that holds
+    most of the container's text is page furniture only by coincidence of
+    naming (e.g. a wrapper class containing "search"), so it is left alone.
+    """
+    try:
+        total = len(el.get_text(strip=True))
+    except Exception:
+        return
+    for descendant in el.find_all(True):
+        if descendant.decomposed or descendant is el:
+            continue
+        tokens = " ".join(
+            [descendant.get("id") or ""] + list(descendant.get("class") or [])
+        ).lower()
+        if not tokens or not any(hint in tokens for hint in _BOILERPLATE_HINTS):
+            continue
+        if total and len(descendant.get_text(strip=True)) > total * 0.6:
+            continue  # this *is* the content; its class name just looks like chrome
+        descendant.decompose()
+
+
+# A generic whole-page fallback ("no content selector matched, take <body>")
+# reliably produces nav + cookie banner + calendar + footer soup rather than a
+# notice. Text longer than this from that fallback is treated as unusable, and
+# the notice keeps its (LLM-summarised, attachment-derived) content instead.
+_MAX_FALLBACK_CONTENT_CHARS = 6000
+
+
+def _extract_main_content(soup: BeautifulSoup) -> tuple[object, bool]:
+    """Locate the notice body. Returns (element, matched_a_content_selector).
+
+    The flag matters: a real content container is trustworthy, whereas the
+    <body> fallback is whole-page soup and needs the length guard applied by
+    the caller.
+    """
     for selector in _CONTENT_SELECTORS:
         el = soup.select_one(selector)
         if el and len(el.get_text(strip=True)) > 80:
-            return el
-    return soup.body or soup
+            _strip_boilerplate(el)
+            return el, True
+    body = soup.body or soup
+    _strip_boilerplate(body)
+    return body, False
 
 
 # DOM ids/classes of common inline PDF/flipbook viewer widgets — many gov
@@ -643,7 +697,7 @@ async def _crawl_detail_generic(crawler: AsyncWebCrawler, url: str, base_url: st
     time_tag = soup.find("time")
     published_raw = time_tag.get_text(" ", strip=True) if time_tag else None
 
-    content_el = _extract_main_content(soup)
+    content_el, matched_selector = _extract_main_content(soup)
     if _is_pdf_viewer_embed(content_el) or _is_pdf_viewer_embed(soup):
         # The "content" here is a PDF.js viewer widget, not article text —
         # its toolbar/loading-bar chrome would otherwise be scraped verbatim
@@ -654,6 +708,20 @@ async def _crawl_detail_generic(crawler: AsyncWebCrawler, url: str, base_url: st
     else:
         content_text = _clean_text(content_el.get_text(" ", strip=True))
         content_html = str(content_el)
+        # No content container matched, so this text came from a whole-page
+        # <body> grab. Past a few thousand characters that is site furniture
+        # (mega-menu + cookie notice + calendar + footer), not a notice —
+        # storing it pollutes the detail page, the RAG index and LLM prompts
+        # alike. Drop it and let the attachment/summary path supply content.
+        if not matched_selector and content_text and len(content_text) > _MAX_FALLBACK_CONTENT_CHARS:
+            logger.info(
+                "Discarding %d chars of whole-page fallback content for %s "
+                "(no content selector matched — almost certainly site chrome)",
+                len(content_text),
+                url,
+            )
+            content_text = None
+            content_html = None
 
     # Prefer an attachment linked from within the article body; fall back to
     # anywhere else on the (chrome-stripped) page, then a JS-embedded viewer
@@ -773,6 +841,19 @@ _NON_ARTICLE_PATH_SEGMENTS = {
     "video", "videos", "faq", "help", "cart", "checkout", "account", "profile",
     "page", "pages", "wp-admin", "wp-login", "admin", "user", "users",
     "organization", "staff", "team", "downloads-page",
+    # Institutional landing/section pages. University and ministry listings
+    # mix these into the same markup as real notice rows, so without this a
+    # generic schema happily scrapes "Fee Structure" or "Departments" as if
+    # each were a published notice.
+    "department", "departments", "faculty", "faculties", "school", "schools",
+    "programs", "programmes", "courses", "curriculum", "syllabus",
+    "admission", "admissions", "fee-structure", "fees", "scholarship",
+    "scholarships", "library", "alumni", "research", "publication",
+    "publications", "event", "events", "calendar", "directory",
+    "leadership", "governance", "history", "vision", "mission",
+    "facilities", "campus", "campuses", "collaboration", "collaborations",
+    "career", "careers", "vacancy-career", "index", "home",
+    "collaborative-programs", "news-app",
 }
 
 # Link text that marks a navigation affordance rather than a document title.
@@ -858,6 +939,27 @@ def _is_probable_article_url(url: str, base_url: str, listing_urls: set[str]) ->
 
     if any(seg in _NON_ARTICLE_PATH_SEGMENTS for seg in segments):
         return False
+
+    # A CMS page addressed only by an opaque id (`/?page_id=4811`) carries no
+    # slug to judge, and on the portals we aggregate these are static section
+    # pages rather than notices. Real notices are either slugged or served
+    # from a content path, both of which have segments.
+    if not segments and parsed.query:
+        return False
+
+    # Query strings that select/filter a *set* of items describe a listing
+    # view, not one document — e.g. `/news-app?search_category=2&search_school=10`.
+    # A real notice is identified, not filtered.
+    if parsed.query:
+        query_keys = {
+            k.split("=")[0].lower() for k in parsed.query.split("&") if k
+        }
+        if any(
+            key.startswith(("search", "filter"))
+            or key in {"category", "cat", "tag", "type", "sort", "order", "q", "s", "keyword"}
+            for key in query_keys
+        ):
+            return False
 
     return True
 
@@ -1619,6 +1721,38 @@ async def scrape_source(
         list(category_urls.keys()),
     )
     return items, schemas_used
+
+
+async def check_listing(
+    base_url: str,
+    category_urls: dict[str, str],
+    cached_schemas: dict[str, dict | None] | None = None,
+    known_urls: set[str] | list[str] | None = None,
+    pagination: PaginationConfig | None = None,
+) -> tuple[list[str], int]:
+    """Cheap "is there anything new?" probe for sources with no sitemap.
+
+    Fetches only page 1 of each configured listing and extracts the detail
+    URLs — no detail pages, no OCR, no LLM (scrape_source only does those
+    when fetch_detail=True). That makes it comparable in cost to a sitemap
+    check, so HTML-only sources can be polled on a short interval and pay
+    for a full crawl only when genuinely new URLs appear.
+
+    Returns (new_urls, total_seen).
+    """
+    known = set(known_urls or ())
+    items, _ = await scrape_source(
+        base_url=base_url,
+        category_urls=category_urls,
+        cached_schemas=cached_schemas,
+        known_urls=known,
+        max_pages=1,
+        fetch_detail=False,
+        pagination=pagination,
+    )
+    seen = [i.source_url for i in items if i.source_url]
+    new_urls = [u for u in dict.fromkeys(seen) if u not in known]
+    return new_urls, len(set(seen))
 
 
 async def scrape_sitemap_urls(

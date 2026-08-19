@@ -6,8 +6,7 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
-  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield,
-} from "lucide-react"
+  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { mockScrapingSources } from "@/lib/mock-data"
@@ -39,6 +38,7 @@ const navGroups = [
     label: "Administration",
     links: [
       { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/plans", label: "Plans & usage", icon: CreditCard },
       { href: "/admin/settings", label: "Settings", icon: SlidersHorizontal },
       { href: "/admin/system", label: "System", icon: Settings },
     ],

@@ -66,6 +66,13 @@ type BlockType = "heading" | "numbered-heading" | "subheading" | "paragraph" | "
 function preprocessContent(raw: string): string {
   let text = raw
 
+  // Strip zero-width joiners/non-joiners and other invisible formatting
+  // characters — a very common artifact of legacy Devanagari font extraction
+  // (PDF text layers built for glyph-shaping, not for copy/paste), e.g.
+  // "सङ्‍घीय" reading as "सङ्‍ घीय" with stray joiners breaking words visually.
+  // U+200B-200F: zero-width space/ZWNJ/ZWJ/LRM/RLM, U+FEFF: BOM/ZWNBSP.
+  text = text.replace(/[\u200B-\u200F\uFEFF]/g, "")
+
   // Normalize multiple spaces to single
   text = text.replace(/[ \t]{2,}/g, " ")
 

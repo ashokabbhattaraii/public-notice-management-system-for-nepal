@@ -8,13 +8,13 @@ import {
   Bell,
   AlertCircle,
   Mail,
-  Phone,
   MessageCircle,
   CheckCircle,
   Info,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
+import { WhatsappConnectCard } from "@/components/alerts/whatsapp-connect-card"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 
@@ -24,14 +24,12 @@ export default function SettingsPage() {
 
   const [alertPrefs, setAlertPrefs] = useState({
     email: { enabled: true, value: user?.email || "" },
-    whatsapp: { enabled: false, value: "+977" },
     messenger: { enabled: false, connected: false },
   })
 
   // Simulating admin-enabled channels
   const adminChannels = {
     email: true,
-    whatsapp: true,
     messenger: false,
   }
 
@@ -138,37 +136,11 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* WhatsApp - only if admin enabled */}
-              {adminChannels.whatsapp && (
-                <div className="flex items-center justify-between rounded-[16px] bg-vez-surface p-5">
-                  <div className="flex flex-1 items-center gap-3.5">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-white">
-                      <Phone className="size-4 text-vez-navy" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-vez-ink">WhatsApp</p>
-                      {alertPrefs.whatsapp.enabled ? (
-                        <input
-                          className="mt-1.5 h-8 w-44 rounded-full border border-vez-line bg-white px-3.5 text-xs text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
-                          placeholder="+977XXXXXXXXXX"
-                          value={alertPrefs.whatsapp.value}
-                          onChange={(e) => setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, value: e.target.value } })}
-                        />
-                      ) : (
-                        <p className="text-xs text-vez-mute">Receive alerts on WhatsApp</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex items-center gap-1 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
-                      <CheckCircle className="size-3" /> Available
-                    </span>
-                    {toggleButton(alertPrefs.whatsapp.enabled, () =>
-                      setAlertPrefs({ ...alertPrefs, whatsapp: { ...alertPrefs.whatsapp, enabled: !alertPrefs.whatsapp.enabled } })
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* WhatsApp — real OTP-verified connect flow, not a bare toggle.
+                  A phone number only becomes active once its owner proves
+                  they received the code sent to it (see WhatsappConnectCard /
+                  NotificationsService.verifyOtp). */}
+              <WhatsappConnectCard />
 
               {/* Facebook Messenger */}
               {adminChannels.messenger ? (

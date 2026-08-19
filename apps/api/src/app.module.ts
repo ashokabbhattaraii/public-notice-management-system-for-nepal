@@ -9,6 +9,10 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RagModule } from './modules/rag.module';
 import { ScrapingModule } from './modules/scraping.module';
 import { SettingsModule } from './modules/settings.module';
+import { BillingModule } from './modules/billing.module';
+import { EvolutionApiModule } from './integrations/evolution/evolution-api.module';
+import { AlertsModule } from './modules/alerts.module';
+import { NotificationsModule } from './modules/notifications.module';
 import { SettingsController, PublicSettingsController } from './controllers/settings.controller';
 import { HealthController } from './controllers/health.controller';
 import { MaintenanceMiddleware } from './common/maintenance.middleware';
@@ -24,12 +28,16 @@ import { TokenRevocationModule } from './common/token-revocation.module';
     TokenRevocationModule,
     PrismaModule,
     SettingsModule,
+    EvolutionApiModule,
     AuthModule,
     NoticesModule,
     DocumentsModule,
     WebhooksModule,
     RagModule,
     ScrapingModule,
+    AlertsModule,
+    NotificationsModule,
+    BillingModule,
   ],
   controllers: [HealthController, SettingsController, PublicSettingsController],
 })

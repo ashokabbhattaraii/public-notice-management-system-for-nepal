@@ -142,17 +142,9 @@ def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
     # Now build blocks: elements + paragraphs between them
     last_end = 0
     for start, end, btype, content in elements:
-        # Paragraph before this element
+        # Paragraph(s) before this element
         if start > last_end:
-            para_text = text[last_end:start].strip()
-            if para_text:
-                blocks.append(Block(
-                    content=para_text,
-                    block_type="paragraph",
-                    page_num=None,
-                    char_start=last_end,
-                    char_end=start,
-                ))
+            blocks.extend(_split_into_paragraph_blocks(text, last_end, start))
         # The element itself
         level = 0
         if btype.startswith("header_h"):
@@ -171,20 +163,43 @@ def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
         ))
         last_end = end
 
-    # Trailing paragraph
+    # Trailing paragraph(s)
     if last_end < len(text):
-        para_text = text[last_end:].strip()
-        if para_text:
-            blocks.append(Block(
-                content=para_text,
-                block_type="paragraph",
-                page_num=None,
-                char_start=last_end,
-                char_end=len(text),
-            ))
+        blocks.extend(_split_into_paragraph_blocks(text, last_end, len(text)))
 
     # Post-process: merge consecutive list items into list blocks
     return _merge_list_blocks(blocks)
+
+
+# Blank-line paragraph boundary — PDF/DOCX/plain-text extraction never
+# produces markdown headers, so without this, any prose gap between (or
+# around) structural elements becomes a single paragraph Block no matter how
+# long the source document is. chunk_blocks() only ever splits *between*
+# blocks, never within one, so one Block == one chunk regardless of size.
+_PARAGRAPH_BREAK_RE = re.compile(r"\n\s*\n")
+
+
+def _split_into_paragraph_blocks(text: str, start: int, end: int) -> list[Block]:
+    """Split text[start:end] into one Block per blank-line-separated paragraph."""
+    blocks: list[Block] = []
+    pos = start
+    for m in _PARAGRAPH_BREAK_RE.finditer(text, start, end):
+        _append_paragraph_block(blocks, text, pos, m.start())
+        pos = m.end()
+    _append_paragraph_block(blocks, text, pos, end)
+    return blocks
+
+
+def _append_paragraph_block(blocks: list[Block], text: str, start: int, end: int) -> None:
+    stripped = text[start:end].strip()
+    if stripped:
+        blocks.append(Block(
+            content=stripped,
+            block_type="paragraph",
+            page_num=None,
+            char_start=start,
+            char_end=end,
+        ))
 
 
 def _merge_list_blocks(blocks: list[Block]) -> list[Block]:
@@ -250,8 +265,17 @@ def chunk_blocks(
     if not blocks:
         return []
 
-    # Build section paths from headers
+    # Build section paths from headers (before any splitting below, so split
+    # pieces of the same original block all inherit one consistent path).
     _build_section_paths(blocks)
+
+    # Safety net: paragraph-splitting upstream (_split_into_paragraph_blocks)
+    # handles the common case, but a single block can still exceed chunk_size
+    # on its own — one giant paragraph with no blank lines, an unbroken wall
+    # of OCR text, etc. The packing loop below only ever creates a chunk
+    # boundary *between* blocks, so without this, such a block becomes one
+    # oversized chunk regardless of chunk_size.
+    blocks = _split_oversized_blocks(blocks, chunk_size)
 
     chunks: list[Chunk] = []
     current_content = ""
@@ -335,6 +359,31 @@ def chunk_blocks(
         chunks.append(chunk)
 
     return chunks
+
+
+def _split_oversized_blocks(blocks: list[Block], chunk_size: int) -> list[Block]:
+    """Expand any block bigger than chunk_size into several same-metadata
+    blocks via the sentence-aware splitter, so the packing loop always has
+    pieces small enough to bound a chunk. Header/table/code blocks are left
+    intact — they're structural units, not prose to break mid-way."""
+    result: list[Block] = []
+    for block in blocks:
+        if len(block.content) <= chunk_size or block.block_type != "paragraph":
+            result.append(block)
+            continue
+        pos = block.char_start
+        for piece in _split_paragraph(block.content, chunk_size):
+            result.append(Block(
+                content=piece,
+                block_type=block.block_type,
+                level=block.level,
+                page_num=block.page_num,
+                char_start=pos,
+                char_end=pos + len(piece),
+                metadata=dict(block.metadata),
+            ))
+            pos += len(piece)
+    return result
 
 
 def _build_section_paths(blocks: list[Block]) -> None:

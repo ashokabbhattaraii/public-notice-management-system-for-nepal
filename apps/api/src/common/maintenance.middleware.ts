@@ -2,7 +2,10 @@ import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { SettingsService } from '../services/settings.service';
 
-const ALLOWED_PREFIXES = ['/admin', '/health', '/auth', '/public'];
+// /webhooks and /billing stay reachable in maintenance mode: Stripe retries a
+// rejected webhook only a limited number of times, and a subscription state
+// lost that way is worse than the maintenance window itself.
+const ALLOWED_PREFIXES = ['/admin', '/health', '/auth', '/public', '/webhooks', '/billing', '/plans'];
 
 /**
  * Maintenance-mode gate. When `maintenance.enabled` is on, everything except

@@ -1,5 +1,8 @@
 import {
   User,
+  WhatsappStatus,
+  DigestFrequency,
+  AlertRule,
   RagDocument,
   RagDocumentListResponse,
   RagQueryResponse,
@@ -81,6 +84,206 @@ function mapUser(u: ApiUser): User {
   }
 }
 
+// ─── Membership & billing ────────────────────────────────────────────────────
+
+export type PlanTier = "FREE" | "PRO" | "MAX"
+
+export type QuotaKind =
+  | "ai_questions"
+  | "documents"
+  | "alert_rules"
+  | "whatsapp_notifications"
+  | "upload_size"
+  | "instant_alerts"
+
+export interface QuotaDenial {
+  kind: QuotaKind
+  limit: number | null
+  used: number
+  tier: PlanTier
+  message: string
+}
+
+/** Thrown on HTTP 402 — the request was refused by the user's plan. */
+export class QuotaError extends Error {
+  constructor(message: string, readonly quota: QuotaDenial) {
+    super(message)
+    this.name = "QuotaError"
+  }
+}
+
+export function isQuotaError(err: unknown): err is QuotaError {
+  return err instanceof QuotaError
+}
+
+export interface PlanLimits {
+  maxDocuments: number | null
+  maxAiQuestionsPerMonth: number | null
+  maxAlertRules: number | null
+  maxWhatsappPerMonth: number | null
+  maxUploadMb: number
+  allowInstantAlerts: boolean
+}
+
+export interface PublicPlan {
+  tier: PlanTier
+  name: string
+  tagline: string | null
+  description: string | null
+  priceMonthlyCents: number
+  priceYearlyCents: number | null
+  currency: string
+  features: string[]
+  limits: PlanLimits
+  sortOrder: number
+  purchasable: boolean
+}
+
+export interface UsageMeter {
+  used: number
+  limit: number | null
+  remaining: number | null
+  exceeded: boolean
+}
+
+export interface BillingSummary {
+  plan: {
+    tier: PlanTier
+    name: string
+    tagline: string | null
+    priceMonthlyCents: number
+    currency: string
+  }
+  status: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INCOMPLETE"
+  isDefault: boolean
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  limits: PlanLimits
+  usage: {
+    aiQuestions: UsageMeter
+    documents: UsageMeter
+    alertRules: UsageMeter
+    whatsappNotifications: UsageMeter
+    periodStart: string
+    periodEnd: string
+  }
+  paymentsConfigured: boolean
+}
+
+/** Public plan catalogue for the pricing page (no auth required). */
+export async function fetchPlans(): Promise<PublicPlan[]> {
+  return apiFetch("/plans")
+}
+
+/** Current plan, limits and this month's usage for the signed-in user. */
+export async function fetchBillingSummary(): Promise<BillingSummary> {
+  return apiFetch("/billing/me")
+}
+
+/** Start an upgrade — returns the Stripe Checkout URL to redirect to. */
+export async function startCheckout(tier: Exclude<PlanTier, "FREE">): Promise<{ url: string }> {
+  return apiFetch("/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ tier }),
+  })
+}
+
+/** Open Stripe's hosted billing portal for the current subscriber. */
+export async function openBillingPortal(): Promise<{ url: string }> {
+  return apiFetch("/billing/portal", { method: "POST", body: JSON.stringify({}) })
+}
+
+export interface AdminPlan extends Omit<PublicPlan, "features" | "purchasable"> {
+  id: string
+  features: string[] | null
+  stripeProductId: string | null
+  stripePriceId: string | null
+  stripeYearlyPriceId: string | null
+  maxDocuments: number | null
+  maxAiQuestionsPerMonth: number | null
+  maxAlertRules: number | null
+  maxWhatsappPerMonth: number | null
+  maxUploadMb: number
+  allowInstantAlerts: boolean
+  isPublic: boolean
+}
+
+export async function fetchAdminPlans(): Promise<AdminPlan[]> {
+  return apiFetch("/admin/plans")
+}
+
+export async function updateAdminPlan(
+  tier: PlanTier,
+  patch: Partial<AdminPlan>,
+): Promise<AdminPlan> {
+  return apiFetch(`/admin/plans/${tier}`, { method: "PUT", body: JSON.stringify(patch) })
+}
+
+export interface AdminUsageRow {
+  id: string
+  name: string
+  email: string
+  role: "user" | "admin"
+  status: "active" | "inactive"
+  createdAt: string
+  tier: PlanTier
+  planName: string
+  subscriptionStatus: string | null
+  grantedByAdmin: boolean
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  usage: {
+    aiQuestions: number
+    documentUploads: number
+    whatsappNotifications: number
+    documents: number
+    alertRules: number
+  }
+}
+
+export async function fetchAdminUsage(
+  limit = 100,
+  offset = 0,
+): Promise<{ data: AdminUsageRow[]; meta: { total: number; limit: number; offset: number; periodStart: string } }> {
+  return apiFetch(`/admin/usage?limit=${limit}&offset=${offset}`)
+}
+
+export interface AdminUserUsageDetail extends BillingSummary {
+  userId: string
+  events: Array<{
+    id: string
+    metric: string
+    quantity: number
+    metadata: Record<string, unknown> | null
+    createdAt: string
+  }>
+}
+
+export async function fetchAdminUserUsage(userId: string): Promise<AdminUserUsageDetail> {
+  return apiFetch(`/admin/users/${userId}/usage`)
+}
+
+export async function grantUserPlan(userId: string, tier: PlanTier, note?: string) {
+  return apiFetch(`/admin/users/${userId}/plan`, {
+    method: "POST",
+    body: JSON.stringify({ tier, note }),
+  })
+}
+
+export async function revokeUserPlan(userId: string) {
+  return apiFetch(`/admin/users/${userId}/plan`, { method: "DELETE" })
+}
+
+/** Money formatting shared by the pricing page and billing panel. */
+export function formatPlanPrice(cents: number, currency: string): string {
+  if (cents === 0) return "Free"
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100)
+}
+
 /**
  * In-flight GETs, keyed by path. A browser only opens a handful of connections
  * per host, so a poll timer that fires again before its previous request came
@@ -128,13 +331,21 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
     // dump of the whole envelope.
     const body = await res.text()
     let message = body
+    let parsed: any = null
     try {
-      const parsed = JSON.parse(body)
+      parsed = JSON.parse(body)
       const raw = parsed?.message ?? parsed?.error
       if (raw) message = Array.isArray(raw) ? raw.join(", ") : String(raw)
     } catch {
       // not JSON — use the raw body
     }
+
+    // 402 means "your plan doesn't cover this". Throwing a typed error lets
+    // callers render a targeted upgrade prompt instead of a generic toast.
+    if (res.status === 402 && parsed?.quota) {
+      throw new QuotaError(message, parsed.quota as QuotaDenial)
+    }
+
     throw new Error(message || `Request failed: ${res.status}`)
   }
   return res.json() as Promise<T>
@@ -517,6 +728,99 @@ export async function fetchNoticeCategoryCounts(): Promise<Record<string, number
 
 export async function fetchNoticeSources(): Promise<PublicNoticeSource[]> {
   return apiFetch("/notices/meta/sources")
+}
+
+// ─── Alerts API ───────────────────────────────────────────────────────────
+// Server and client share the same AlertRule shape directly — no mapping
+// needed (each filter dimension is AND'd; values within one are OR'd).
+
+export type NewAlertRuleInput = Pick<
+  AlertRule,
+  | "name"
+  | "enabled"
+  | "priority"
+  | "categories"
+  | "tags"
+  | "keywords"
+  | "excludeKeywords"
+  | "organizations"
+  | "minUrgency"
+  | "deadlineWithinDays"
+>
+
+export async function fetchAlertRules(): Promise<AlertRule[]> {
+  return apiFetch<AlertRule[]>("/alerts")
+}
+
+export async function createAlertRule(input: NewAlertRuleInput): Promise<AlertRule> {
+  return apiFetch<AlertRule>("/alerts", { method: "POST", body: JSON.stringify(input) })
+}
+
+export async function updateAlertRule(id: string, updates: Partial<NewAlertRuleInput>): Promise<AlertRule> {
+  return apiFetch<AlertRule>(`/alerts/${id}`, { method: "PATCH", body: JSON.stringify(updates) })
+}
+
+export async function deleteAlertRule(id: string): Promise<void> {
+  await apiFetch(`/alerts/${id}`, { method: "DELETE" })
+}
+
+// ─── WhatsApp notification channel API ───────────────────────────────────
+
+export async function fetchWhatsappStatus(): Promise<WhatsappStatus> {
+  return apiFetch("/notifications/whatsapp/status")
+}
+
+export async function setWhatsappDigestFrequency(digestFrequency: DigestFrequency): Promise<WhatsappStatus> {
+  return apiFetch("/notifications/whatsapp/digest-frequency", {
+    method: "PATCH",
+    body: JSON.stringify({ digestFrequency }),
+  })
+}
+
+export async function requestWhatsappOtp(phoneNumber: string): Promise<{ requested: true }> {
+  return apiFetch("/notifications/whatsapp/request-otp", {
+    method: "POST",
+    body: JSON.stringify({ phoneNumber }),
+  })
+}
+
+export async function verifyWhatsappOtp(code: string): Promise<WhatsappStatus> {
+  return apiFetch("/notifications/whatsapp/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  })
+}
+
+export async function toggleWhatsappAlerts(enabled: boolean): Promise<WhatsappStatus> {
+  return apiFetch("/notifications/whatsapp/toggle", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+export async function disconnectWhatsapp(): Promise<WhatsappStatus> {
+  return apiFetch("/notifications/whatsapp", { method: "DELETE" })
+}
+
+// ─── Admin: shared WhatsApp sender instance (Evolution API) ─────────────────
+// Distinct from the per-user opt-in flow above — this controls the single
+// shared sending number itself. Admin-only (JwtAuthGuard + RolesGuard).
+
+export interface AdminWhatsappStatus {
+  configured: boolean
+  state: string // "open" (connected) | "connecting" | "close" | "unknown"
+}
+
+export async function fetchAdminWhatsappStatus(): Promise<AdminWhatsappStatus> {
+  return apiFetch("/admin/whatsapp/status")
+}
+
+export async function fetchAdminWhatsappQr(): Promise<{ available: boolean; base64: string | null; pairingCode: string | null }> {
+  return apiFetch("/admin/whatsapp/qr", { method: "POST" })
+}
+
+export async function logoutAdminWhatsapp(): Promise<{ loggedOut: boolean }> {
+  return apiFetch("/admin/whatsapp/logout", { method: "POST" })
 }
 
 export async function correctScrapedItem(

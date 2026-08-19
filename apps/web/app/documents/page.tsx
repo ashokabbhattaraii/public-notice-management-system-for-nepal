@@ -16,7 +16,9 @@ import { useAuth } from "@/lib/auth-context"
 import {
   fetchDocuments, uploadDocument, deleteDocument, ragQuery,
   embedDocument, unembedDocument, fetchDocumentsProgress,
+  isQuotaError, type QuotaDenial,
 } from "@/lib/api"
+import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
 
 // Titles often arrive as raw filenames ("_Hamro_Life_Bank_SRS.pdf");
 // humanize them for display in the source chips.
@@ -280,6 +282,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   const [title, setTitle] = useState("")
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
+  const [quota, setQuota] = useState<QuotaDenial | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -287,12 +290,16 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     if (!file || !title.trim()) return
     setUploading(true)
     setError("")
+    setQuota(null)
     try {
       await uploadDocument(file, title.trim())
       onUploaded()
       onClose()
     } catch (e: any) {
-      setError(e.message || "Upload failed")
+      // A plan limit is not a failure to retry — show what ran out and how to
+      // fix it, instead of a red error the user can only stare at.
+      if (isQuotaError(e)) setQuota(e.quota)
+      else setError(e.message || "Upload failed")
     } finally {
       setUploading(false)
     }
@@ -400,6 +407,8 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             />
           </div>
 
+          {quota && <UpgradePrompt quota={quota} onDismiss={() => setQuota(null)} />}
+
           {error && (
             <div className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3">
               <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-500" />
@@ -434,6 +443,8 @@ export default function RagPage() {
   const [docSearch, setDocSearch] = useState("")
   const [chatInput, setChatInput] = useState("")
   const [typing, setTyping] = useState(false)
+  // Set when the AI allowance runs out; rendered above the composer.
+  const [chatQuota, setChatQuota] = useState<QuotaDenial | null>(null)
   const [docs, setDocs] = useState<RagDocument[]>([])
   const [docsLoading, setDocsLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -586,6 +597,13 @@ export default function RagPage() {
       }
       setMessages(prev => [...prev, assistantMsg])
     } catch (e: any) {
+      // A spent AI allowance is a billing state, not a chat failure — surface
+      // it as an upgrade prompt below the composer instead of a bot apology.
+      if (isQuotaError(e)) {
+        setChatQuota(e.quota)
+        setTyping(false)
+        return
+      }
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -876,6 +894,11 @@ export default function RagPage() {
 
       {/* Input */}
       <div className="shrink-0 border-t border-vez-line px-4 py-3 sm:px-5 sm:py-4">
+        {chatQuota && (
+          <div className="mb-3">
+            <UpgradePrompt quota={chatQuota} compact onDismiss={() => setChatQuota(null)} />
+          </div>
+        )}
         <div className="flex gap-2 sm:gap-3">
           <input
             value={chatInput}

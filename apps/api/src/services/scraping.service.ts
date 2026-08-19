@@ -11,7 +11,16 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from './settings.service';
+import { AlertMatchingService } from './alert-matching.service';
 import * as crypto from 'crypto';
+
+/**
+ * Minimum extraction-quality score (0-1, from the AI service's
+ * extractor._text_quality) for PDF text to be stored as a notice's body.
+ * Mirrors the AI service's own QUALITY_THRESHOLD: below this the "text" is
+ * legacy-font/OCR noise rather than language.
+ */
+const EXTRACTION_QUALITY_FLOOR = 0.55;
 
 interface RawAttachment {
   url: string;
@@ -86,6 +95,7 @@ export class ScrapingService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly alertMatching: AlertMatchingService,
   ) {
     this.aiServiceUrl =
       this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
@@ -416,6 +426,60 @@ export class ScrapingService {
       checked_at: string;
       new_urls: string[];
       total_locs: number;
+    };
+  }
+
+  /**
+   * Cheap "anything new?" probe for a source with no usable sitemap: fetches
+   * only page 1 of each listing and returns detail URLs not already stored.
+   * No detail pages, no OCR, no LLM — comparable in cost to a sitemap check,
+   * so HTML-only sources can be polled on a short interval and only pay for
+   * a full crawl when something actually appeared.
+   */
+  async checkListing(id: string) {
+    const source = await this.getSource(id);
+
+    const categoryUrls: Record<string, string> = {};
+    if (source.noticeListUrl) categoryUrls.NOTICE = source.noticeListUrl;
+    if (source.newsListUrl) categoryUrls.NEWS = source.newsListUrl;
+    if (source.pressReleaseListUrl) categoryUrls.PRESS_RELEASE = source.pressReleaseListUrl;
+    if (Object.keys(categoryUrls).length === 0) {
+      throw new ConflictException('This source has no listing URL configured');
+    }
+
+    const knownUrls = (
+      await this.prisma.scrapedItem.findMany({
+        where: { sourceId: id },
+        select: { sourceUrl: true },
+      })
+    ).map((r) => r.sourceUrl);
+
+    const cachedSchemas: Record<string, unknown> = {};
+    if (source.noticeSchema) cachedSchemas.NOTICE = source.noticeSchema;
+    if (source.newsSchema) cachedSchemas.NEWS = source.newsSchema;
+    if (source.pressReleaseSchema) cachedSchemas.PRESS_RELEASE = source.pressReleaseSchema;
+
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.aiServiceUrl}/scrape/listing/check`,
+        {
+          base_url: source.baseUrl,
+          category_urls: categoryUrls,
+          cached_schemas: cachedSchemas,
+          known_urls: knownUrls,
+          pagination: {
+            type: source.paginationType,
+            param: source.paginationParam,
+            start_page: source.startPage,
+          },
+        },
+        { timeout: 60000 },
+      ),
+    );
+    return response.data as {
+      new_urls: string[];
+      total_seen: number;
+      checked_at: string;
     };
   }
 
@@ -780,6 +844,12 @@ export class ScrapingService {
         itemsNew++;
         if (item.ai_summary) freshlySummarizedIds.push(created.id);
 
+        // Queue for alert matching — synchronous, cannot throw, never blocks
+        // or slows the scrape loop. Processed one at a time in the
+        // background so a burst of new items can't flood the DB/WhatsApp
+        // API with concurrent requests (see AlertMatchingService.enqueue).
+        this.alertMatching.enqueue(created);
+
         // Create attachment records
         if (item.attachments?.length) {
           await this.prisma.attachment.createMany({
@@ -991,8 +1061,25 @@ export class ScrapingService {
       );
       if (!response.data?.content_text) return false;
 
+      // The AI service scores how plausible the extracted text is (see
+      // extractor._text_quality). A legacy Nepali font (Preeti and friends)
+      // decodes to confident-looking symbol noise — `S Ñ ! ."$% &'( )*(` —
+      // which is worse than having no text at all: it renders as garbage on
+      // the notice page, pollutes the RAG index, and gets echoed back as
+      // "answers" by the chatbot. Keep the AI summary (the LLM reads the
+      // rendered pages, so it stays usable) but don't persist the body text.
+      const quality: number | undefined =
+        typeof response.data.quality === 'number' ? response.data.quality : undefined;
+      const usableText = quality === undefined || quality >= EXTRACTION_QUALITY_FLOOR;
+      if (!usableText) {
+        this.logger.warn(
+          `Discarding unreadable PDF text for notice ${id} ` +
+            `(quality ${quality!.toFixed(2)} < ${EXTRACTION_QUALITY_FLOOR}, method=${response.data.method ?? 'unknown'})`,
+        );
+      }
+
       const data: any = {
-        contentText: response.data.content_text,
+        ...(usableText ? { contentText: response.data.content_text } : {}),
         aiAnalyzedAt: new Date(),
       };
       if (response.data.analyzed) {
