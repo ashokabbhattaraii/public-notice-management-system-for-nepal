@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Phone, CheckCircle, XCircle, Loader2, QrCode, LogOut } from "lucide-react"
 import { fetchAdminWhatsappStatus, fetchAdminWhatsappQr, logoutAdminWhatsapp, AdminWhatsappStatus } from "@/lib/api"
+import { toast } from "sonner"
 
 const STATUS_POLL_MS = 5000
 
@@ -60,6 +61,7 @@ export function AdminWhatsappCard() {
     try {
       await logoutAdminWhatsapp()
       setQr(null)
+      toast.success("WhatsApp sender disconnected")
       refreshStatus()
     } catch (e: any) {
       setError(e.message || "Could not disconnect")

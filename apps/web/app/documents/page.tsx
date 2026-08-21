@@ -19,6 +19,8 @@ import {
   isQuotaError, type QuotaDenial,
 } from "@/lib/api"
 import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
+import { toast } from "sonner"
+import { toastApiError } from "@/lib/toast"
 
 // Titles often arrive as raw filenames ("_Hamro_Life_Bank_SRS.pdf");
 // humanize them for display in the source chips.
@@ -473,8 +475,9 @@ export default function RagPage() {
       if (!opts.silent) setDocsLoading(true)
       const response = await fetchDocuments(1, 100)
       setDocs(response.data)
-    } catch {
-      // Silently fail - will show empty state
+    } catch (e) {
+      // Silent polls stay quiet — only the user-triggered load reports failure.
+      if (!opts.silent) toastApiError(e, "Could not load your documents")
     } finally {
       if (!opts.silent) setDocsLoading(false)
     }
@@ -548,8 +551,9 @@ export default function RagPage() {
     try {
       await deleteDocument(id)
       setDocs(prev => prev.filter(d => d.id !== id))
-    } catch (e: any) {
-      alert(`Delete failed: ${e.message}`)
+      toast.success("Document deleted")
+    } catch (e) {
+      toastApiError(e, "Delete failed")
     }
   }
 
@@ -560,8 +564,9 @@ export default function RagPage() {
         ? await unembedDocument(doc.id)
         : await embedDocument(doc.id)
       setDocs(prev => prev.map(d => (d.id === doc.id ? { ...d, ...updated } : d)))
-    } catch (e: any) {
-      alert(`Could not update embedding: ${e.message}`)
+      toast.success(doc.status === "INDEXED" ? "Document unembedded" : "Document embedding started")
+    } catch (e) {
+      toastApiError(e, "Could not update embedding")
     } finally {
       setTogglingIds(prev => {
         const next = new Set(prev)

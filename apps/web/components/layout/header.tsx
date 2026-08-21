@@ -260,13 +260,6 @@ export function Header() {
 
           {/* Mobile toggle */}
           <div className="flex items-center gap-2 lg:hidden">
-            <button
-              onClick={() => alert("🔔 Notify button clicked! (dummy test)")}
-              className="flex size-10 items-center justify-center rounded-full bg-vez-navy/10 text-vez-navy backdrop-blur-[6px]"
-              aria-label="Notify"
-            >
-              <Bell className="size-4" />
-            </button>
             {user && (
               <button className="relative flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]" aria-label="Notifications">
                 <Bell className="size-4" />

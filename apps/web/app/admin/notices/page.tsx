@@ -13,6 +13,7 @@ import {
   reextractNotices,
 } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
+import { toast } from "sonner"
 import type { ScrapedItem, ScrapedItemCategory, ScrapeSource } from "@/lib/types"
 
 const inputClass =
@@ -134,7 +135,7 @@ function AdminNoticesPageContent() {
   }, [search])
 
   useEffect(() => {
-    fetchScrapeSources().then(setSources).catch(() => {})
+    fetchScrapeSources().then(setSources).catch((e) => console.error("scrape sources:", e))
   }, [])
 
   const [sortBy, sortOrder] = sort.split(":") as [ScrapedItemFiltersSortBy, "asc" | "desc"]
@@ -262,6 +263,7 @@ function AdminNoticesPageContent() {
         tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
         aiCategoryConfidence: editConfidence,
       })
+      toast.success("Notice updated")
       await load()
       closeEditor()
     } catch (err) {
@@ -276,6 +278,7 @@ function AdminNoticesPageContent() {
     setEditing(true)
     try {
       await correctScrapedItem(editingItem.id, { reClassify: true })
+      toast.success("Notice re-classified")
       await load()
       closeEditor()
     } catch (err) {
@@ -291,6 +294,7 @@ function AdminNoticesPageContent() {
     if (!confirm("Remove this notice from the list?")) return
     try {
       await deleteScrapedItem(id)
+      toast.success("Notice removed")
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete notice")

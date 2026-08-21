@@ -308,6 +308,32 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return request
 }
 
+/**
+ * Nest error bodies are JSON ({statusCode, message, error}); surface the
+ * message so UI toasts read "Downloaded file is not a PDF …" instead of a
+ * dump of the whole envelope. 402 means "your plan doesn't cover this" —
+ * throws a typed QuotaError so callers can render a targeted upgrade prompt
+ * instead of a generic toast.
+ */
+async function throwApiError(res: Response): Promise<never> {
+  const body = await res.text()
+  let message = body
+  let parsed: any = null
+  try {
+    parsed = JSON.parse(body)
+    const raw = parsed?.message ?? parsed?.error
+    if (raw) message = Array.isArray(raw) ? raw.join(", ") : String(raw)
+  } catch {
+    // not JSON — use the raw body
+  }
+
+  if (res.status === 402 && parsed?.quota) {
+    throw new QuotaError(message, parsed.quota as QuotaDenial)
+  }
+
+  throw new Error(message || `Request failed: ${res.status}`)
+}
+
 async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   const token = tokenStore.get()
   const res = await fetch(`${API_URL}${path}`, {
@@ -326,27 +352,7 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
       tokenStore.clear()
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
     }
-    // Nest error bodies are JSON ({statusCode, message, error}); surface the
-    // message so UI toasts read "Downloaded file is not a PDF …" instead of a
-    // dump of the whole envelope.
-    const body = await res.text()
-    let message = body
-    let parsed: any = null
-    try {
-      parsed = JSON.parse(body)
-      const raw = parsed?.message ?? parsed?.error
-      if (raw) message = Array.isArray(raw) ? raw.join(", ") : String(raw)
-    } catch {
-      // not JSON — use the raw body
-    }
-
-    // 402 means "your plan doesn't cover this". Throwing a typed error lets
-    // callers render a targeted upgrade prompt instead of a generic toast.
-    if (res.status === 402 && parsed?.quota) {
-      throw new QuotaError(message, parsed.quota as QuotaDenial)
-    }
-
-    throw new Error(message || `Request failed: ${res.status}`)
+    await throwApiError(res)
   }
   return res.json() as Promise<T>
 }
@@ -397,10 +403,7 @@ export async function uploadDocument(file: File, title: string): Promise<RagDocu
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
   })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(err || `Upload failed: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res)
   return res.json()
 }
 

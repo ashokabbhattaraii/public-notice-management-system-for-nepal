@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
+import { toast } from "sonner"
 import {
   fetchAdminPlans,
   updateAdminPlan,
@@ -390,6 +391,7 @@ function AdminPlansPageContent() {
       } else {
         await grantUserPlan(userId, tier, "Granted from admin console")
       }
+      toast.success(`Plan changed to ${tier}`)
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not change the plan")

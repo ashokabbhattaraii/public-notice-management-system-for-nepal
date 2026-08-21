@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
+import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { UsageMeterBar } from "@/components/billing/upgrade-prompt"
 import {
   fetchBillingSummary,
@@ -247,27 +248,29 @@ function BillingPageContent() {
 
 export default function BillingPage() {
   return (
-    <div className="min-h-screen bg-vez-surface/30 font-poppins">
+    <div className="min-h-screen bg-white font-poppins">
       <Header />
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-[clamp(26px,3vw,36px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
-            Plan &amp; usage.
-          </h1>
-          <p className="mt-2 text-sm text-vez-mute">
-            What your membership includes, and what you've used this month.
-          </p>
+      <DashboardLayout>
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-8">
+            <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+              Plan &amp; usage.
+            </h1>
+            <p className="mt-2 text-sm text-vez-mute">
+              What your membership includes, and what you've used this month.
+            </p>
+          </div>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-24 text-vez-mute">
+                <Loader2 className="size-6 animate-spin" />
+              </div>
+            }
+          >
+            <BillingPageContent />
+          </Suspense>
         </div>
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-24 text-vez-mute">
-              <Loader2 className="size-6 animate-spin" />
-            </div>
-          }
-        >
-          <BillingPageContent />
-        </Suspense>
-      </main>
+      </DashboardLayout>
     </div>
   )
 }

@@ -206,8 +206,11 @@ function NoticesPageContent() {
   }, [searchInput])
 
   useEffect(() => {
-    fetchNoticeCategoryCounts().then(setCategoryCounts).catch(() => {})
-    fetchNoticeSources().then(setSources).catch(() => {})
+    // Non-critical sidebar enrichment (category counts, source dropdown) — a
+    // failure here shouldn't interrupt browsing with a toast, just leave the
+    // filter aids empty and note it for diagnostics.
+    fetchNoticeCategoryCounts().then(setCategoryCounts).catch((e) => console.error("category counts:", e))
+    fetchNoticeSources().then(setSources).catch((e) => console.error("notice sources:", e))
   }, [])
 
   // Re-sync local state whenever the URL's query string changes — this is

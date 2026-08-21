@@ -45,6 +45,7 @@ import {
   runAllScrapeSources,
 } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
+import { toast } from "sonner"
 import type {
   ScrapeSource,
   ScrapeRun,
@@ -446,6 +447,7 @@ function AdminScrapingPageContent() {
       } else {
         await createScrapeSource(payload)
       }
+      toast.success(form.id ? "Source updated" : "Source added")
       setDialogOpen(false)
       await loadAll()
     } catch (err) {
@@ -522,6 +524,7 @@ function AdminScrapingPageContent() {
   async function handleToggleEnabled(source: ScrapeSource) {
     try {
       await updateScrapeSource(source.id, { enabled: !source.enabled })
+      toast.success(source.enabled ? "Source disabled" : "Source enabled")
       await loadAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update source")
@@ -583,6 +586,7 @@ function AdminScrapingPageContent() {
     if (!confirm("Delete this source? Its scraped items and run history will also be removed.")) return
     try {
       await deleteScrapeSource(id)
+      toast.success("Source deleted")
       await loadAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete source")
@@ -1276,7 +1280,7 @@ function AdminScrapingPageContent() {
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="e.g. Ministry of Home Affairs"
-                        className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                        className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                       />
                     </div>
                     <div>
@@ -1287,7 +1291,7 @@ function AdminScrapingPageContent() {
                         value={form.baseUrl}
                         onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
                         placeholder="https://example.gov.np"
-                        className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                        className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                       />
                     </div>
                   </div>
@@ -1303,7 +1307,7 @@ function AdminScrapingPageContent() {
                           value={form.noticeListUrl}
                           onChange={(e) => setForm({ ...form, noticeListUrl: e.target.value })}
                           placeholder="https://example.gov.np/notices"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         />
                       </div>
                       <div>
@@ -1313,7 +1317,7 @@ function AdminScrapingPageContent() {
                           value={form.newsListUrl}
                           onChange={(e) => setForm({ ...form, newsListUrl: e.target.value })}
                           placeholder="https://example.gov.np/news"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         />
                       </div>
                       <div>
@@ -1323,7 +1327,7 @@ function AdminScrapingPageContent() {
                           value={form.pressReleaseListUrl}
                           onChange={(e) => setForm({ ...form, pressReleaseListUrl: e.target.value })}
                           placeholder="https://example.gov.np/press-release"
-                          className="w-full rounded-[10px] border border-vez-line px-3 py-2 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="w-full rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         />
                       </div>
                     </div>
@@ -1362,7 +1366,7 @@ function AdminScrapingPageContent() {
                           onChange={(e) =>
                             setForm({ ...form, pollIntervalSeconds: Number(e.target.value) || 60 })
                           }
-                          className="h-9 w-24 rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-9 w-24 rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         />
                         <span className="text-xs text-vez-mute">seconds</span>
                         <span className="ml-auto text-xs font-medium text-vez-ink">
@@ -1386,7 +1390,7 @@ function AdminScrapingPageContent() {
                           value={form.sitemapUrl}
                           onChange={(e) => setForm({ ...form, sitemapUrl: e.target.value })}
                           placeholder="https://example.gov.np/sitemap-news.xml"
-                          className="h-9 w-full min-w-0 rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-9 w-full min-w-0 rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         />
                         <button
                           type="button"
@@ -1462,7 +1466,7 @@ function AdminScrapingPageContent() {
                           onChange={(e) =>
                             setForm({ ...form, paginationType: e.target.value as ScrapePaginationType })
                           }
-                          className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                          className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                         >
                           <option value="QUERY_PARAM">Query parameter (?page=2, ?start=20, …)</option>
                           <option value="PATH_TEMPLATE">Path template ({"{page}"} placeholder in the URL)</option>
@@ -1476,7 +1480,7 @@ function AdminScrapingPageContent() {
                             value={form.paginationParam}
                             onChange={(e) => setForm({ ...form, paginationParam: e.target.value })}
                             placeholder="page"
-                            className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                            className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                           />
                         </div>
                       )}
@@ -1495,7 +1499,7 @@ function AdminScrapingPageContent() {
                               min={0}
                               value={form.startPage}
                               onChange={(e) => setForm({ ...form, startPage: Number(e.target.value) || 1 })}
-                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                             />
                           </div>
                           <div>
@@ -1506,7 +1510,7 @@ function AdminScrapingPageContent() {
                               max={20}
                               value={form.maxPages}
                               onChange={(e) => setForm({ ...form, maxPages: Number(e.target.value) || 1 })}
-                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm outline-none transition-colors focus:border-vez-navy"
+                              className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                             />
                           </div>
                         </div>

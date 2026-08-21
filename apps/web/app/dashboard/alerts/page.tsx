@@ -9,6 +9,7 @@ import {
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { WhatsappConnectCard } from "@/components/alerts/whatsapp-connect-card"
+import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
 import { useAuth } from "@/lib/auth-context"
 import { useAlerts } from "@/lib/alerts-context"
 import { NewAlertRuleInput } from "@/lib/api"
@@ -64,7 +65,7 @@ function hasPrimaryDimension(form: typeof emptyForm): boolean {
 
 export default function AlertsPage() {
   const { user } = useAuth()
-  const { alerts, error, addAlert, toggleAlert, deleteAlert } = useAlerts()
+  const { alerts, error, quotaError, clearQuotaError, addAlert, toggleAlert, deleteAlert } = useAlerts()
   const [showCreate, setShowCreate] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -151,6 +152,12 @@ export default function AlertsPage() {
         {error && (
           <div className="mb-6 flex items-center justify-between rounded-full bg-red-50 px-5 py-2.5 text-sm text-red-600">
             <span>{error}</span>
+          </div>
+        )}
+
+        {quotaError && (
+          <div className="mb-6">
+            <UpgradePrompt quota={quotaError} onDismiss={clearQuotaError} />
           </div>
         )}
 

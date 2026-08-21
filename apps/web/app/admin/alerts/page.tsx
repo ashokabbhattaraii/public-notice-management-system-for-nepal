@@ -14,6 +14,7 @@ import {
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { AdminWhatsappCard } from "@/components/admin/admin-whatsapp-card"
 import { Header } from "@/components/layout/header"
+import { toast } from "sonner"
 
 interface AlertChannel {
   id: string
@@ -85,6 +86,7 @@ export default function AdminAlertChannelsPage() {
         c.id === id ? { ...c, status: "connected", lastTested: new Date().toISOString() } : c
       ))
       setTestingId(null)
+      toast.success("Test message sent")
     }, 2000)
   }
 
@@ -92,6 +94,7 @@ export default function AdminAlertChannelsPage() {
     setSavingId(id)
     setTimeout(() => {
       setSavingId(null)
+      toast.success("Channel settings saved")
     }, 1000)
   }
 

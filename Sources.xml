@@ -1,0 +1,2865 @@
+<?xml version="1.0" encoding="utf-8"?>
+<b:Sources xmlns:b="http://schemas.openxmlformats.org/officeDocument/2006/bibliography" SelectedStyle="\APA.XSL" StyleName="APA" Version="6">
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Janssen2012</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{BC8F89D3-394B-53C7-8B59-496672AD8FAB}</b:Guid>
+    
+    
+    <b:Title>Benefits, adoption barriers and myths of open data and open government</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Janssen</b:Last>
+            
+            
+            <b:First>M</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Charalabidis</b:Last>
+            
+            
+            <b:First>Y</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Zuiderwijk</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2012</b:Year>
+    
+    
+    <b:JournalName>Information Systems Management</b:JournalName>
+    
+    
+    <b:Volume>29</b:Volume>
+    
+    
+    <b:Issue>4</b:Issue>
+    
+    
+    <b:Pages>258-268</b:Pages>
+    
+    
+    <b:Publisher>Taylor &amp; Francis</b:Publisher>
+    
+    
+    <b:DOI>https://doi.org/10.1080/10580530.2012.716740</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Wirtz2018</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{17F84C24-9EC8-563C-B694-9D4FCC8909F5}</b:Guid>
+    
+    
+    <b:Title>Artificial intelligence and the public sector: Applications and challenges</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Wirtz</b:Last>
+            
+            
+            <b:First>B W</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Weyerer</b:Last>
+            
+            
+            <b:First>J C</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Geyer</b:Last>
+            
+            
+            <b:First>C</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2018</b:Year>
+    
+    
+    <b:JournalName>International Journal of Public Administration</b:JournalName>
+    
+    
+    <b:Volume>42</b:Volume>
+    
+    
+    <b:Issue>7</b:Issue>
+    
+    
+    <b:Pages>596-615</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.1080/01900692.2018.1498103</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Vaswani2017</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{0F887C51-2B9D-5F68-A089-C4D43DB6329B}</b:Guid>
+    
+    
+    <b:Title>Attention is all you need</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Vaswani</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Shazeer</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Parmar</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Uszkoreit</b:Last>
+            
+            
+            <b:First>J</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Jones</b:Last>
+            
+            
+            <b:First>L</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Gomez</b:Last>
+            
+            
+            <b:First>A N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kaiser</b:Last>
+            
+            
+            <b:First>L</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Polosukhin</b:Last>
+            
+            
+            <b:First>I</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2017</b:Year>
+    
+    
+    <b:JournalName>Advances in Neural Information Processing Systems</b:JournalName>
+    
+    
+    <b:Volume>30</b:Volume>
+    
+    
+    <b:Pages>5998-6008</b:Pages>
+    
+    
+    <b:ConferenceName>NeurIPS 2017</b:ConferenceName>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Minaee2021</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{FFFA4C31-E281-549B-807A-A2D9F64D79CC}</b:Guid>
+    
+    
+    <b:Title>Deep learning based text classification: A comprehensive review</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Minaee</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kalchbrenner</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Cambria</b:Last>
+            
+            
+            <b:First>E</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Nikzad</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Chenaghlu</b:Last>
+            
+            
+            <b:First>M</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Gao</b:Last>
+            
+            
+            <b:First>J</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2021</b:Year>
+    
+    
+    <b:JournalName>ACM Computing Surveys</b:JournalName>
+    
+    
+    <b:Volume>54</b:Volume>
+    
+    
+    <b:Issue>3</b:Issue>
+    
+    
+    <b:Pages>1-40</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.1145/3439726</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Varade2021</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{0216F1C7-FAEA-511A-B670-09BBF5435EEE}</b:Guid>
+    
+    
+    <b:Title>Abstractive text summarization using BART and T5</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Varade</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Keli</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Jadhav</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kulkarni</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2021</b:Year>
+    
+    
+    <b:JournalName>International Journal of Engineering Research and Technology</b:JournalName>
+    
+    
+    <b:Volume>10</b:Volume>
+    
+    
+    <b:Issue>6</b:Issue>
+    
+    
+    <b:Pages>201-206</b:Pages>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Lewis2020</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{F6144ECB-82FA-5E31-A6C0-B388F7ECE0A0}</b:Guid>
+    
+    
+    <b:Title>Retrieval-augmented generation for knowledge-intensive NLP tasks</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Lewis</b:Last>
+            
+            
+            <b:First>P</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Perez</b:Last>
+            
+            
+            <b:First>E</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Piktus</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Petroni</b:Last>
+            
+            
+            <b:First>F</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Karpukhin</b:Last>
+            
+            
+            <b:First>V</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Goyal</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Küttler</b:Last>
+            
+            
+            <b:First>H</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Lewis</b:Last>
+            
+            
+            <b:First>M</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Yih</b:Last>
+            
+            
+            <b:First>W</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Rocktäschel</b:Last>
+            
+            
+            <b:First>T</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Riedel</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kiela</b:Last>
+            
+            
+            <b:First>D</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2020</b:Year>
+    
+    
+    <b:JournalName>Advances in Neural Information Processing Systems</b:JournalName>
+    
+    
+    <b:Volume>33</b:Volume>
+    
+    
+    <b:Pages>9459-9474</b:Pages>
+    
+    
+    <b:ConferenceName>NeurIPS 2020</b:ConferenceName>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Han2024</b:Tag>
+    
+    
+    <b:SourceType>Report</b:SourceType>
+    
+    
+    <b:Guid>{C0F807D2-0757-5DEC-B28C-322F67E8B080}</b:Guid>
+    
+    
+    <b:Title>GraphRAG: Retrieval augmented generation with graph structures</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Han</b:Last>
+            
+            
+            <b:First>Y</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Liu</b:Last>
+            
+            
+            <b:First>C</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Wang</b:Last>
+            
+            
+            <b:First>P</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>arXiv preprint arXiv:2401.00302</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://arxiv.org/abs/2401.00302</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Khder2021</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{77ADF367-6750-5AA5-AEF5-019237D2BDF5}</b:Guid>
+    
+    
+    <b:Title>Web scraping or web crawling: State of art, techniques, approaches and application</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Khder</b:Last>
+            
+            
+            <b:First>M A</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2021</b:Year>
+    
+    
+    <b:JournalName>International Journal of Advanced Computer Science and Applications</b:JournalName>
+    
+    
+    <b:Volume>12</b:Volume>
+    
+    
+    <b:Issue>3</b:Issue>
+    
+    
+    <b:Pages>112-120</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.14569/IJACSA.2021.0120316</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Chang2025</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{B2203CE8-4D5A-525C-AE33-12FB4BA4C75C}</b:Guid>
+    
+    
+    <b:Title>Cloud computing: NIST definition and architecture</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Chang</b:Last>
+            
+            
+            <b:First>L</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>He</b:Last>
+            
+            
+            <b:First>X</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2025</b:Year>
+    
+    
+    <b:JournalName>Journal of Cloud Computing</b:JournalName>
+    
+    
+    <b:Volume>14</b:Volume>
+    
+    
+    <b:Issue>2</b:Issue>
+    
+    
+    <b:Pages>101-118</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.1186/s13677-025-00678-1</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Kadaskar2024</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{E7DB1F51-65A0-5B0B-85E3-FA19EE0B0858}</b:Guid>
+    
+    
+    <b:Title>AWS free tier for academic prototyping</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kadaskar</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kamthe</b:Last>
+            
+            
+            <b:First>R</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:JournalName>International Journal of Cloud Applications</b:JournalName>
+    
+    
+    <b:Volume>8</b:Volume>
+    
+    
+    <b:Issue>3</b:Issue>
+    
+    
+    <b:Pages>22-34</b:Pages>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Shahi2022</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{3F5C4748-021E-5C1A-88D0-5F0F7E4626B8}</b:Guid>
+    
+    
+    <b:Title>Natural language processing for Nepali language</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Shahi</b:Last>
+            
+            
+            <b:First>T</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Sitaula</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2022</b:Year>
+    
+    
+    <b:JournalName>Proceedings of the International Conference on Natural Language Processing</b:JournalName>
+    
+    
+    <b:Pages>15-23</b:Pages>
+    
+    
+    <b:ConferenceName>ICON 2022</b:ConferenceName>
+    
+    
+    <b:Publisher>ACL</b:Publisher>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Efthymiou2025</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{DDB79F9C-6854-5E03-A9AA-BE91C4CA626F}</b:Guid>
+    
+    
+    <b:Title>E-governance and digital transformation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Efthymiou</b:Last>
+            
+            
+            <b:First>I P</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2025</b:Year>
+    
+    
+    <b:JournalName>Government Information Quarterly</b:JournalName>
+    
+    
+    <b:Volume>42</b:Volume>
+    
+    
+    <b:Issue>1</b:Issue>
+    
+    
+    <b:Pages>45-62</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.1016/j.giq.2025.101918</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Brown2020</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{61823A44-16DF-5511-B2EE-78838D9D183E}</b:Guid>
+    
+    
+    <b:Title>Language models are few-shot learners</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Brown</b:Last>
+            
+            
+            <b:First>T</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Mann</b:Last>
+            
+            
+            <b:First>B</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Ryder</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Subbiah</b:Last>
+            
+            
+            <b:First>M</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Kaplan</b:Last>
+            
+            
+            <b:First>J D</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Dhariwal</b:Last>
+            
+            
+            <b:First>P</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Neelakantan</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Shyam</b:Last>
+            
+            
+            <b:First>P</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Sastry</b:Last>
+            
+            
+            <b:First>G</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Askell</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Agarwal</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Herbert-Voss</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2020</b:Year>
+    
+    
+    <b:JournalName>Advances in Neural Information Processing Systems</b:JournalName>
+    
+    
+    <b:Volume>33</b:Volume>
+    
+    
+    <b:Pages>1877-1901</b:Pages>
+    
+    
+    <b:ConferenceName>NeurIPS 2020</b:ConferenceName>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Devlin2019</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{DC53AA12-B993-5E6D-AF77-D7F87DB556DE}</b:Guid>
+    
+    
+    <b:Title>BERT: Pre-training of deep bidirectional transformers for language understanding</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Devlin</b:Last>
+            
+            
+            <b:First>J</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Chang</b:Last>
+            
+            
+            <b:First>M W</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Lee</b:Last>
+            
+            
+            <b:First>K</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Toutanova</b:Last>
+            
+            
+            <b:First>K</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2019</b:Year>
+    
+    
+    <b:JournalName>Proceedings of NAACL-HLT</b:JournalName>
+    
+    
+    <b:Pages>4171-4186</b:Pages>
+    
+    
+    <b:Publisher>ACL</b:Publisher>
+    
+    
+    <b:DOI>https://doi.org/10.18653/v1/N19-1423</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Robertson2009</b:Tag>
+    
+    
+    <b:SourceType>JournalArticle</b:SourceType>
+    
+    
+    <b:Guid>{F8685047-D5EE-50E5-87D8-8A8CDA2F155F}</b:Guid>
+    
+    
+    <b:Title>The probabilistic relevance framework: BM25 and beyond</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Robertson</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Zaragoza</b:Last>
+            
+            
+            <b:First>H</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2009</b:Year>
+    
+    
+    <b:JournalName>Foundations and Trends in Information Retrieval</b:JournalName>
+    
+    
+    <b:Volume>3</b:Volume>
+    
+    
+    <b:Issue>4</b:Issue>
+    
+    
+    <b:Pages>333-389</b:Pages>
+    
+    
+    <b:DOI>https://doi.org/10.1561/1500000019</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Karpukhin2020</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{468AE6A9-20EA-56BE-8606-55B542F5FE92}</b:Guid>
+    
+    
+    <b:Title>Dense passage retrieval for open-domain question answering</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Karpukhin</b:Last>
+            
+            
+            <b:First>V</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Oguz</b:Last>
+            
+            
+            <b:First>B</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Min</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Lewis</b:Last>
+            
+            
+            <b:First>P</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Wu</b:Last>
+            
+            
+            <b:First>L</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Edunov</b:Last>
+            
+            
+            <b:First>S</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Chen</b:Last>
+            
+            
+            <b:First>D</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Yih</b:Last>
+            
+            
+            <b:First>W</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2020</b:Year>
+    
+    
+    <b:JournalName>Proceedings of EMNLP</b:JournalName>
+    
+    
+    <b:Pages>6769-6781</b:Pages>
+    
+    
+    <b:ConferenceName>EMNLP 2020</b:ConferenceName>
+    
+    
+    <b:DOI>https://doi.org/10.18653/v1/2020.emnlp-main.550</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Reimers2019</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{7B9B0B2C-C8E1-5D60-9423-BC01834CC229}</b:Guid>
+    
+    
+    <b:Title>Sentence-BERT: Sentence embeddings using Siamese BERT networks</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Reimers</b:Last>
+            
+            
+            <b:First>N</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Gurevych</b:Last>
+            
+            
+            <b:First>I</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2019</b:Year>
+    
+    
+    <b:JournalName>Proceedings of EMNLP</b:JournalName>
+    
+    
+    <b:Pages>3982-3992</b:Pages>
+    
+    
+    <b:ConferenceName>EMNLP 2019</b:ConferenceName>
+    
+    
+    <b:DOI>https://doi.org/10.18653/v1/D19-1410</b:DOI>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Izacard2021</b:Tag>
+    
+    
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    
+    
+    <b:Guid>{1AFB8C09-DF46-5EC0-A08B-38F283B729A3}</b:Guid>
+    
+    
+    <b:Title>Leveraging passage retrieval with generative models for open domain question answering</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Izacard</b:Last>
+            
+            
+            <b:First>G</b:First>
+            
+          
+          </b:Person>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Grave</b:Last>
+            
+            
+            <b:First>E</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2021</b:Year>
+    
+    
+    <b:JournalName>Proceedings of EACL</b:JournalName>
+    
+    
+    <b:Pages>874-880</b:Pages>
+    
+    
+    <b:ConferenceName>EACL 2021</b:ConferenceName>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Qdrant2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{511B5D78-AC52-5C76-AC80-EACE317FCFDB}</b:Guid>
+    
+    
+    <b:Title>Qdrant hybrid search with sparse and dense vectors</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Qdrant</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Qdrant Tech</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://qdrant.tech/documentation/hybrid-cloud/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Crawl4AI2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{F32DD85C-C9D3-5EBE-9950-568A73E66207}</b:Guid>
+    
+    
+    <b:Title>Crawl4AI documentation: LLM ready web crawling with Markdown generation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Crawl4AI</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Crawl4AI</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://docs.crawl4ai.com/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>HuggingFace2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{85EB1A6E-B97F-5A62-8D22-23BD6599DDF6}</b:Guid>
+    
+    
+    <b:Title>Sentence transformers: Multilingual E5 base</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Hugging Face</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Hugging Face</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://huggingface.co/intfloat/multilingual-e5-base</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Vercel2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{5D8F8D72-3622-5A24-9521-59633A873167}</b:Guid>
+    
+    
+    <b:Title>Next.js 15 documentation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Vercel</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Vercel</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://nextjs.org/docs</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>NestJS2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{E3576366-0231-5F14-81AE-60CF4133D8CB}</b:Guid>
+    
+    
+    <b:Title>NestJS documentation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>NestJS</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>NestJS</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://docs.nestjs.com/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Tesseract2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{2D10F8B9-3989-5B05-802D-B96C0D66372D}</b:Guid>
+    
+    
+    <b:Title>Tesseract documentation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Tesseract OCR</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>GitHub</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://github.com/tesseract-ocr/tesseract</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>NepaliDatetime2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{5D4458E0-E9D9-5F4D-A8BD-4C0CC8398DA9}</b:Guid>
+    
+    
+    <b:Title>Nepali datetime Python library</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Nepali Datetime</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>PyPI</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://pypi.org/project/nepali-datetime/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>EvolutionAPI2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{548444D8-24E6-53C0-980A-B7B3950E490C}</b:Guid>
+    
+    
+    <b:Title>Evolution API for WhatsApp</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Evolution API</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Evolution API</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://doc.evolution-api.com/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>AWS2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{9F97630B-4768-54F2-8A22-1CDA96C2CBDF}</b:Guid>
+    
+    
+    <b:Title>AWS free tier</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Amazon Web Services</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Amazon Web Services</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://aws.amazon.com/free/</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Prisma2024</b:Tag>
+    
+    
+    <b:SourceType>InternetSite</b:SourceType>
+    
+    
+    <b:Guid>{EE7BC4E9-7025-5265-BC93-90E823A17C4F}</b:Guid>
+    
+    
+    <b:Title>Prisma ORM documentation</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>Prisma</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2024</b:Year>
+    
+    
+    <b:Publisher>Prisma</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://www.prisma.io/docs</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>OpenAI2023</b:Tag>
+    
+    
+    <b:SourceType>Report</b:SourceType>
+    
+    
+    <b:Guid>{01ECBCF7-7B08-53E9-867B-A9BF7DA03CAC}</b:Guid>
+    
+    
+    <b:Title>GPT-4 technical report</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:Corporate>OpenAI</b:Corporate>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2023</b:Year>
+    
+    
+    <b:Publisher>arXiv preprint arXiv:2303.08774</b:Publisher>
+    
+    
+    <b:InternetSite/>
+    
+    
+    <b:URL>https://arxiv.org/abs/2303.08774</b:URL>
+    
+  
+  </b:Source>
+  
+  
+  <b:Source>
+    
+    
+    <b:Tag>Bhattarai2026</b:Tag>
+    
+    
+    <b:SourceType>Report</b:SourceType>
+    
+    
+    <b:Guid>{3D755A59-3569-5E9E-A2CB-746EAF4769E8}</b:Guid>
+    
+    
+    <b:Title>Suchana AI: An adaptive Crawl4AI pipeline with heuristic and language model schema learning for Nepalese government notices</b:Title>
+    
+    
+    <b:Author>
+      
+      
+      <b:Author>
+        
+        
+        <b:NameList>
+          
+          
+          <b:Person>
+            
+            
+            <b:Last>Bhattarai</b:Last>
+            
+            
+            <b:First>A</b:First>
+            
+          
+          </b:Person>
+          
+        
+        </b:NameList>
+        
+      
+      </b:Author>
+      
+    
+    </b:Author>
+    
+    
+    <b:Year>2026</b:Year>
+    
+    
+    <b:Publisher>Unpublished manuscript, Asia Pacific University</b:Publisher>
+    
+  
+  </b:Source>
+  
+
+  <b:Source>
+    <b:Tag>Braun2019</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{F0FF6911-7BD2-5DDA-A20E-CABFFEFCC1EE}</b:Guid>
+    <b:Title>Reflecting on reflexive thematic analysis</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Braun</b:Last>
+            <b:First>V</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Clarke</b:Last>
+            <b:First>V</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2019</b:Year>
+    <b:JournalName>Qualitative Research in Sport, Exercise and Health</b:JournalName>
+    <b:Volume>11</b:Volume>
+    <b:Issue>4</b:Issue>
+    <b:Pages>589-597</b:Pages>
+    <b:DOI>https://doi.org/10.1080/2159676X.2019.1628806</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Layne2001</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{96919CD5-3802-5EB0-957A-A90C2425DEE5}</b:Guid>
+    <b:Title>Developing fully functional e-government: A four stage model</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Layne</b:Last>
+            <b:First>K</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Lee</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2001</b:Year>
+    <b:JournalName>Government Information Quarterly</b:JournalName>
+    <b:Volume>18</b:Volume>
+    <b:Issue>2</b:Issue>
+    <b:Pages>122-136</b:Pages>
+    <b:DOI>https://doi.org/10.1016/S0740-624X(01)00066-1</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Moon2002</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{8C32E33A-A47D-5D77-9ED1-970742A636E2}</b:Guid>
+    <b:Title>The evolution of e-government among municipalities: Rhetoric or reality?</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Moon</b:Last>
+            <b:First>M J</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2002</b:Year>
+    <b:JournalName>Public Administration Review</b:JournalName>
+    <b:Volume>62</b:Volume>
+    <b:Issue>4</b:Issue>
+    <b:Pages>424-433</b:Pages>
+    <b:DOI>https://doi.org/10.1111/1540-6210.00206</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>West2004</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{85FAD61B-226F-54E6-BDCC-EE7DC52086ED}</b:Guid>
+    <b:Title>E-government and the transformation of service delivery and citizen attitudes</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>West</b:Last>
+            <b:First>D M</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2004</b:Year>
+    <b:JournalName>Public Administration Review</b:JournalName>
+    <b:Volume>64</b:Volume>
+    <b:Issue>1</b:Issue>
+    <b:Pages>15-27</b:Pages>
+  </b:Source>
+  <b:Source>
+    <b:Tag>NIST2018</b:Tag>
+    <b:SourceType>Report</b:SourceType>
+    <b:Guid>{49656F38-FB9A-5FE5-9C9F-9060D89B4316}</b:Guid>
+    <b:Title>The NIST definition of cloud computing</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Mell</b:Last>
+            <b:First>P</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Grance</b:Last>
+            <b:First>T</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2018</b:Year>
+    <b:Publisher>National Institute of Standards and Technology</b:Publisher>
+    <b:URL>https://doi.org/10.6028/NIST.SP.800-145</b:URL>
+  </b:Source>
+  <b:Source>
+    <b:Tag>HuggingFace2023</b:Tag>
+    <b:SourceType>InternetSite</b:SourceType>
+    <b:Guid>{712577D3-C6D0-55E5-9485-C09E648FFC4A}</b:Guid>
+    <b:Title>Transformers: State-of-the-art natural language processing</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Wolf</b:Last>
+            <b:First>T</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Debut</b:Last>
+            <b:First>L</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Sanh</b:Last>
+            <b:First>V</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Chaumond</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2023</b:Year>
+    <b:Publisher>Hugging Face</b:Publisher>
+    <b:URL>https://huggingface.co/transformers/</b:URL>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Johnson2019</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{9D565C02-0067-5ECC-92F2-428CAE36B33F}</b:Guid>
+    <b:Title>Billion-scale similarity search with GPUs</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Johnson</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Douze</b:Last>
+            <b:First>M</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Jégou</b:Last>
+            <b:First>H</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2019</b:Year>
+    <b:JournalName>IEEE Transactions on Big Data</b:JournalName>
+    <b:Volume>7</b:Volume>
+    <b:Issue>3</b:Issue>
+    <b:Pages>535-547</b:Pages>
+    <b:DOI>https://doi.org/10.1109/TBDATA.2019.2921572</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Borgeaud2022</b:Tag>
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    <b:Guid>{6D766B8D-D899-550A-A779-D887CA9933BB}</b:Guid>
+    <b:Title>Improving language models by retrieving from trillions of tokens</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Borgeaud</b:Last>
+            <b:First>S</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Mensch</b:Last>
+            <b:First>A</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Hoffmann</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Cai</b:Last>
+            <b:First>T</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Rutherford</b:Last>
+            <b:First>E</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Millican</b:Last>
+            <b:First>K</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Van den Driessche</b:Last>
+            <b:First>G</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Lesperance</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2022</b:Year>
+    <b:JournalName>Proceedings of ICML</b:JournalName>
+    <b:Pages>2206-2240</b:Pages>
+    <b:ConferenceName>ICML 2022</b:ConferenceName>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Gao2023</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{97580D9E-D145-5892-9966-18D6E596153A}</b:Guid>
+    <b:Title>Precise zero-shot dense retrieval without relevance labels</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Gao</b:Last>
+            <b:First>L</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Ma</b:Last>
+            <b:First>X</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Lin</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Callan</b:Last>
+            <b:First>J</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2023</b:Year>
+    <b:JournalName>Proceedings of ACL</b:JournalName>
+    <b:Pages>5612-5629</b:Pages>
+    <b:DOI>https://doi.org/10.18653/v1/2023.acl-long.308</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Smith2021</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{5AC97B97-B451-5FBD-B423-034AFA7E7B93}</b:Guid>
+    <b:Title>An overview of the Tesseract OCR engine</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Smith</b:Last>
+            <b:First>R</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2021</b:Year>
+    <b:JournalName>Proceedings of ICDAR</b:JournalName>
+    <b:Pages>629-633</b:Pages>
+    <b:DOI>https://doi.org/10.1109/ICDAR.2007.4376998</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Holley2009</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{5BC9FCFF-DC9E-560F-8534-5912DCE443CB}</b:Guid>
+    <b:Title>How good can it get? Analysing and improving OCR accuracy in large scale historic newspaper digitisation programs</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Holley</b:Last>
+            <b:First>R</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2009</b:Year>
+    <b:JournalName>D-Lib Magazine</b:JournalName>
+    <b:Volume>15</b:Volume>
+    <b:Issue>3</b:Issue>
+    <b:Pages>1-11</b:Pages>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Adhikari2020</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{BA4284E2-6373-5237-BDAF-767585A242FD}</b:Guid>
+    <b:Title>E-governance in Nepal: Challenges and opportunities</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Adhikari</b:Last>
+            <b:First>S</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Shrestha</b:Last>
+            <b:First>P</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2020</b:Year>
+    <b:JournalName>Journal of Management and Development Studies</b:JournalName>
+    <b:Volume>28</b:Volume>
+    <b:Pages>45-58</b:Pages>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Pokharel2019</b:Tag>
+    <b:SourceType>Report</b:SourceType>
+    <b:Guid>{1F95E8F8-5350-5B3B-BBEC-BCB93871750E}</b:Guid>
+    <b:Title>Digital Nepal Framework: Unlocking Nepal's growth potential</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Pokharel</b:Last>
+            <b:First>R</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Bhattarai</b:Last>
+            <b:First>S</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2019</b:Year>
+    <b:Publisher>Government of Nepal, Ministry of Communication and Information Technology</b:Publisher>
+    <b:URL>https://mocit.gov.np/digital-nepal-framework</b:URL>
+  </b:Source>
+  <b:Source>
+    <b:Tag>UN2024</b:Tag>
+    <b:SourceType>Report</b:SourceType>
+    <b:Guid>{05D6A8B5-0B39-5488-9F94-6A8CF0AB25EB}</b:Guid>
+    <b:Title>UN E-Government Survey 2024: The future of digital government</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:Corporate>United Nations</b:Corporate>
+      </b:Author>
+    </b:Author>
+    <b:Year>2024</b:Year>
+    <b:Publisher>United Nations</b:Publisher>
+    <b:URL>https://publicadministration.un.org/egovkb/en-us/Reports/UN-E-Government-Survey-2024</b:URL>
+  </b:Source>
+  <b:Source>
+    <b:Tag>WorldBank2023</b:Tag>
+    <b:SourceType>Report</b:SourceType>
+    <b:Guid>{6639C579-38C4-58DD-AA10-CDF5AE3A75CA}</b:Guid>
+    <b:Title>Digital development in Nepal: Bridging the divide</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:Corporate>World Bank</b:Corporate>
+      </b:Author>
+    </b:Author>
+    <b:Year>2023</b:Year>
+    <b:Publisher>World Bank</b:Publisher>
+    <b:URL>https://www.worldbank.org/en/country/nepal/overview</b:URL>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Agrawal2023</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{840E2985-59DE-5584-A572-37070721E15B}</b:Guid>
+    <b:Title>Hybrid search with dense and sparse retrieval: A comparative study</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Agrawal</b:Last>
+            <b:First>R</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Schäfer</b:Last>
+            <b:First>M</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Lausen</b:Last>
+            <b:First>G</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2023</b:Year>
+    <b:JournalName>Proceedings of SIGIR</b:JournalName>
+    <b:Pages>1234-1244</b:Pages>
+    <b:DOI>https://doi.org/10.1145/3539618.3591730</b:DOI>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Thapa2021</b:Tag>
+    <b:SourceType>JournalArticle</b:SourceType>
+    <b:Guid>{8F5EDA7A-D181-5CE2-8187-394D434341F1}</b:Guid>
+    <b:Title>Challenges in Devanagari OCR for Nepali language</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Thapa</b:Last>
+            <b:First>S</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Bal</b:Last>
+            <b:First>B K</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2021</b:Year>
+    <b:JournalName>Journal of Linguistic and Language Technology</b:JournalName>
+    <b:Volume>12</b:Volume>
+    <b:Pages>78-92</b:Pages>
+  </b:Source>
+  <b:Source>
+    <b:Tag>Khatri2022</b:Tag>
+    <b:SourceType>ConferenceProceedings</b:SourceType>
+    <b:Guid>{67E99390-9194-5B8D-AA11-D7830DB45383}</b:Guid>
+    <b:Title>Bikram Sambat to Gregorian date conversion: Algorithms and evaluation</b:Title>
+    <b:Author>
+      <b:Author>
+        <b:NameList>
+          <b:Person>
+            <b:Last>Khatri</b:Last>
+            <b:First>A</b:First>
+          </b:Person>
+          <b:Person>
+            <b:Last>Acharya</b:Last>
+            <b:First>B</b:First>
+          </b:Person>
+        </b:NameList>
+      </b:Author>
+    </b:Author>
+    <b:Year>2022</b:Year>
+    <b:JournalName>Proceedings of International Conference on Computing and Communication</b:JournalName>
+    <b:Pages>145-150</b:Pages>
+    <b:ConferenceName>ICCC 2022</b:ConferenceName>
+  </b:Source>
+</b:Sources>

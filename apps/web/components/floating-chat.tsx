@@ -7,8 +7,9 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { searchNotices, askNoticeQuestion, NoticeSearchResponse } from "@/lib/api"
+import { searchNotices, askNoticeQuestion, isQuotaError, NoticeSearchResponse, type QuotaDenial } from "@/lib/api"
 import { useNoticeContext } from "@/lib/notice-context"
+import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
 import gsap from "gsap"
 
 interface Source {
@@ -91,6 +92,7 @@ export function FloatingChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [quota, setQuota] = useState<QuotaDenial | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const messagesEnd = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
@@ -136,6 +138,7 @@ export function FloatingChat() {
     setMessages(prev => [...prev, userMsg])
     setInput("")
     setLoading(true)
+    setQuota(null)
 
     try {
       // If we have an active notice context, try notice-specific Q&A first
@@ -165,7 +168,13 @@ export function FloatingChat() {
         contextUsed: "general",
       }
       setMessages(prev => [...prev, botMsg])
-    } catch {
+    } catch (e) {
+      // A spent AI allowance is a billing state, not a chat failure — surface
+      // it as an upgrade prompt below the composer instead of a bot apology.
+      if (isQuotaError(e)) {
+        setQuota(e.quota)
+        return
+      }
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -331,6 +340,11 @@ export function FloatingChat() {
 
           {/* Input */}
           <div className="p-3 border-t border-border/60" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+            {quota && (
+              <div className="mb-2">
+                <UpgradePrompt quota={quota} compact onDismiss={() => setQuota(null)} />
+              </div>
+            )}
             <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex gap-2">
               <input
                 type="text"

@@ -13,11 +13,12 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
-import { fetchNotice, askNoticeQuestion, reextractNotice } from "@/lib/api"
+import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, type QuotaDenial } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
 import type { PublicNoticeDetail } from "@/lib/types"
+import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
 
@@ -462,6 +463,7 @@ export default function NoticeDetailPage() {
   const [question, setQuestion] = useState("")
   const [qaHistory, setQaHistory] = useState<Array<{ q: string; a: string }>>([])
   const [answering, setAnswering] = useState(false)
+  const [askQuota, setAskQuota] = useState<QuotaDenial | null>(null)
   const [extracting, setExtracting] = useState(false)
 
   // Admin-only re-extraction of this notice's attachment text.
@@ -571,10 +573,17 @@ export default function NoticeDetailPage() {
     if (!finalQuestion || answering || !notice) return
     setAnswering(true)
     setQuestion("")
+    setAskQuota(null)
     try {
       const { answer } = await askNoticeQuestion(notice.id, finalQuestion)
       setQaHistory((prev) => [...prev, { q: finalQuestion, a: answer }])
-    } catch {
+    } catch (e) {
+      // A spent AI allowance is a billing state, not a chat failure — surface
+      // it as an upgrade prompt instead of a bot apology.
+      if (isQuotaError(e)) {
+        setAskQuota(e.quota)
+        return
+      }
       setQaHistory((prev) => [
         ...prev,
         { q: finalQuestion, a: "Sorry, I couldn't process that question right now. Please try again." },
@@ -960,6 +969,12 @@ export default function NoticeDetailPage() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {askQuota && (
+                    <div className="mb-4">
+                      <UpgradePrompt quota={askQuota} compact onDismiss={() => setAskQuota(null)} />
                     </div>
                   )}
 

@@ -3,7 +3,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { AlertRule } from "./types"
 import { useAuth } from "./auth-context"
-import { fetchAlertRules, createAlertRule, updateAlertRule, deleteAlertRule, NewAlertRuleInput } from "./api"
+import {
+  fetchAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
+  isQuotaError, NewAlertRuleInput, QuotaDenial,
+} from "./api"
 
 // userId/id/matchCount/createdAt/updatedAt are server-owned — the API
 // rejects unexpected fields (ValidationPipe forbidNonWhitelisted), so only
@@ -14,6 +17,9 @@ interface AlertsContextType {
   alerts: AlertRule[]
   isLoading: boolean
   error: string | null
+  /** Set instead of `error` when creating a rule hits the plan's alert-rule limit. */
+  quotaError: QuotaDenial | null
+  clearQuotaError: () => void
   /** Resolves true on success, false on failure (error is set on the context either way). */
   addAlert: (alert: NewAlert) => Promise<boolean>
   updateAlert: (id: string, updates: Partial<NewAlertRuleInput>) => void
@@ -28,6 +34,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const [alerts, setAlerts] = useState<AlertRule[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [quotaError, setQuotaError] = useState<QuotaDenial | null>(null)
 
   useEffect(() => {
     if (!user) {
@@ -43,15 +50,22 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
   const addAlert = useCallback(async (alert: NewAlert): Promise<boolean> => {
     setError(null)
+    setQuotaError(null)
     try {
       const created = await createAlertRule(alert)
       setAlerts((prev) => [created, ...prev])
       return true
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e) {
+      if (isQuotaError(e)) {
+        setQuotaError(e.quota)
+      } else {
+        setError(e instanceof Error ? e.message : "Could not create the alert")
+      }
       return false
     }
   }, [])
+
+  const clearQuotaError = useCallback(() => setQuotaError(null), [])
 
   const updateAlert = useCallback((id: string, updates: Partial<NewAlertRuleInput>) => {
     setError(null)
@@ -85,7 +99,9 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <AlertsContext.Provider value={{ alerts, isLoading, error, addAlert, updateAlert, deleteAlert, toggleAlert }}>
+    <AlertsContext.Provider
+      value={{ alerts, isLoading, error, quotaError, clearQuotaError, addAlert, updateAlert, deleteAlert, toggleAlert }}
+    >
       {children}
     </AlertsContext.Provider>
   )

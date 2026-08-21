@@ -5,12 +5,13 @@ import Link from "next/link"
 import {
   Eye, Bookmark, Bell, TrendingUp, FileText, Search,
   ArrowRight, AlertCircle, Zap, CheckCircle,
-  CalendarClock, Activity, BarChart3,
+  CalendarClock, Activity, BarChart3, CreditCard,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
 import { useAlerts } from "@/lib/alerts-context"
+import { toast } from "sonner"
 import { mockNotices, mockActivities } from "@/lib/mock-data"
 import { CATEGORY_ORDER, categoryLabel, ScrapedItemCategory } from "@/lib/types"
 import gsap from "gsap"
@@ -49,7 +50,7 @@ const inputClass =
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { alerts, addAlert } = useAlerts()
+  const { alerts, addAlert, error: alertError, quotaError } = useAlerts()
   const [wizardData, setWizardData] = useState({ name: "", categories: [] as ScrapedItemCategory[] })
   const gridRef = useRef<HTMLDivElement>(null)
 
@@ -90,6 +91,19 @@ export default function DashboardPage() {
   const urgentNotices = mockNotices.filter(n => n.priority === "high").slice(0, 2)
   const recentActivities = mockActivities.slice(0, 6)
 
+  // The quick-create wizard has no room for a persistent inline error card —
+  // surface addAlert's failure (from the shared alerts context) as a toast
+  // instead, once it lands.
+  useEffect(() => {
+    if (quotaError) {
+      toast.error(quotaError.message, {
+        action: { label: "View plans", onClick: () => { window.location.href = "/pricing" } },
+      })
+    } else if (alertError) {
+      toast.error(alertError)
+    }
+  }, [alertError, quotaError])
+
   const handleWizardSubmit = async () => {
     if (!wizardData.name || wizardData.categories.length === 0) return
     const ok = await addAlert({
@@ -104,7 +118,10 @@ export default function DashboardPage() {
       priority: "NORMAL",
       enabled: true,
     })
-    if (ok) setWizardData({ name: "", categories: [] })
+    if (ok) {
+      toast.success("Alert created")
+      setWizardData({ name: "", categories: [] })
+    }
   }
 
   const toggleWizardCategory = (cat: ScrapedItemCategory) => {
@@ -411,6 +428,7 @@ export default function DashboardPage() {
                     { href: "/documents", label: "Doc search", icon: FileText },
                     { href: "/dashboard/alerts", label: "My alerts", icon: Bell },
                     { href: "/dashboard/saved", label: "Saved", icon: Bookmark },
+                    { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
                   ].map((action) => {
                     const Icon = action.icon
                     return (
