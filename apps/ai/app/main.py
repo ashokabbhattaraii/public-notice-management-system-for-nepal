@@ -3,7 +3,6 @@ import hashlib
 import json
 import re
 import time
-import uuid
 from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
@@ -49,10 +48,16 @@ async def app(scope, receive, send):
 
     start = time.perf_counter()
     try:
-        response = await _route(method, path, scope, receive)
+        response = await _route(method, path, scope, receive, send)
     except Exception as e:
         logger.exception("Unhandled error on %s %s", method, path)
         response = (500, {"error": "Internal server error", "detail": str(e)})
+
+    # SSE routes (_document_progress_sse) stream their own ASGI response
+    # directly over `send` and return None — there's no separate status/body
+    # left to send afterward.
+    if response is None:
+        return
 
     status, body = response
     elapsed_ms = (time.perf_counter() - start) * 1000
@@ -227,7 +232,7 @@ async def _handle_lifespan(scope, receive, send):
             return
 
 
-async def _route(method: str, path: str, scope: dict, receive) -> tuple[int, dict]:
+async def _route(method: str, path: str, scope: dict, receive, send) -> tuple[int, dict] | None:
     if method == "GET" and path == "/":
         return 200, {"service": "pnm-ai", "status": "running", "version": "1.0.0"}
 

@@ -9,9 +9,7 @@ Provides:
 
 import time
 import threading
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional
 
 from app.logger import get_logger
 

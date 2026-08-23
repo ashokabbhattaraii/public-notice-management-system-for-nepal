@@ -702,7 +702,12 @@ export class ScrapingService {
     if (/^\(?untitled\)?$/i.test(title)) return false;
 
     // Must contain real words in either script, not just digits/punctuation.
-    const letters = title.match(/[A-Za-zऀ-ॿ]/g)?.length ?? 0;
+    // U+0904-U+097F covers Devanagari letters (Nepali script) — deliberately
+    // starting at U+0904 (अ, the first actual letter) rather than U+0900:
+    // U+0900-U+0903 are combining signs/marks, not letters, and using one as
+    // a character-class range boundary is exactly what eslint's
+    // no-misleading-character-class rule (rightly) rejects.
+    const letters = title.match(/[A-Za-z\u0904-\u097F]/g)?.length ?? 0;
     return letters >= 5;
   }
 

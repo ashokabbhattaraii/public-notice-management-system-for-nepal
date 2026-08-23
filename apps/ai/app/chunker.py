@@ -98,7 +98,6 @@ def parse_blocks(text: str, page_num: Optional[int] = None) -> list[Block]:
 def _parse_blocks_single_page(text: str, page_num: int) -> list[Block]:
     """Parse a single page's text into blocks."""
     blocks: list[Block] = []
-    char_pos = 0
 
     # Find all structural elements with their positions
     elements: list[tuple[int, int, str, str]] = []  # (start, end, type, content)
@@ -428,7 +427,7 @@ def _finalize_chunk(
 
     chunk = Chunk(
         content=content.strip(),
-        index=len(chunks) if 'chunks' in locals() else 0,  # placeholder
+        index=index,
         char_start=char_offset,
         char_end=char_offset + len(content),
         section_path=section_path,
