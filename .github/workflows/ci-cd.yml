@@ -1,0 +1,243 @@
+name: CI/CD
+
+# One pipeline, in order: lint & build every app → (on main only) detect which
+# app(s) changed → build+push their Docker image to ECR → deploy to that
+# app's Elastic Beanstalk environment. See docs/AWS_ELASTIC_BEANSTALK_DEPLOYMENT.md
+# for the one-time AWS/GitHub setup this depends on.
+#
+# Validation (the `lint-*` jobs) runs on every PR, including from forks, and
+# touches no secrets or AWS access — deploy jobs are structurally skipped for
+# `pull_request` events (see each deploy job's `if:`) and only ever run on a
+# push to main or a manual dispatch.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: "Deploy all three apps regardless of what changed"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # Only the deploy jobs use this (to mint short-lived AWS credentials via
+  # OIDC) — granted at workflow level since job-level `permissions:` can only
+  # narrow, never widen, what the workflow already has.
+  id-token: write
+
+env:
+  # ── CI (validation) — build-time-only, not secrets ────────────────────
+  NEXT_PUBLIC_APP_URL: https://ci.invalid
+  NEXT_PUBLIC_API_URL: https://ci.invalid
+  NEXT_PUBLIC_AI_URL: https://ci.invalid
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: ci-placeholder
+  # apps/api's `postinstall` runs `prisma generate`, which only reads
+  # prisma/schema.prisma for env("DATABASE_URL") to resolve — never connects.
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_placeholder_unused
+
+jobs:
+  # ── Validation — always runs ─────────────────────────────────────────
+  lint-build-web-api:
+    name: Lint & build (web, api)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ci-lint-build-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm turbo lint --filter=@pnm/web --filter=@pnm/api
+
+      - name: Build
+        run: pnpm turbo build --filter=@pnm/web --filter=@pnm/api
+
+  lint-ai:
+    name: Lint (ai)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ci-lint-ai-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # A full `pip install -r requirements.txt` pulls torch, playwright, and
+      # every OCR dependency just to run a linter — ruff is all this needs.
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check apps/ai/app/
+
+  # ── Change detection — only meaningful once we're past validation ─────
+  detect-changes:
+    name: Detect changed apps
+    needs: [lint-build-web-api, lint-ai]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      api: ${{ steps.filter.outputs.api }}
+      ai: ${{ steps.filter.outputs.ai }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+            api:
+              - 'apps/api/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+            ai:
+              - 'apps/ai/**'
+
+  # ── Deploy — one job per app, each independently skippable ────────────
+  deploy-web:
+    name: Deploy web
+    needs: detect-changes
+    if: github.event_name != 'pull_request' && (needs.detect-changes.outputs.web == 'true' || inputs.force_all == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      # Never cancel a deploy mid-flight — a killed Beanstalk update can
+      # leave the environment mid-rollout. Scoped to web only, so a slow AI
+      # build/deploy never blocks an unrelated web-only redeploy.
+      group: deploy-web-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & push image
+        id: image
+        uses: ./.github/actions/build-push-ecr
+        with:
+          aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          ecr-repo: ${{ vars.ECR_WEB_REPO || 'suchana-web' }}
+          dockerfile: apps/web/Dockerfile
+          image-tag: ${{ github.sha }}
+          # Next.js inlines these into the client bundle at build time (see
+          # apps/web/Dockerfile) — shipped to every visitor's browser
+          # regardless, so they're repo Variables, not Secrets.
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_AI_URL=${{ vars.NEXT_PUBLIC_AI_URL }}
+            NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+
+      - name: Deploy to Elastic Beanstalk
+        uses: ./.github/actions/deploy-beanstalk
+        with:
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
+          environment-name: ${{ vars.EB_WEB_ENV || 'suchana-web-prod' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          image-uri: ${{ steps.image.outputs.image-uri }}
+          container-port: 3535
+          version-label: web-${{ github.run_number }}-${{ github.sha }}
+
+  deploy-api:
+    name: Deploy api
+    needs: detect-changes
+    if: github.event_name != 'pull_request' && (needs.detect-changes.outputs.api == 'true' || inputs.force_all == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: deploy-api-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & push image
+        id: image
+        uses: ./.github/actions/build-push-ecr
+        with:
+          aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          ecr-repo: ${{ vars.ECR_API_REPO || 'suchana-api' }}
+          dockerfile: apps/api/Dockerfile
+          image-tag: ${{ github.sha }}
+          # Runtime secrets (JWT_SECRET, DATABASE_URL, STRIPE_SECRET_KEY, ...)
+          # intentionally do NOT appear here — the image is generic, and
+          # Beanstalk supplies them at boot from that environment's own
+          # configuration, never from this build.
+
+      - name: Deploy to Elastic Beanstalk
+        uses: ./.github/actions/deploy-beanstalk
+        with:
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
+          environment-name: ${{ vars.EB_API_ENV || 'suchana-api-prod' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          image-uri: ${{ steps.image.outputs.image-uri }}
+          container-port: 3001
+          version-label: api-${{ github.run_number }}-${{ github.sha }}
+
+  deploy-ai:
+    name: Deploy ai
+    needs: detect-changes
+    if: github.event_name != 'pull_request' && (needs.detect-changes.outputs.ai == 'true' || inputs.force_all == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: deploy-ai-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & push image
+        id: image
+        uses: ./.github/actions/build-push-ecr
+        with:
+          aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          ecr-repo: ${{ vars.ECR_AI_REPO || 'suchana-ai-service' }}
+          dockerfile: apps/ai/Dockerfile
+          image-tag: ${{ github.sha }}
+          # Runtime secrets (GROQ_API_KEY, GEMINI_API_KEY, QDRANT_API_KEY,
+          # HF_TOKEN, ...) intentionally do NOT appear here — same reasoning
+          # as deploy-api above.
+
+      - name: Deploy to Elastic Beanstalk
+        uses: ./.github/actions/deploy-beanstalk
+        with:
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
+          environment-name: ${{ vars.EB_AI_ENV || 'suchana-ai-service-prod' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          image-uri: ${{ steps.image.outputs.image-uri }}
+          container-port: 8000
+          version-label: ai-${{ github.run_number }}-${{ github.sha }}

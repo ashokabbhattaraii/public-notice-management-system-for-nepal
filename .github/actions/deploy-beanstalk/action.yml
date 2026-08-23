@@ -1,0 +1,54 @@
+name: Deploy image to Elastic Beanstalk
+description: >
+  Points a single-container Docker Elastic Beanstalk environment at an
+  already-built, already-pushed ECR image via a generated Dockerrun.aws.json.
+  Beanstalk never builds anything itself here — it only runs the image
+  build-push-ecr already produced.
+
+inputs:
+  application-name:
+    required: true
+  environment-name:
+    required: true
+  aws-region:
+    required: true
+  image-uri:
+    description: Output of the build-push-ecr action (registry/repo:tag)
+    required: true
+  container-port:
+    required: true
+  version-label:
+    description: Unique label for this deploy, shown in the Beanstalk console's version history
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Write Dockerrun.aws.json
+      shell: bash
+      run: |
+        cat > Dockerrun.aws.json <<EOF
+        {
+          "AWSEBDockerrunVersion": "1",
+          "Image": {
+            "Name": "${{ inputs.image-uri }}",
+            "Update": "true"
+          },
+          "Ports": [{ "ContainerPort": "${{ inputs.container-port }}" }]
+        }
+        EOF
+        zip deploy.zip Dockerrun.aws.json
+
+    - name: Deploy
+      uses: einaregilsson/beanstalk-deploy@v22
+      with:
+        # No aws_access_key/aws_secret_key here on purpose — this action
+        # falls back to the ambient credentials the build-push-ecr action's
+        # OIDC step already put in the environment, so the deploy call
+        # never needs a separate credential of its own.
+        application_name: ${{ inputs.application-name }}
+        environment_name: ${{ inputs.environment-name }}
+        region: ${{ inputs.aws-region }}
+        version_label: ${{ inputs.version-label }}
+        deployment_package: deploy.zip
+        wait_for_environment_recovery: 300

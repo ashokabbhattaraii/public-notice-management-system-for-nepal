@@ -1,0 +1,68 @@
+name: Build & push to ECR
+description: >
+  Authenticates to AWS via OIDC, builds a service's Dockerfile with Buildx,
+  and pushes it to Amazon ECR tagged with both the commit SHA and `latest`.
+  Used by every deploy-*.yml workflow so the build/push logic is written once.
+
+inputs:
+  aws-role-arn:
+    description: IAM role ARN to assume via OIDC (repo secret AWS_DEPLOY_ROLE_ARN)
+    required: true
+  aws-region:
+    required: true
+  ecr-repo:
+    description: ECR repository name (created ahead of time — this action does not create it)
+    required: true
+  dockerfile:
+    description: Path to the Dockerfile, relative to the repo root
+    required: true
+  image-tag:
+    description: Primary tag for the built image (the deploying workflow also always pushes `latest`)
+    required: true
+  build-args:
+    description: Newline-separated KEY=value pairs forwarded to `docker build --build-arg`
+    required: false
+    default: ""
+
+outputs:
+  image-uri:
+    description: Full pushed image reference (registry/repo:tag) — feed this to the deploy-beanstalk action
+    value: ${{ steps.resolve.outputs.image-uri }}
+
+runs:
+  using: composite
+  steps:
+    # id-token: write must be granted by the calling workflow's job — a
+    # composite action can't declare permissions of its own, it only ever
+    # inherits the job it runs inside.
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Log in to Amazon ECR
+      id: ecr-login
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - uses: docker/setup-buildx-action@v3
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        push: true
+        tags: |
+          ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repo }}:${{ inputs.image-tag }}
+          ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repo }}:latest
+        build-args: ${{ inputs.build-args }}
+        # Scoped per repo so web/api/ai never thrash a shared cache entry —
+        # their dependency trees (Node vs Python+torch) have nothing in common.
+        cache-from: type=gha,scope=${{ inputs.ecr-repo }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.ecr-repo }}
+
+    - name: Resolve pushed image URI
+      id: resolve
+      shell: bash
+      run: echo "image-uri=${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repo }}:${{ inputs.image-tag }}" >> "$GITHUB_OUTPUT"
