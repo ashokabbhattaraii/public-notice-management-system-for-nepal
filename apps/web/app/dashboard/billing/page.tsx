@@ -169,8 +169,8 @@ function BillingPageContent() {
 
         {summary.status === "PAST_DUE" && (
           <p className="mt-4 break-words rounded-[12px] bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800">
-            We couldn't take the last payment. Your plan keeps working until the end of the current
-            period — update your card in "Manage billing" to avoid losing access.
+            We couldn&apos;t take the last payment. Your plan keeps working until the end of the current
+            period — update your card in &quot;Manage billing&quot; to avoid losing access.
           </p>
         )}
       </section>
@@ -179,7 +179,7 @@ function BillingPageContent() {
       <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-vez-line bg-white p-4 sm:p-6">
         <div className="mb-4 flex min-w-0 items-center justify-between gap-2 sm:mb-5">
           <div className="min-w-0 flex-1 overflow-hidden">
-            <h3 className="break-words text-sm font-medium text-vez-ink sm:text-base">This month's usage</h3>
+            <h3 className="break-words text-sm font-medium text-vez-ink sm:text-base">This month&apos;s usage</h3>
             <p className="mt-0.5 break-words text-xs text-vez-mute">
               Resets {new Date(usage.periodEnd).toLocaleDateString()}
             </p>
@@ -257,7 +257,7 @@ export default function BillingPage() {
               Plan &amp; usage.
             </h1>
             <p className="mt-1 break-words text-sm text-vez-mute sm:mt-2">
-              What your membership includes, and what you've used this month.
+              What your membership includes, and what you&apos;ve used this month.
             </p>
           </div>
           <Suspense

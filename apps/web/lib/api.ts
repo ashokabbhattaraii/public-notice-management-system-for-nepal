@@ -318,7 +318,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 async function throwApiError(res: Response): Promise<never> {
   const body = await res.text()
   let message = body
-  let parsed: any = null
+  let parsed: { message?: unknown; error?: unknown; quota?: unknown } | null = null
   try {
     parsed = JSON.parse(body)
     const raw = parsed?.message ?? parsed?.error

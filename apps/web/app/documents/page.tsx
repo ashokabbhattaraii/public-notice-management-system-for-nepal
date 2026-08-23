@@ -297,11 +297,11 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
       await uploadDocument(file, title.trim())
       onUploaded()
       onClose()
-    } catch (e: any) {
+    } catch (e) {
       // A plan limit is not a failure to retry — show what ran out and how to
       // fix it, instead of a red error the user can only stare at.
       if (isQuotaError(e)) setQuota(e.quota)
-      else setError(e.message || "Upload failed")
+      else setError(e instanceof Error ? e.message : "Upload failed")
     } finally {
       setUploading(false)
     }
@@ -601,7 +601,7 @@ export default function RagPage() {
         modelUsed: result.model_used,
       }
       setMessages(prev => [...prev, assistantMsg])
-    } catch (e: any) {
+    } catch (e) {
       // A spent AI allowance is a billing state, not a chat failure — surface
       // it as an upgrade prompt below the composer instead of a bot apology.
       if (isQuotaError(e)) {
@@ -612,7 +612,7 @@ export default function RagPage() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `Sorry, I couldn't process your question. ${e.message || "Please try again."}`,
+        content: `Sorry, I couldn't process your question. ${e instanceof Error ? e.message : "Please try again."}`,
         timestamp: new Date().toISOString(),
       }])
     } finally {

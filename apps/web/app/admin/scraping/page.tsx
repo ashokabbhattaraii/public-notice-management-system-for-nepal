@@ -778,7 +778,7 @@ function AdminScrapingPageContent() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {sources.length === 0 && (
                   <div className="col-span-full rounded-[20px] bg-white p-10 text-center text-sm text-vez-mute">
-                    No sources yet. Click "Add source" to start scraping a government or public website.
+                    No sources yet. Click &quot;Add source&quot; to start scraping a government or public website.
                   </div>
                 )}
                 {sources.map((source) => {

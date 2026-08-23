@@ -64,8 +64,8 @@ export default function AdminSettingsPage() {
       setDraft({})
       setErrors({})
       setActiveGroup((prev) => prev ?? data.groups[0]?.id ?? null)
-    } catch (err: any) {
-      setLoadError(err.message ?? "Failed to load settings")
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load settings")
     } finally {
       if (!silent) setLoading(false)
     }
@@ -219,8 +219,8 @@ export default function AdminSettingsPage() {
       setView(result)
       setDraft({})
       setErrors({})
-    } catch (err: any) {
-      setSaveFeedback({ ok: false, text: err.message ?? "Save failed." })
+    } catch (err) {
+      setSaveFeedback({ ok: false, text: err instanceof Error ? err.message : "Save failed." })
     } finally {
       setSaving(false)
     }
@@ -248,8 +248,8 @@ export default function AdminSettingsPage() {
         return next
       })
       await load(true)
-    } catch (err: any) {
-      setSaveFeedback({ ok: false, text: err.message ?? "Reset failed." })
+    } catch (err) {
+      setSaveFeedback({ ok: false, text: err instanceof Error ? err.message : "Reset failed." })
     }
   }
 

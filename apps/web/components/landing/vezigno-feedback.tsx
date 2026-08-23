@@ -92,7 +92,7 @@ function initials(name: string) {
 function TestimonialCard({ t }: { t: Testimonial }) {
   return (
     <figure className="vz-sweep vz-glass group flex w-[340px] shrink-0 flex-col justify-between rounded-[20px] p-8 md:w-[420px]">
-      <blockquote className="text-base leading-[1.6] text-vez-ink">"{t.quote}"</blockquote>
+      <blockquote className="text-base leading-[1.6] text-vez-ink">&quot;{t.quote}&quot;</blockquote>
       <figcaption className="mt-6 flex items-center gap-4">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-vez-sky text-sm font-medium text-vez-navy transition-colors duration-300 group-hover:bg-white">
           {initials(t.name)}

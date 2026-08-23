@@ -63,6 +63,20 @@ export default function DashboardPage() {
     )
   }, [])
 
+  // The quick-create wizard has no room for a persistent inline error card —
+  // surface addAlert's failure (from the shared alerts context) as a toast
+  // instead, once it lands. Must run unconditionally (before the `!user`
+  // early return below) — hooks can't be called conditionally.
+  useEffect(() => {
+    if (quotaError) {
+      toast.error(quotaError.message, {
+        action: { label: "View plans", onClick: () => { window.location.href = "/pricing" } },
+      })
+    } else if (alertError) {
+      toast.error(alertError)
+    }
+  }, [alertError, quotaError])
+
   if (!user) {
     return (
       <div className="min-h-screen bg-white font-poppins">
@@ -90,19 +104,6 @@ export default function DashboardPage() {
   const recommendedNotices = mockNotices.slice(0, 5)
   const urgentNotices = mockNotices.filter(n => n.priority === "high").slice(0, 2)
   const recentActivities = mockActivities.slice(0, 6)
-
-  // The quick-create wizard has no room for a persistent inline error card —
-  // surface addAlert's failure (from the shared alerts context) as a toast
-  // instead, once it lands.
-  useEffect(() => {
-    if (quotaError) {
-      toast.error(quotaError.message, {
-        action: { label: "View plans", onClick: () => { window.location.href = "/pricing" } },
-      })
-    } else if (alertError) {
-      toast.error(alertError)
-    }
-  }, [alertError, quotaError])
 
   const handleWizardSubmit = async () => {
     if (!wizardData.name || wizardData.categories.length === 0) return

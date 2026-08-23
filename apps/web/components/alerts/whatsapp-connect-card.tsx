@@ -52,8 +52,8 @@ export function WhatsappConnectCard() {
     try {
       await requestWhatsappOtp(phone.trim())
       setStep("otp")
-    } catch (e: any) {
-      setError(e.message || "Could not send a code — check the number and try again")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not send a code — check the number and try again")
     } finally {
       setBusy(false)
     }
@@ -68,8 +68,8 @@ export function WhatsappConnectCard() {
       setStatus(s)
       setStep("connected")
       setCode("")
-    } catch (e: any) {
-      setError(e.message || "Incorrect or expired code")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Incorrect or expired code")
     } finally {
       setBusy(false)
     }
@@ -84,9 +84,9 @@ export function WhatsappConnectCard() {
     try {
       const s = await toggleWhatsappAlerts(next)
       setStatus(s)
-    } catch (e: any) {
+    } catch (e) {
       setStatus((prev) => (prev ? { ...prev, alertsEnabled: !next } : prev))
-      setError(e.message || "Could not update alert setting")
+      setError(e instanceof Error ? e.message : "Could not update alert setting")
     } finally {
       setBusy(false)
     }
@@ -101,9 +101,9 @@ export function WhatsappConnectCard() {
     try {
       const s = await setWhatsappDigestFrequency(frequency)
       setStatus(s)
-    } catch (e: any) {
+    } catch (e) {
       setStatus(previous)
-      setError(e.message || "Could not update delivery frequency")
+      setError(e instanceof Error ? e.message : "Could not update delivery frequency")
     } finally {
       setBusy(false)
     }
@@ -117,8 +117,8 @@ export function WhatsappConnectCard() {
       setStatus(s)
       setStep("phone")
       setPhone("")
-    } catch (e: any) {
-      setError(e.message || "Could not disconnect")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disconnect")
     } finally {
       setBusy(false)
     }

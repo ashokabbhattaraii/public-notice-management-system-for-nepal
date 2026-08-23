@@ -47,8 +47,8 @@ export function AdminWhatsappCard() {
       } else {
         setQr({ base64: result.base64, pairingCode: result.pairingCode })
       }
-    } catch (e: any) {
-      setError(e.message || "Could not fetch a QR code")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not fetch a QR code")
     } finally {
       setBusy(false)
     }
@@ -63,8 +63,8 @@ export function AdminWhatsappCard() {
       setQr(null)
       toast.success("WhatsApp sender disconnected")
       refreshStatus()
-    } catch (e: any) {
-      setError(e.message || "Could not disconnect")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disconnect")
     } finally {
       setBusy(false)
     }
