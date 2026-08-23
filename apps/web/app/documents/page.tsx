@@ -703,7 +703,7 @@ export default function RagPage() {
             value={docSearch}
             onChange={e => setDocSearch(e.target.value)}
             placeholder="Search documents..."
-            className="h-11 w-full rounded-xl border border-vez-line bg-vez-surface/50 pl-11 pr-4 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky focus:bg-white"
+            className="h-11 min-h-[44px] w-full rounded-xl border border-vez-line bg-vez-surface/50 pl-11 pr-4 text-[16px] sm:text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky focus:bg-white focus-visible:ring-2 focus-visible:ring-vez-navy/10"
           />
         </div>
       </div>
@@ -910,11 +910,11 @@ export default function RagPage() {
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && sendMessage()}
             placeholder={embeddedCount === 0 ? "Embed documents first..." : "Ask about government policies..."}
-            className="h-12 min-w-0 flex-1 rounded-xl border border-vez-line bg-vez-surface/50 px-4 text-[15px] text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30 disabled:opacity-50 sm:px-5"
+            className="h-12 min-h-[44px] min-w-0 flex-1 rounded-xl border border-vez-line bg-vez-surface/50 px-4 text-[16px] sm:text-[15px] text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30 disabled:opacity-50 sm:px-5"
             disabled={embeddedCount === 0 || typing}
           />
           <button
-            className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-vez-navy text-white shadow-md transition-all hover:bg-vez-navy/90 hover:shadow-lg disabled:opacity-40 disabled:shadow-none"
+            className="flex size-12 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl bg-vez-navy text-white shadow-md transition-all hover:bg-vez-navy/90 hover:shadow-lg disabled:opacity-40 disabled:shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2"
             onClick={() => sendMessage()}
             disabled={!chatInput.trim() || typing}
             aria-label="Send message"
@@ -967,7 +967,7 @@ export default function RagPage() {
             ))}
           </div>
 
-          {/* View switcher (desktop) */}
+          {/* View switcher (desktop) - 44px touch targets */}
           <div className="hidden items-center gap-1 rounded-xl bg-vez-surface p-1.5 lg:flex">
             {([
               { id: "library", icon: BookOpen,        label: "Library" },
@@ -977,7 +977,7 @@ export default function RagPage() {
               const Icon = m.icon
               return (
                 <button key={m.id} onClick={() => setView(m.id)}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  className={`flex min-h-[44px] items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
                     view === m.id
                       ? "bg-vez-navy text-white shadow-sm"
                       : "text-vez-mute hover:text-vez-navy"
@@ -1029,7 +1029,7 @@ export default function RagPage() {
                   <button
                     key={m.id}
                     onClick={() => setMobileTab(m.id)}
-                    className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+                    className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
                       mobileTab === m.id
                         ? "bg-vez-navy text-white shadow-sm"
                         : "text-vez-mute"

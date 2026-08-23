@@ -52,28 +52,28 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white font-poppins">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mb-8">
-          <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+        <div className="mb-6 w-full max-w-full min-w-0 overflow-hidden sm:mb-8">
+          <h1 className="break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
             Activity.
           </h1>
-          <p className="mt-2 text-sm text-vez-mute">Your recent actions and history</p>
+          <p className="mt-1 text-sm text-vez-mute sm:mt-2">Your recent actions and history</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden">
           {mockActivities.map((activity) => (
             <div
               key={activity.id}
-              className="flex items-center gap-4 rounded-[16px] bg-white p-5 transition-colors hover:bg-vez-sky/10"
+              className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[16px] bg-white p-4 transition-colors hover:bg-vez-sky/10 sm:gap-4 sm:p-5"
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy sm:size-10">
                 {activityIcon(activity.type)}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-vez-ink">{activity.description}</p>
-                <p className="mt-0.5 text-xs text-vez-mute">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <p className="break-words text-sm leading-relaxed text-vez-ink">{activity.description}</p>
+                <p className="mt-0.5 break-words text-xs text-vez-mute">
                   {new Date(activity.timestamp).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",

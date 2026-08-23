@@ -101,21 +101,21 @@ export function Header() {
     <>
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300",
+          "fixed top-0 left-0 right-0 z-50 w-full transition-all duration-300 [padding-top:env(safe-area-inset-top)]",
           solid
             ? "bg-white/60 backdrop-blur-xl border-b border-white/50 shadow-sm"
             : "bg-transparent"
         )}
       >
-        <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between px-6 md:px-8 lg:px-12">
-          {/* Brand */}
-          <Link href="/" className="shrink-0">
+        <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between gap-2 px-4 sm:px-6 md:px-8 lg:px-12">
+          {/* Brand - responsive sizing to prevent overflow on 375px */}
+          <Link href="/" className="shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2 rounded-lg">
             <Image
               src="/images/logo.png"
               alt="Suchana AI"
               width={220}
               height={220}
-              className="h-16 w-auto sm:h-[72px]"
+              className="h-12 w-auto sm:h-14 md:h-16 lg:h-[72px] max-w-[140px] sm:max-w-none object-contain"
               priority
             />
           </Link>
@@ -258,10 +258,10 @@ export function Header() {
             )}
           </div>
 
-          {/* Mobile toggle */}
+          {/* Mobile toggle - 44px touch targets, 8px gap */}
           <div className="flex items-center gap-2 lg:hidden">
             {user && (
-              <button className="relative flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]" aria-label="Notifications">
+              <button className="relative flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px] transition-colors hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2" aria-label="Notifications">
                 <Bell className="size-4" />
                 <span className="absolute right-1 top-1 flex size-3.5 items-center justify-center rounded-full bg-vez-navy text-[8px] text-white">
                   3
@@ -269,23 +269,24 @@ export function Header() {
               </button>
             )}
             <button
-              className="flex size-10 items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px]"
+              className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/40 text-vez-ink backdrop-blur-[6px] transition-colors hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2 cursor-pointer"
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label="Toggle menu"
+              aria-expanded={mobileOpen}
             >
               {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile menu - responsive drawer with safe area and 44px touch targets */}
         <div
           className={cn(
             "lg:hidden overflow-hidden transition-all duration-300",
-            mobileOpen ? "max-h-[85vh]" : "max-h-0"
+            mobileOpen ? "max-h-[85dvh]" : "max-h-0"
           )}
         >
-          <nav className="flex max-h-[75vh] flex-col gap-1 overflow-y-auto border-t border-vez-line bg-white px-6 py-4">
+          <nav className="flex max-h-[75dvh] flex-col gap-1 overflow-y-auto overscroll-contain border-t border-vez-line bg-white px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-6">
             <p className="px-4 py-1 text-xs font-medium uppercase tracking-wider text-vez-mute">{t("nav.product")}</p>
             {productLinks.map((link) => {
               const href = isHome ? link.id : `/${link.id}`
@@ -294,7 +295,7 @@ export function Header() {
                   key={link.tKey}
                   href={href}
                   onClick={(e) => handleNavClick(e, href, true)}
-                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink transition-colors hover:bg-vez-surface"
+                  className="flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base text-vez-ink transition-colors hover:bg-vez-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 cursor-pointer"
                 >
                   {t(link.tKey)}
                 </Link>
@@ -309,7 +310,7 @@ export function Header() {
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "rounded-[12px] px-4 py-3 text-base transition-colors",
+                  "flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20",
                   isActive(link.href, false) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                 )}
               >
@@ -327,7 +328,7 @@ export function Header() {
                   href={href}
                   onClick={(e) => handleNavClick(e, href, link.anchor)}
                   className={cn(
-                    "rounded-[12px] px-4 py-3 text-base transition-colors",
+                    "flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20",
                     isActive(href, link.anchor) ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
                   )}
                 >
@@ -340,7 +341,7 @@ export function Header() {
               href="/contact"
               onClick={() => setMobileOpen(false)}
               className={cn(
-                "rounded-[12px] px-4 py-3 text-base transition-colors",
+                "flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20",
                 pathname === "/contact" ? "bg-vez-navy text-white" : "text-vez-ink hover:bg-vez-surface"
               )}
             >
@@ -351,7 +352,7 @@ export function Header() {
 
             <button
               onClick={() => setLanguage(language === "en" ? "ne" : "en")}
-              className="flex items-center gap-2 rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+              className="flex min-h-[44px] items-center gap-2 rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
             >
               <Globe className="size-4" />
               {language === "en" ? "English" : "नेपाली"}
@@ -374,7 +375,7 @@ export function Header() {
                 <Link
                   href="/dashboard"
                   onClick={() => setMobileOpen(false)}
-                  className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                  className="flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
                 >
                   {t("nav.dashboard")}
                 </Link>
@@ -382,7 +383,7 @@ export function Header() {
                   <Link
                     href="/admin"
                     onClick={() => setMobileOpen(false)}
-                    className="rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface"
+                    className="flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-base text-vez-ink hover:bg-vez-surface cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
                   >
                     {t("nav.adminPanel")}
                   </Link>
@@ -392,7 +393,7 @@ export function Header() {
                     logout()
                     setMobileOpen(false)
                   }}
-                  className="rounded-[12px] px-4 py-3 text-left text-base text-red-600 hover:bg-red-50"
+                  className="flex min-h-[44px] items-center rounded-[12px] px-4 py-3 text-left text-base text-red-600 hover:bg-red-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
                 >
                   {t("nav.signout")}
                 </button>
@@ -401,7 +402,7 @@ export function Header() {
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}
-                className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white"
+                className="mt-2 flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-vez-navy px-6 py-3 text-base text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2"
               >
                 {t("nav.signin")}
                 <ArrowUpRight className="size-4" />
@@ -411,8 +412,8 @@ export function Header() {
         </div>
       </header>
 
-      {/* Spacer - only off the home page; the hero supplies its own top padding under the transparent header */}
-      {!isHome && <div className="h-20" aria-hidden="true" />}
+      {/* Spacer - only off the home page; hero supplies its own padding. Use dvh-safe calc for notched devices */}
+      {!isHome && <div className="h-[calc(5rem+env(safe-area-inset-top))]" aria-hidden="true" />}
     </>
   )
 }

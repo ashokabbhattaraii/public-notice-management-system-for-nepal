@@ -169,8 +169,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent pathname={pathname} />
       </aside>
 
-      <main className="flex-1 overflow-auto bg-vez-surface/60">
-        <div className="p-5 md:p-8">
+      <main className="flex-1 overflow-auto bg-vez-surface/60 overscroll-contain">
+        <div className="p-4 sm:p-5 md:p-6 lg:p-8">
           {children}
         </div>
       </main>

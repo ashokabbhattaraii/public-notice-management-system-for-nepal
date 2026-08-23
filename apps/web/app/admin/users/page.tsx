@@ -30,19 +30,20 @@ export default function AdminUsersPage() {
           </button>
         </div>
 
-        <div className="rounded-[20px] bg-white p-6">
+        <div className="rounded-[20px] bg-white p-4 sm:p-6">
           <div className="relative mb-5 max-w-sm">
-            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
+            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute pointer-events-none" />
             <input
               placeholder="Search users…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-11 w-full rounded-full border border-vez-line bg-white pl-11 pr-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+              className="h-11 min-h-[44px] w-full rounded-full border border-vez-line bg-white pl-11 pr-5 text-[16px] sm:text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky focus-visible:ring-2 focus-visible:ring-vez-navy/10"
             />
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          {/* Desktop table - hidden on mobile */}
+          <div className="hidden md:block overflow-x-auto -mx-2">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-vez-line text-left">
                   <th className="pb-3 font-normal text-vez-mute">User</th>
@@ -88,17 +89,48 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="py-3.5">
                       <div className="flex items-center gap-1">
-                        <button className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy" aria-label="Edit user"><Edit className="size-3.5" /></button>
-                        <button className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy" aria-label={user.role === "admin" ? "Revoke admin" : "Make admin"}>
+                        <button className="flex size-8 min-h-[32px] min-w-[32px] items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20" aria-label="Edit user"><Edit className="size-3.5" /></button>
+                        <button className="flex size-8 min-h-[32px] min-w-[32px] items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20" aria-label={user.role === "admin" ? "Revoke admin" : "Make admin"}>
                           {user.role === "admin" ? <ShieldOff className="size-3.5" /> : <Shield className="size-3.5" />}
                         </button>
-                        <button className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600" aria-label="Delete user"><Trash2 className="size-3.5" /></button>
+                        <button className="flex size-8 min-h-[32px] min-w-[32px] items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200" aria-label="Delete user"><Trash2 className="size-3.5" /></button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile cards - visible only on mobile, no horizontal scroll */}
+          <div className="grid gap-3 md:hidden">
+            {filteredUsers.map((user) => (
+              <div key={user.id} className="rounded-2xl border border-vez-line/50 bg-vez-surface/50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky">
+                      <span className="text-sm text-vez-navy">{user.username[0].toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-vez-ink">{user.username}</p>
+                      <p className="truncate text-xs text-vez-mute">{user.email}</p>
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs capitalize ${
+                    user.status === "active" ? "bg-vez-sky/30 text-vez-navy" : "border border-vez-line text-vez-mute"
+                  }`}>{user.status}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-3 py-1 text-xs capitalize ${user.role === "admin" ? "bg-vez-navy text-white" : "bg-white border border-vez-line text-vez-mute"}`}>{user.role}</span>
+                  <span className="text-xs text-vez-mute">{new Date(user.lastLogin).toLocaleDateString()}</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-vez-line bg-white px-3 py-2 text-xs text-vez-ink cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20" aria-label="Edit user"><Edit className="size-3.5" /> Edit</button>
+                  <button className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-vez-line bg-white px-3 py-2 text-xs text-vez-ink cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20" aria-label={user.role === "admin" ? "Revoke admin" : "Make admin"}>{user.role === "admin" ? <ShieldOff className="size-3.5" /> : <Shield className="size-3.5" />} {user.role === "admin" ? "Revoke" : "Make admin"}</button>
+                  <button className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-50 text-red-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200" aria-label="Delete user"><Trash2 className="size-4" /></button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </AdminLayout>

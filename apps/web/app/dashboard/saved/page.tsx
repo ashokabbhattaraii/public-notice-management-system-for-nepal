@@ -35,36 +35,38 @@ export default function SavedNoticesPage() {
   const savedNotices = mockNotices.slice(0, 6)
 
   return (
-    <div className="min-h-screen bg-white font-poppins">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mb-8">
-          <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+        <div className="mb-6 w-full max-w-full min-w-0 overflow-hidden sm:mb-8">
+          <h1 className="break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
             Saved notices.
           </h1>
-          <p className="mt-2 text-sm text-vez-mute">{savedNotices.length} notices saved</p>
+          <p className="mt-1 text-sm text-vez-mute sm:mt-2">{savedNotices.length} notices saved</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden">
           {savedNotices.map((notice) => (
             <div
               key={notice.id}
-              className="flex items-start gap-4 rounded-[16px] bg-white p-5 transition-colors hover:bg-vez-sky/10"
+              className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden rounded-[16px] bg-white p-4 transition-colors hover:bg-vez-sky/10 sm:flex-row sm:items-start sm:gap-4 sm:p-5"
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky/30">
-                <FileText className="size-4 text-vez-navy" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-base text-vez-ink">{notice.title}</p>
-                <p className="mt-1 line-clamp-2 text-sm text-vez-mute">{notice.description}</p>
-                <div className="mt-2.5 flex items-center gap-2.5">
-                  <span className="rounded-full bg-vez-sky/30 px-3 py-0.5 text-xs capitalize text-vez-navy">{notice.category}</span>
-                  <span className="text-xs text-vez-mute">{notice.organization}</span>
-                  <span className="text-xs text-vez-mute">· {new Date(notice.publishedAt).toLocaleDateString()}</span>
+              <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 sm:size-10">
+                  <FileText className="size-3.5 text-vez-navy sm:size-4" />
+                </div>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <p className="break-words text-sm font-medium text-vez-ink sm:truncate sm:text-base">{notice.title}</p>
+                  <p className="mt-1 line-clamp-2 break-words text-sm text-vez-mute">{notice.description}</p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                    <span className="shrink-0 rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-xs capitalize text-vez-navy sm:px-3">{notice.category}</span>
+                    <span className="min-w-0 truncate text-xs text-vez-mute">{notice.organization}</span>
+                    <span className="shrink-0 text-xs text-vez-mute">· {new Date(notice.publishedAt).toLocaleDateString()}</span>
+                  </div>
                 </div>
               </div>
               <button
-                className="flex size-9 shrink-0 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
+                className="flex size-9 shrink-0 items-center justify-center self-start rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600 sm:self-auto"
                 aria-label="Remove saved notice"
               >
                 <Trash2 className="size-4" />

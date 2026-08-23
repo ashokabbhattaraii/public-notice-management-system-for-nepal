@@ -120,12 +120,13 @@ function NoticeCard({
         </div>
       </div>
 
-      {/* Right actions */}
-      <div className="flex shrink-0 flex-col items-center justify-between gap-2 border-l border-vez-line/60 p-4">
+      {/* Right actions - 44px touch target, hidden label for a11y */}
+      <div className="flex shrink-0 flex-col items-center justify-between gap-2 border-l border-vez-line/60 p-3 sm:p-4">
         <button
           onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSave() }}
-          className="flex size-9 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+          className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
           title={saved ? "Remove bookmark" : "Bookmark"}
+          aria-label={saved ? "Remove bookmark" : "Bookmark"}
         >
           {saved ? <BookmarkCheck className="size-4 text-vez-navy" /> : <Bookmark className="size-4" />}
         </button>
@@ -341,39 +342,39 @@ function NoticesPageContent() {
     searchQuery !== "" || selectedCategory !== "all" || selectedSourceId !== "" || selectedTag !== ""
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white font-poppins">
+    <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-white font-poppins md:h-screen md:overflow-hidden overflow-x-hidden">
       <Header />
 
-      {/* Fixed-height workspace - mirrors the Documents page */}
-      <div className="mx-auto flex w-full max-w-[1480px] min-h-0 flex-1 flex-col gap-4 px-6 py-5 md:px-8 lg:px-12">
+      {/* Responsive workspace - natural scroll on mobile, fixed-height on desktop */}
+      <div className="mx-auto flex w-full max-w-[1480px] min-h-0 flex-1 flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5 md:px-8 lg:px-12">
 
-        {/* Top bar */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-full bg-vez-navy">
+        {/* Top bar - stacks vertically on mobile (375px), horizontal on desktop */}
+        <div className="flex shrink-0 flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex size-10 sm:size-11 shrink-0 items-center justify-center rounded-full bg-vez-navy">
               <FileText className="size-4 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg tracking-[-0.02em] text-vez-ink">Public notices</h1>
-              <p className="text-xs text-vez-mute">
-                {totalCount.toLocaleString()} notices &amp; news · {sources.length} official portals
+            <div className="min-w-0">
+              <h1 className="text-[17px] sm:text-lg tracking-[-0.02em] text-vez-ink truncate">Public notices</h1>
+              <p className="text-xs text-vez-mute truncate">
+                {totalCount.toLocaleString()} notices &amp; news · {sources.length} portals
               </p>
             </div>
           </div>
 
-          {/* Search */}
-          <div className="relative w-full max-w-md flex-1 md:w-auto">
-            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
+          {/* Search - full width on mobile, auto on desktop, 44px touch target */}
+          <div className="relative w-full md:w-auto md:max-w-md md:flex-1">
+            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute pointer-events-none" />
             <input
               placeholder="Search title, keyword, organisation…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="h-11 w-full rounded-full border border-vez-line bg-white pl-11 pr-10 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+              className="h-11 min-h-[44px] w-full rounded-full border border-vez-line bg-white pl-11 pr-10 text-[16px] sm:text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky focus-visible:ring-2 focus-visible:ring-vez-navy/10"
             />
             {searchInput && (
               <button
                 onClick={() => setSearchInput("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-navy"
+                className="absolute right-3.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-vez-mute hover:text-vez-navy hover:bg-vez-surface cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
                 aria-label="Clear search"
               >
                 <X className="size-4" />
@@ -383,18 +384,17 @@ function NoticesPageContent() {
 
           <Link
             href={user ? "/dashboard/alerts" : "/login"}
-            className="flex items-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+            className="flex min-h-[44px] w-full sm:w-auto items-center justify-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy focus-visible:ring-offset-2"
           >
             <Bell className="size-4" /> Set up alerts
           </Link>
         </div>
 
-        {/* Type chips — the primary filter, visible on all breakpoints.
-            "All" + each type with its live count; selected chip fills navy. */}
-        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* Type chips — primary filter, horizontal scroll on mobile with snap, 8px gap */}
+        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => selectCategory("all")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+            className={`flex shrink-0 snap-start min-h-[36px] items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
               selectedCategory === "all"
                 ? "bg-vez-navy text-white"
                 : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
@@ -409,7 +409,7 @@ function NoticesPageContent() {
             <button
               key={id}
               onClick={() => selectCategory(id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+              className={`flex shrink-0 snap-start min-h-[36px] items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
                 selectedCategory === id
                   ? "bg-vez-navy text-white"
                   : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
@@ -423,13 +423,11 @@ function NoticesPageContent() {
           ))}
         </div>
 
-        {/* Tag chips — secondary filter for thematic topics. Shows the top
-            canonical tags with live counts (derived from current page items),
-            plus "All" to clear. */}
-        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* Tag chips — secondary filter, snap scroll */}
+        <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setSelectedTag("")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+            className={`flex shrink-0 snap-start min-h-[36px] items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
               !selectedTag
                 ? "bg-vez-navy text-white"
                 : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
@@ -442,7 +440,7 @@ function NoticesPageContent() {
             <button
               key={tag}
               onClick={() => setSelectedTag(tag)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+              className={`flex shrink-0 snap-start min-h-[36px] items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 ${
                 selectedTag === normalizeTag(tag)
                   ? "bg-vez-sky/50 text-vez-navy"
                   : "border border-vez-line bg-white text-vez-ink hover:border-vez-sky hover:text-vez-navy"
@@ -454,15 +452,14 @@ function NoticesPageContent() {
           ))}
         </div>
 
-        {/* Refine bar — source + sort dropdowns and clear-all, in a row
-            everyone recognizes from news/marketplace sites. */}
+        {/* Refine bar — source + sort, wraps on mobile, 44px touch targets */}
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none min-w-[140px]">
             <Building2 className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-vez-mute" />
             <select
               value={selectedSourceId}
               onChange={(e) => selectSource(e.target.value)}
-              className="h-10 appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+              className="h-11 min-h-[44px] w-full appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-[16px] sm:text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky focus-visible:ring-2 focus-visible:ring-vez-navy/10 cursor-pointer"
               aria-label="Filter by source"
             >
               <option value="">All sources</option>
@@ -473,12 +470,12 @@ function NoticesPageContent() {
             <ChevronRight className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 rotate-90 text-vez-mute" />
           </div>
 
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none min-w-[140px]">
             <Filter className="pointer-events-none absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-vez-mute" />
             <select
               value={sortBy}
               onChange={(e) => selectSort(e.target.value as "publishedAt" | "views")}
-              className="h-10 appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky"
+              className="h-11 min-h-[44px] w-full appearance-none rounded-full border border-vez-line bg-white pl-9 pr-8 text-[16px] sm:text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky focus-visible:ring-2 focus-visible:ring-vez-navy/10 cursor-pointer"
               aria-label="Sort notices"
             >
               <option value="publishedAt">Newest first</option>
@@ -490,17 +487,17 @@ function NoticesPageContent() {
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="flex h-10 items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-mute transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              className="flex h-11 min-h-[44px] items-center gap-1.5 rounded-full border border-vez-line bg-white px-4 text-sm text-vez-mute transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
             >
               <RotateCcw className="size-3.5" /> Clear
             </button>
           )}
         </div>
 
-        {/* Panels - fill remaining height, page itself never scrolls */}
-        <div className="flex min-h-0 flex-1 gap-4 pb-5">
-          {/* ── Notice feed (scrolls internally) ── */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] bg-vez-surface">
+        {/* Panels - on mobile natural scroll, on desktop fixed-height internal scroll */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 pb-5 md:flex-row">
+          {/* ── Notice feed — full-width card on mobile, scrolls internally only on desktop */}
+          <div className="flex min-h-[50vh] w-full min-w-0 flex-1 flex-col overflow-visible rounded-[20px] bg-vez-surface md:min-h-0 md:overflow-hidden">
             <div className="flex shrink-0 items-center justify-between border-b border-vez-line px-5 py-3.5">
               <p className="text-sm text-vez-ink">
                 {total.toLocaleString()} notice{total !== 1 ? "s" : ""}
@@ -529,7 +526,7 @@ function NoticesPageContent() {
               <div className="mx-4 mt-4 rounded-[14px] bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
             )}
 
-            <div ref={feedRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+            <div ref={feedRef} className="flex-1 space-y-3 overflow-visible p-3 sm:p-4 md:overflow-y-auto md:overscroll-contain">
               {loading ? (
                 <div className="flex h-full items-center justify-center text-vez-mute">
                   <Loader2 className="size-5 animate-spin" />
@@ -540,7 +537,7 @@ function NoticesPageContent() {
                   <h3 className="mb-1 text-base text-vez-ink">No notices found</h3>
                   <p className="mb-5 text-sm">Try adjusting your search or filter criteria</p>
                   <button
-                    className="rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-sky/20"
+                    className="min-h-[44px] rounded-full border border-vez-line bg-white px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-sky/20 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20"
                     onClick={clearFilters}
                   >
                     Clear filters
@@ -559,20 +556,20 @@ function NoticesPageContent() {
             </div>
 
             {!loading && totalPages > 1 && (
-              <div className="flex shrink-0 items-center justify-between border-t border-vez-line px-5 py-3 text-sm">
-                <p className="text-vez-mute">Page {page} of {totalPages}</p>
-                <div className="flex items-center gap-2">
+              <div className="flex shrink-0 flex-col gap-3 border-t border-vez-line px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <p className="text-vez-mute text-center sm:text-left">Page {page} of {totalPages}</p>
+                <div className="flex items-center justify-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="rounded-full border border-vez-line px-4 py-1.5 text-vez-ink transition-colors hover:bg-white disabled:opacity-40"
+                    className="flex min-h-[44px] items-center justify-center rounded-full border border-vez-line px-5 py-2 text-vez-ink transition-colors hover:bg-white disabled:opacity-40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="rounded-full border border-vez-line px-4 py-1.5 text-vez-ink transition-colors hover:bg-white disabled:opacity-40"
+                    className="flex min-h-[44px] items-center justify-center rounded-full border border-vez-line px-5 py-2 text-vez-ink transition-colors hover:bg-white disabled:opacity-40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vez-navy/20 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>

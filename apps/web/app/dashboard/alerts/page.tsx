@@ -127,23 +127,23 @@ export default function AlertsPage() {
     : []
 
   return (
-    <div className="min-h-screen bg-white font-poppins">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+        <div className="mb-6 flex w-full max-w-full min-w-0 flex-wrap items-end justify-between gap-3 overflow-x-hidden sm:mb-8 sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
               My alerts.
             </h1>
-            <p className="mt-2 text-sm text-vez-mute">
+            <p className="mt-1 text-sm text-vez-mute sm:mt-2">
               {alerts.length} alert rule{alerts.length !== 1 ? "s" : ""} configured
             </p>
           </div>
           <button
-            className="flex items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-2 rounded-full bg-vez-navy px-4 py-2.5 text-sm text-white transition-opacity hover:opacity-90 sm:px-5"
             onClick={() => setShowCreate(!showCreate)}
           >
-            <Plus className="size-4" /> New alert
+            <Plus className="size-4 shrink-0" /> New alert
           </button>
         </div>
 
@@ -163,7 +163,7 @@ export default function AlertsPage() {
 
         {/* Create Alert Form */}
         {showCreate && (
-          <div className="mb-6 rounded-[20px] bg-vez-sky/25 p-6 md:p-8">
+          <div className="mb-6 w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-vez-sky/25 p-4 sm:p-6 md:p-8">
             <h2 className="text-lg text-vez-ink">Create new alert</h2>
             <p className="mt-1 text-sm text-vez-mute">
               Pick a category and/or tag to start — that&apos;s the easy way. Add keywords, organizations, urgency, or a
@@ -241,14 +241,14 @@ export default function AlertsPage() {
 
               <button
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1.5 text-sm text-vez-navy"
+                className="flex min-w-0 items-start gap-1.5 break-words text-left text-sm text-vez-navy"
               >
-                {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                {showAdvanced ? "Hide advanced filters" : "Advanced filters (optional — keywords, organization, exclude, urgency, deadline)"}
+                <span className="mt-0.5 shrink-0">{showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
+                <span className="min-w-0 flex-1 break-words">{showAdvanced ? "Hide advanced filters" : "Advanced filters (optional — keywords, organization, exclude, urgency, deadline)"}</span>
               </button>
 
               {showAdvanced && (
-                <div className="space-y-5 rounded-[16px] bg-white/60 p-5">
+                <div className="w-full min-w-0 space-y-5 overflow-hidden rounded-[16px] bg-white/60 p-4 sm:p-5">
                   <div>
                     <label className="mb-2 flex items-center gap-1.5 text-sm text-vez-mute">
                       <Search className="size-3.5" /> Also require these keywords (comma separated)
@@ -364,7 +364,7 @@ export default function AlertsPage() {
                 </p>
               )}
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   onClick={handleCreate}
                   disabled={creating || !canSubmit}
@@ -418,7 +418,7 @@ export default function AlertsPage() {
 
         {/* Alert List */}
         {alerts.length > 0 && (
-          <div className="space-y-3">
+          <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden">
             {alerts.map((alert) => (
               <AlertRow key={alert.id} alert={alert} onToggle={toggleAlert} onDelete={deleteAlert} />
             ))}
@@ -439,76 +439,80 @@ function AlertRow({
   onDelete: (id: string) => void
 }) {
   return (
-    <div className="flex items-start gap-4 rounded-[16px] bg-white p-5 transition-colors hover:bg-vez-sky/10">
-      <button
-        onClick={() => onToggle(alert.id)}
-        className="mt-0.5 shrink-0"
-        aria-label={alert.enabled ? "Disable alert" : "Enable alert"}
-      >
-        {alert.enabled ? (
-          <ToggleRight className="size-7 text-vez-navy" />
-        ) : (
-          <ToggleLeft className="size-7 text-vez-mute" />
-        )}
-      </button>
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy">
-        <Bell className="size-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-base text-vez-ink">{alert.name}</p>
-          {alert.priority === "HIGH" && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] text-amber-700">⚡ High priority</span>
+    <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden rounded-[16px] bg-white p-4 transition-colors hover:bg-vez-sky/10 sm:flex-row sm:items-start sm:gap-4 sm:p-5">
+      <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+        <button
+          onClick={() => onToggle(alert.id)}
+          className="mt-0.5 shrink-0"
+          aria-label={alert.enabled ? "Disable alert" : "Enable alert"}
+        >
+          {alert.enabled ? (
+            <ToggleRight className="size-6 text-vez-navy sm:size-7" />
+          ) : (
+            <ToggleLeft className="size-6 text-vez-mute sm:size-7" />
           )}
+        </button>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy sm:size-10">
+          <Bell className="size-3.5 sm:size-4" />
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {alert.categories.map((c) => (
-            <span key={`cat-${c}`} className="rounded-full bg-vez-sky/40 px-2.5 py-0.5 text-[10px] text-vez-navy">
-              {categoryLabel(c)}
-            </span>
-          ))}
-          {alert.tags.map((t) => (
-            <span key={`tag-${t}`} className="rounded-full bg-vez-navy px-2.5 py-0.5 text-[10px] text-white">
-              #{t}
-            </span>
-          ))}
-          {alert.keywords.map((k) => (
-            <span key={`kw-${k}`} className="rounded-full bg-vez-surface px-2.5 py-0.5 text-[10px] text-vez-mute">
-              🔍 {k}
-            </span>
-          ))}
-          {alert.organizations.map((o) => (
-            <span key={`org-${o}`} className="rounded-full bg-vez-surface px-2.5 py-0.5 text-[10px] text-vez-mute">
-              🏛️ {o}
-            </span>
-          ))}
-          {alert.minUrgency && (
-            <span className="rounded-full bg-vez-surface px-2.5 py-0.5 text-[10px] text-vez-mute">
-              {URGENCY_BADGE[alert.minUrgency]}
-            </span>
-          )}
-          {alert.deadlineWithinDays != null && (
-            <span className="rounded-full bg-vez-surface px-2.5 py-0.5 text-[10px] text-vez-mute">
-              ⏰ due ≤{alert.deadlineWithinDays}d
-            </span>
-          )}
-          {alert.excludeKeywords.map((k) => (
-            <span key={`ex-${k}`} className="rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] text-red-600">
-              🚫 {k}
-            </span>
-          ))}
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <p className="min-w-0 break-words text-sm font-medium text-vez-ink sm:text-base">{alert.name}</p>
+            {alert.priority === "HIGH" && (
+              <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 sm:px-2.5">⚡ High priority</span>
+            )}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:gap-1.5">
+            {alert.categories.map((c) => (
+              <span key={`cat-${c}`} className="shrink-0 rounded-full bg-vez-sky/40 px-2 py-0.5 text-[10px] text-vez-navy sm:px-2.5">
+                {categoryLabel(c)}
+              </span>
+            ))}
+            {alert.tags.map((t) => (
+              <span key={`tag-${t}`} className="max-w-full break-all rounded-full bg-vez-navy px-2 py-0.5 text-[10px] text-white sm:px-2.5">
+                #{t}
+              </span>
+            ))}
+            {alert.keywords.map((k) => (
+              <span key={`kw-${k}`} className="max-w-full break-all rounded-full bg-vez-surface px-2 py-0.5 text-[10px] text-vez-mute sm:px-2.5">
+                🔍 {k}
+              </span>
+            ))}
+            {alert.organizations.map((o) => (
+              <span key={`org-${o}`} className="max-w-full break-all rounded-full bg-vez-surface px-2 py-0.5 text-[10px] text-vez-mute sm:px-2.5">
+                🏛️ {o}
+              </span>
+            ))}
+            {alert.minUrgency && (
+              <span className="shrink-0 rounded-full bg-vez-surface px-2 py-0.5 text-[10px] text-vez-mute sm:px-2.5">
+                {URGENCY_BADGE[alert.minUrgency]}
+              </span>
+            )}
+            {alert.deadlineWithinDays != null && (
+              <span className="shrink-0 rounded-full bg-vez-surface px-2 py-0.5 text-[10px] text-vez-mute sm:px-2.5">
+                ⏰ due ≤{alert.deadlineWithinDays}d
+              </span>
+            )}
+            {alert.excludeKeywords.map((k) => (
+              <span key={`ex-${k}`} className="max-w-full break-all rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-600 sm:px-2.5">
+                🚫 {k}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-      <span className="shrink-0 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
-        {alert.matchCount} matches
-      </span>
-      <button
-        className="flex size-9 shrink-0 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
-        onClick={() => onDelete(alert.id)}
-        aria-label="Delete alert"
-      >
-        <Trash2 className="size-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+        <span className="shrink-0 rounded-full bg-vez-sky/30 px-3 py-1 text-xs text-vez-navy">
+          {alert.matchCount} matches
+        </span>
+        <button
+          className="flex size-9 shrink-0 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
+          onClick={() => onDelete(alert.id)}
+          aria-label="Delete alert"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
     </div>
   )
 }

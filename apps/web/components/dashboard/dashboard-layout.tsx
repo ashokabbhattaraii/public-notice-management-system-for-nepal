@@ -126,11 +126,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <RequireAuth>
-      <div className="flex h-[calc(100vh-5rem)] overflow-hidden">
+      <div className="flex h-[calc(100vh-5rem)] w-full max-w-full overflow-hidden">
       {/* Mobile sidebar toggle */}
       <div className="fixed bottom-4 left-4 z-50 md:hidden">
         <button
-          className="flex size-12 items-center justify-center rounded-full bg-vez-navy text-white"
+          className="flex size-12 items-center justify-center rounded-full bg-vez-navy text-white shadow-lg"
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
         >
@@ -142,7 +142,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-vez-navy/40 backdrop-blur-[6px]" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute bottom-0 left-0 top-0 flex w-64 flex-col border-r border-vez-line bg-white">
+          <aside className="absolute bottom-0 left-0 top-0 flex w-[min(272px,85vw)] max-w-[85vw] flex-col border-r border-vez-line bg-white">
             <div className="flex items-center justify-end border-b border-vez-line p-2">
               <button
                 className="flex size-9 items-center justify-center rounded-full text-vez-mute hover:bg-vez-surface"
@@ -162,8 +162,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent pathname={pathname} />
       </aside>
 
-      <main className="flex-1 overflow-auto bg-vez-surface/60">
-        <div className="p-5 md:p-8">
+      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-vez-surface/60">
+        <div className="mx-auto w-full max-w-full p-4 sm:p-5 md:p-6 lg:p-8 overflow-x-hidden">
           {children}
         </div>
       </main>

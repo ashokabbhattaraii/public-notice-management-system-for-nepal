@@ -23,19 +23,19 @@ function StatCard({
   icon: React.ReactNode; trend?: string; trendUp?: boolean
 }) {
   return (
-    <div className="dash-card flex flex-col gap-4 rounded-[20px] bg-white p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-vez-mute">{label}</span>
-        <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy">
+    <div className="dash-card flex min-w-0 flex-col gap-3 overflow-hidden rounded-[20px] bg-white p-4 sm:p-5">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-xs sm:text-sm text-vez-mute">{label}</span>
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 text-vez-navy sm:size-9">
           {icon}
         </div>
       </div>
-      <div>
-        <p className="text-3xl leading-none tracking-[-0.02em] text-vez-ink tabular-nums">{value}</p>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-xs text-vez-mute">{sub}</span>
+      <div className="min-w-0">
+        <p className="break-words text-xl leading-none tracking-[-0.02em] text-vez-ink tabular-nums sm:text-2xl lg:text-3xl">{value}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-[11px] text-vez-mute sm:text-xs">{sub}</span>
           {trend && (
-            <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy">
+            <span className="shrink-0 rounded-full bg-vez-sky/30 px-2 py-0.5 text-[9px] leading-none text-vez-navy sm:px-2.5 sm:text-[10px]">
               {trend}
             </span>
           )}
@@ -132,32 +132,32 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white font-poppins">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
         {/* Page header */}
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-sm text-vez-mute">
+        <div className="mb-6 flex w-full max-w-full min-w-0 flex-wrap items-end justify-between gap-3 sm:mb-8 sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-vez-mute sm:text-sm">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
-            <h1 className="mt-2 text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
-              Good morning, {user.username}.
+            <h1 className="mt-1 min-w-0 break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink sm:mt-2">
+              Good morning, <span className="break-all">{user.username}</span>.
             </h1>
           </div>
 
           <Link
             href="/notices"
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2.5 text-sm text-white transition-opacity hover:opacity-90 sm:px-5"
           >
-            <Search className="size-4" />
+            <Search className="size-4 shrink-0" />
             Browse notices
           </Link>
         </div>
 
-        <div ref={gridRef} className="space-y-6">
+        <div ref={gridRef} className="w-full max-w-full min-w-0 space-y-4 overflow-x-hidden sm:space-y-6">
           {/* Stats row */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid w-full max-w-full min-w-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <StatCard
               label="Notices viewed"
               value="47"
@@ -189,29 +189,29 @@ export default function DashboardPage() {
 
           {/* Urgent notices banner */}
           {urgentNotices.length > 0 && (
-            <div className="dash-card rounded-[20px] bg-vez-navy p-6">
-              <div className="mb-4 flex items-center gap-2.5">
-                <CalendarClock className="size-5 text-vez-sky" />
-                <span className="text-base text-white">Urgent notices</span>
-                <span className="rounded-full bg-white/15 px-3 py-0.5 text-xs text-white">
+            <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-vez-navy p-4 sm:p-6">
+              <div className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4 sm:gap-2.5">
+                <CalendarClock className="size-4 shrink-0 text-vez-sky sm:size-5" />
+                <span className="text-sm text-white sm:text-base">Urgent notices</span>
+                <span className="shrink-0 rounded-full bg-white/15 px-3 py-0.5 text-xs text-white">
                   {urgentNotices.length} active
                 </span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2">
                 {urgentNotices.map((n) => (
                   <Link
                     key={n.id}
                     href="/notices"
-                    className="group flex items-center gap-3 rounded-[16px] bg-white/10 p-4 transition-colors hover:bg-white/20"
+                    className="group flex min-w-0 items-center gap-3 overflow-hidden rounded-[16px] bg-white/10 p-3 transition-colors hover:bg-white/20 sm:p-4"
                   >
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky/30">
-                      <FileText className="size-4 text-vez-sky" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 sm:size-9">
+                      <FileText className="size-3.5 text-vez-sky sm:size-4" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <p className="truncate text-sm text-white">{n.title}</p>
                       <p className="truncate text-xs text-white/60">{n.organization}</p>
                     </div>
-                    <ArrowRight className="size-4 shrink-0 text-vez-sky opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+                    <ArrowRight className="hidden size-4 shrink-0 text-vez-sky opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 sm:block" />
                   </Link>
                 ))}
               </div>
@@ -219,34 +219,34 @@ export default function DashboardPage() {
           )}
 
           {/* Main grid */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
             {/* Left - 2 cols */}
-            <div className="space-y-6 lg:col-span-2">
+            <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-2">
               {/* Alert setup wizard */}
               {!hasAlerts ? (
-                <div className="dash-card rounded-[20px] bg-vez-sky/25 p-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-white">
+                <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-vez-sky/25 p-4 sm:p-6">
+                  <div className="mb-4 flex min-w-0 items-start gap-3 sm:mb-5">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white sm:size-10">
                       <Zap className="size-4 text-vez-navy" />
                     </div>
-                    <div>
-                      <p className="text-base text-vez-ink">Set up your first alert</p>
-                      <p className="mt-0.5 text-sm text-vez-mute">Get notified the moment relevant notices are published</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-vez-ink sm:text-base">Set up your first alert</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-vez-mute sm:text-sm">Get notified the moment relevant notices are published</p>
                     </div>
                   </div>
-                  <div className="space-y-3">
+                  <div className="min-w-0 space-y-3">
                     <input
                       placeholder="Alert name (e.g. Vacancy Updates)"
                       value={wizardData.name}
                       onChange={(e) => setWizardData({ ...wizardData, name: e.target.value })}
                       className={inputClass}
                     />
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {CATEGORY_ORDER.map((cat) => (
                         <button
                           key={cat}
                           onClick={() => toggleWizardCategory(cat)}
-                          className={`rounded-full px-3.5 py-1.5 text-xs transition-colors ${
+                          className={`rounded-full px-3 py-1.5 text-[11px] transition-colors sm:px-3.5 sm:text-xs ${
                             wizardData.categories.includes(cat)
                               ? "bg-vez-navy text-white"
                               : "bg-white text-vez-mute hover:text-vez-navy"
@@ -256,17 +256,17 @@ export default function DashboardPage() {
                         </button>
                       ))}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
                       <button
                         onClick={handleWizardSubmit}
                         disabled={!wizardData.name || wizardData.categories.length === 0}
-                        className="rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                        className="w-full rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40 sm:w-auto"
                       >
                         Create alert
                       </button>
                       <Link
                         href="/dashboard/alerts"
-                        className="rounded-full px-5 py-2.5 text-sm text-vez-mute transition-colors hover:bg-white hover:text-vez-navy"
+                        className="break-words rounded-full px-3 py-2 text-xs leading-relaxed text-vez-mute transition-colors hover:bg-white hover:text-vez-navy sm:px-5 sm:py-2.5 sm:text-sm"
                       >
                         Want tags, keywords, or other advanced filters? Open the full alert builder →
                       </Link>
@@ -274,26 +274,27 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div className="dash-card rounded-[20px] bg-vez-surface p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 text-base text-vez-ink">
-                      <Bell className="size-4 text-vez-navy" /> Active alerts
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-vez-navy px-1.5 text-[10px] text-white">{activeAlertCount}</span>
+                <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-vez-surface p-4 sm:p-6">
+                  <div className="mb-3 flex min-w-0 items-center justify-between gap-2 sm:mb-4">
+                    <h3 className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-vez-ink sm:gap-2 sm:text-base">
+                      <Bell className="size-3.5 shrink-0 text-vez-navy sm:size-4" />
+                      <span className="truncate">Active alerts</span>
+                      <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-vez-navy px-1.5 text-[10px] text-white">{activeAlertCount}</span>
                     </h3>
                     <Link
                       href="/dashboard/alerts"
-                      className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-white hover:text-vez-navy"
+                      className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-xs text-vez-mute transition-colors hover:bg-white hover:text-vez-navy sm:px-3"
                     >
-                      Manage <ArrowRight className="size-3" />
+                      Manage <ArrowRight className="size-3 shrink-0" />
                     </Link>
                   </div>
                   <div className="space-y-2.5">
                     {alerts.filter(a => a.enabled).slice(0, 3).map((alert) => (
-                      <div key={alert.id} className="flex items-center justify-between rounded-[14px] bg-white px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="size-2 rounded-full bg-vez-navy" />
-                          <span className="text-sm text-vez-ink">{alert.name}</span>
-                          <span className="rounded-full bg-vez-sky/30 px-2.5 py-0.5 text-[10px] text-vez-navy">
+                      <div key={alert.id} className="flex min-w-0 flex-col gap-2 rounded-[14px] bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:gap-2.5">
+                          <span className="size-2 shrink-0 rounded-full bg-vez-navy" />
+                          <span className="min-w-0 truncate text-sm font-medium text-vez-ink">{alert.name}</span>
+                          <span className="max-w-full break-words rounded-full bg-vez-sky/30 px-2 py-0.5 text-[9px] leading-relaxed text-vez-navy sm:px-2.5 sm:text-[10px]">
                             {[
                               alert.categories.length && `${alert.categories.length} categor${alert.categories.length > 1 ? "ies" : "y"}`,
                               alert.tags.length && `${alert.tags.length} tag${alert.tags.length > 1 ? "s" : ""}`,
@@ -304,7 +305,7 @@ export default function DashboardPage() {
                             ].filter(Boolean).join(" + ") || "no filters"}
                           </span>
                         </div>
-                        <span className="text-xs text-vez-mute">{alert.matchCount} matches</span>
+                        <span className="shrink-0 self-start rounded-full bg-vez-sky/20 px-2.5 py-0.5 text-xs text-vez-mute sm:self-auto sm:bg-transparent sm:px-0">{alert.matchCount} matches</span>
                       </div>
                     ))}
                     {alerts.length > 3 && (
@@ -315,38 +316,38 @@ export default function DashboardPage() {
               )}
 
               {/* Recommended notices */}
-              <div className="dash-card rounded-[20px] bg-white p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-base text-vez-ink">
-                    <TrendingUp className="size-4 text-vez-navy" /> Recommended for you
+              <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-white p-4 sm:p-6">
+                <div className="mb-3 flex min-w-0 items-center justify-between gap-2 sm:mb-4">
+                  <h3 className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-vez-ink sm:gap-2 sm:text-base">
+                    <TrendingUp className="size-3.5 shrink-0 text-vez-navy sm:size-4" /> <span className="truncate">Recommended for you</span>
                   </h3>
                   <Link
                     href="/notices"
-                    className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                    className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy sm:px-3"
                   >
-                    View all <ArrowRight className="size-3.5" />
+                    View all <ArrowRight className="size-3 shrink-0 sm:size-3.5" />
                   </Link>
                 </div>
-                <div className="space-y-1">
+                <div className="w-full min-w-0 space-y-0">
                   {recommendedNotices.map((notice) => (
                     <Link
                       key={notice.id}
                       href="/notices"
-                      className="group -mx-2 flex items-center gap-3 rounded-[14px] border-b border-vez-line/50 px-2 py-3 transition-colors last:border-0 hover:bg-vez-surface"
+                      className="group flex w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-[14px] border-b border-vez-line/50 px-2 py-3 transition-colors last:border-0 hover:bg-vez-surface sm:gap-3 sm:px-3"
                     >
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-vez-sky/30">
-                        <FileText className="size-4 text-vez-navy" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 sm:size-9">
+                        <FileText className="size-3.5 text-vez-navy sm:size-4" />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         <p className="truncate text-sm text-vez-ink">{notice.title}</p>
-                        <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="truncate text-xs text-vez-mute">{notice.organization}</span>
-                          <span className="text-xs text-vez-mute/60">·</span>
-                          <span className="text-xs text-vez-mute">{notice.views.toLocaleString()} views</span>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1 sm:gap-1.5">
+                          <span className="min-w-0 truncate text-xs text-vez-mute">{notice.organization}</span>
+                          <span className="hidden shrink-0 text-xs text-vez-mute/60 sm:inline">·</span>
+                          <span className="hidden shrink-0 text-xs text-vez-mute sm:inline">{notice.views.toLocaleString()} views</span>
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="rounded-full bg-vez-surface px-2.5 py-0.5 text-[10px] capitalize text-vez-mute">{notice.category}</span>
+                      <div className="hidden shrink-0 items-center gap-1.5 sm:flex sm:gap-2">
+                        <span className="rounded-full bg-vez-surface px-2 py-0.5 text-[10px] capitalize text-vez-mute sm:px-2.5">{notice.category}</span>
                         {notice.priority === "high" && (
                           <span className="size-2 rounded-full bg-vez-navy" />
                         )}
@@ -358,12 +359,12 @@ export default function DashboardPage() {
               </div>
 
               {/* Engagement summary */}
-              <div className="dash-card rounded-[20px] bg-white p-6">
-                <div className="mb-5 flex items-center gap-2.5">
-                  <BarChart3 className="size-5 text-vez-navy" />
-                  <h3 className="text-base text-vez-ink">This month</h3>
+              <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-white p-4 sm:p-6">
+                <div className="mb-4 flex items-center gap-2 sm:mb-5 sm:gap-2.5">
+                  <BarChart3 className="size-4 shrink-0 text-vez-navy sm:size-5" />
+                  <h3 className="text-sm font-medium text-vez-ink sm:text-base">This month</h3>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                   {[
                     { label: "Searches", value: "23", icon: Search },
                     { label: "Docs read", value: "14", icon: FileText },
@@ -371,12 +372,12 @@ export default function DashboardPage() {
                   ].map((item) => {
                     const Icon = item.icon
                     return (
-                      <div key={item.label} className="flex flex-col items-center gap-2 rounded-[16px] bg-vez-surface p-5 text-center">
-                        <div className="flex size-9 items-center justify-center rounded-full bg-white">
-                          <Icon className="size-4 text-vez-navy" />
+                      <div key={item.label} className="flex min-w-0 flex-col items-center gap-1.5 overflow-hidden rounded-[14px] bg-vez-surface p-3 text-center sm:gap-2 sm:rounded-[16px] sm:p-4 lg:p-5">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white sm:size-9">
+                          <Icon className="size-3.5 text-vez-navy sm:size-4" />
                         </div>
-                        <p className="text-2xl text-vez-ink tabular-nums">{item.value}</p>
-                        <p className="text-xs text-vez-mute">{item.label}</p>
+                        <p className="text-lg font-medium text-vez-ink tabular-nums sm:text-2xl">{item.value}</p>
+                        <p className="break-words text-[10px] leading-tight text-vez-mute sm:text-xs">{item.label}</p>
                       </div>
                     )
                   })}
@@ -385,28 +386,28 @@ export default function DashboardPage() {
             </div>
 
             {/* Right - 1 col */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-4 sm:space-y-6">
               {/* Activity feed */}
-              <div className="dash-card rounded-[20px] bg-white p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-base text-vez-ink">
-                    <Activity className="size-4 text-vez-navy" /> Activity log
+              <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-white p-4 sm:p-6">
+                <div className="mb-3 flex min-w-0 items-center justify-between gap-2 sm:mb-4">
+                  <h3 className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-vez-ink sm:gap-2 sm:text-base">
+                    <Activity className="size-3.5 shrink-0 text-vez-navy sm:size-4" /> <span className="truncate">Activity log</span>
                   </h3>
                   <Link
                     href="/dashboard/activity"
-                    className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                    className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy sm:px-3"
                   >
-                    All <ArrowRight className="size-3.5" />
+                    All <ArrowRight className="size-3 shrink-0 sm:size-3.5" />
                   </Link>
                 </div>
                 <div className="relative">
                   <div className="absolute bottom-2 left-[5px] top-2 w-px bg-vez-line" />
                   {recentActivities.map((activity) => (
-                    <div key={activity.id} className="relative flex items-start gap-3 py-2.5">
+                    <div key={activity.id} className="relative flex min-w-0 items-start gap-3 py-2.5">
                       <span className="z-10 mt-1.5 size-2.5 shrink-0 rounded-full border-2 border-white bg-vez-sky" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-relaxed text-vez-ink/90">{activity.description}</p>
-                        <p className="mt-1 text-xs text-vez-mute">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <p className="break-words text-sm leading-relaxed text-vez-ink/90">{activity.description}</p>
+                        <p className="mt-1 break-words text-xs text-vez-mute">
                           {new Date(activity.timestamp).toLocaleDateString("en-US", {
                             month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                           })}
@@ -418,11 +419,11 @@ export default function DashboardPage() {
               </div>
 
               {/* Quick actions */}
-              <div className="dash-card rounded-[20px] bg-vez-surface p-6">
-                <h3 className="mb-4 flex items-center gap-2 text-base text-vez-ink">
-                  <TrendingUp className="size-4 text-vez-navy" /> Quick actions
+              <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-vez-surface p-4 sm:p-6">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-vez-ink sm:mb-4 sm:text-base">
+                  <TrendingUp className="size-3.5 text-vez-navy sm:size-4" /> Quick actions
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   {[
                     { href: "/notices", label: "Browse", icon: Search },
                     { href: "/documents", label: "Doc search", icon: FileText },
@@ -435,12 +436,12 @@ export default function DashboardPage() {
                       <Link
                         key={action.href}
                         href={action.href}
-                        className="group flex flex-col items-center gap-2.5 rounded-[16px] bg-white p-4 text-center transition-transform duration-300 hover:-translate-y-1"
+                        className="group flex min-w-0 flex-col items-center gap-2 overflow-hidden rounded-[14px] bg-white p-3 text-center transition-transform duration-300 hover:-translate-y-1 sm:gap-2.5 sm:rounded-[16px] sm:p-4"
                       >
-                        <div className="flex size-9 items-center justify-center rounded-full bg-vez-sky/30 transition-colors group-hover:bg-vez-sky/50">
-                          <Icon className="size-4 text-vez-navy" />
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-vez-sky/30 transition-colors group-hover:bg-vez-sky/50 sm:size-9">
+                          <Icon className="size-3.5 text-vez-navy sm:size-4" />
                         </div>
-                        <span className="text-xs text-vez-ink">{action.label}</span>
+                        <span className="break-words text-[11px] leading-tight text-vez-ink sm:text-xs">{action.label}</span>
                       </Link>
                     )
                   })}
@@ -448,9 +449,9 @@ export default function DashboardPage() {
               </div>
 
               {/* Notice categories */}
-              <div className="dash-card rounded-[20px] bg-white p-6">
-                <h3 className="mb-4 text-base text-vez-ink">Browse by category</h3>
-                <div className="space-y-1.5">
+              <div className="dash-card w-full max-w-full min-w-0 overflow-hidden rounded-[20px] bg-white p-4 sm:p-6">
+                <h3 className="mb-3 text-sm font-medium text-vez-ink sm:mb-4 sm:text-base">Browse by category</h3>
+                <div className="space-y-1 sm:space-y-1.5">
                   {[
                     { label: "Vacancies", count: 14 },
                     { label: "Tenders", count: 8 },
@@ -460,12 +461,12 @@ export default function DashboardPage() {
                     <Link
                       key={cat.label}
                       href="/notices"
-                      className="group flex items-center gap-3 rounded-full px-3 py-2 transition-colors hover:bg-vez-surface"
+                      className="group flex min-w-0 items-center gap-2 rounded-full px-2 py-2 transition-colors hover:bg-vez-surface sm:gap-3 sm:px-3"
                     >
                       <span className="size-2 shrink-0 rounded-full bg-vez-sky" />
-                      <span className="flex-1 text-sm text-vez-ink">{cat.label}</span>
-                      <span className="text-xs text-vez-mute">{cat.count}</span>
-                      <ArrowRight className="size-3 text-vez-mute opacity-0 transition-opacity group-hover:opacity-100" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-vez-ink">{cat.label}</span>
+                      <span className="shrink-0 text-xs text-vez-mute">{cat.count}</span>
+                      <ArrowRight className="hidden size-3 shrink-0 text-vez-mute opacity-0 transition-opacity group-hover:opacity-100 sm:block" />
                     </Link>
                   ))}
                 </div>

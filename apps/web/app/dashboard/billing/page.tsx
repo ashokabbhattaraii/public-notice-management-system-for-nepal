@@ -95,39 +95,39 @@ function BillingPageContent() {
   const usage = summary.usage
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-full min-w-0 space-y-4 overflow-x-hidden sm:space-y-6">
       {justCheckedOut && (
-        <div className="flex items-center gap-2 rounded-[14px] bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          <CheckCircle className="size-4 shrink-0" />
-          Payment received — welcome to {summary.plan.name}. It can take a few seconds to appear.
+        <div className="flex items-start gap-2 overflow-hidden rounded-[14px] bg-emerald-50 px-3 py-3 text-sm text-emerald-700 sm:px-4">
+          <CheckCircle className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 flex-1 break-words">Payment received — welcome to {summary.plan.name}. It can take a few seconds to appear.</span>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 rounded-[14px] bg-red-50 px-4 py-3 text-sm text-red-600">
-          <AlertCircle className="size-4 shrink-0" /> {error}
+        <div className="flex items-start gap-2 overflow-hidden rounded-[14px] bg-red-50 px-3 py-3 text-sm text-red-600 sm:px-4">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" /> <span className="min-w-0 flex-1 break-words">{error}</span>
         </div>
       )}
 
       {/* Current plan */}
-      <section className="rounded-[20px] border border-vez-line bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-xl text-vez-ink">{summary.plan.name}</h2>
-              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${status.tone}`}>
+      <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-vez-line bg-white p-4 sm:p-6">
+        <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <h2 className="break-words text-lg text-vez-ink sm:text-xl">{summary.plan.name}</h2>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${status.tone}`}>
                 {status.label}
               </span>
               {summary.cancelAtPeriodEnd && (
-                <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+                <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
                   Cancels at period end
                 </span>
               )}
             </div>
             {summary.plan.tagline && (
-              <p className="mt-1 text-sm text-vez-mute">{summary.plan.tagline}</p>
+              <p className="mt-1 break-words text-sm text-vez-mute">{summary.plan.tagline}</p>
             )}
-            <p className="mt-2 text-sm text-vez-ink">
+            <p className="mt-2 break-words text-sm text-vez-ink">
               {formatPlanPrice(summary.plan.priceMonthlyCents, summary.plan.currency)}
               {summary.plan.priceMonthlyCents > 0 && (
                 <span className="text-vez-mute"> / month</span>
@@ -141,25 +141,25 @@ function BillingPageContent() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Link
               href="/pricing"
-              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2.5 text-sm text-white transition-opacity hover:opacity-90 sm:px-5"
             >
               {summary.plan.tier === "MAX" ? "Compare plans" : "Upgrade"}
-              <ArrowUpRight className="size-3.5" />
+              <ArrowUpRight className="size-3.5 shrink-0" />
             </Link>
             {/* Only a real Stripe customer has a portal to open. */}
             {!summary.isDefault && summary.paymentsConfigured && (
               <button
                 onClick={handlePortal}
                 disabled={openingPortal}
-                className="flex items-center gap-1.5 rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-full border border-vez-line px-4 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-60 sm:px-5"
               >
                 {openingPortal ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <CreditCard className="size-3.5" />
+                  <CreditCard className="size-3.5 shrink-0" />
                 )}
                 Manage billing
               </button>
@@ -168,7 +168,7 @@ function BillingPageContent() {
         </div>
 
         {summary.status === "PAST_DUE" && (
-          <p className="mt-4 rounded-[12px] bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
+          <p className="mt-4 break-words rounded-[12px] bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800">
             We couldn't take the last payment. Your plan keeps working until the end of the current
             period — update your card in "Manage billing" to avoid losing access.
           </p>
@@ -176,23 +176,23 @@ function BillingPageContent() {
       </section>
 
       {/* Usage */}
-      <section className="rounded-[20px] border border-vez-line bg-white p-6">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base text-vez-ink">This month's usage</h3>
-            <p className="mt-0.5 text-xs text-vez-mute">
+      <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-vez-line bg-white p-4 sm:p-6">
+        <div className="mb-4 flex min-w-0 items-center justify-between gap-2 sm:mb-5">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <h3 className="break-words text-sm font-medium text-vez-ink sm:text-base">This month's usage</h3>
+            <p className="mt-0.5 break-words text-xs text-vez-mute">
               Resets {new Date(usage.periodEnd).toLocaleDateString()}
             </p>
           </div>
           <button
             onClick={() => void load()}
-            className="flex items-center gap-1.5 rounded-full border border-vez-line px-3.5 py-1.5 text-xs text-vez-ink transition-colors hover:bg-vez-surface"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-vez-line px-3 py-1.5 text-xs text-vez-ink transition-colors hover:bg-vez-surface sm:px-3.5"
           >
-            <RefreshCw className="size-3" /> Refresh
+            <RefreshCw className="size-3 shrink-0" /> Refresh
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-4 overflow-hidden sm:gap-5 lg:grid-cols-2">
           <UsageMeterBar
             label="AI questions"
             used={usage.aiQuestions.used}
@@ -215,30 +215,30 @@ function BillingPageContent() {
           />
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-vez-line pt-5 text-xs text-vez-mute sm:grid-cols-4">
-          <div>
-            <p className="text-vez-ink">{summary.limits.maxUploadMb} MB</p>
-            <p>Max upload size</p>
+        <div className="mt-6 grid grid-cols-2 gap-3 border-t border-vez-line pt-5 text-xs text-vez-mute sm:gap-4 lg:grid-cols-4">
+          <div className="min-w-0 overflow-hidden">
+            <p className="break-words text-vez-ink">{summary.limits.maxUploadMb} MB</p>
+            <p className="break-words">Max upload size</p>
           </div>
-          <div>
-            <p className="text-vez-ink">
+          <div className="min-w-0 overflow-hidden">
+            <p className="break-words text-vez-ink">
               {summary.limits.allowInstantAlerts ? "Instant" : "Daily digest"}
             </p>
-            <p>Alert delivery</p>
+            <p className="break-words">Alert delivery</p>
           </div>
-          <div>
-            <p className="text-vez-ink">
+          <div className="min-w-0 overflow-hidden">
+            <p className="break-words text-vez-ink">
               {summary.limits.maxDocuments === null ? "Unlimited" : summary.limits.maxDocuments}
             </p>
-            <p>Document limit</p>
+            <p className="break-words">Document limit</p>
           </div>
-          <div>
-            <p className="text-vez-ink">
+          <div className="min-w-0 overflow-hidden">
+            <p className="break-words text-vez-ink">
               {summary.limits.maxAiQuestionsPerMonth === null
                 ? "Unlimited"
                 : summary.limits.maxAiQuestionsPerMonth}
             </p>
-            <p>AI questions / month</p>
+            <p className="break-words">AI questions / month</p>
           </div>
         </div>
       </section>
@@ -248,15 +248,15 @@ function BillingPageContent() {
 
 export default function BillingPage() {
   return (
-    <div className="min-h-screen bg-white font-poppins">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-8">
-            <h1 className="text-[clamp(28px,3vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
+        <div className="mx-auto w-full max-w-3xl min-w-0 overflow-hidden">
+          <div className="mb-6 w-full max-w-full min-w-0 overflow-hidden sm:mb-8">
+            <h1 className="break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
               Plan &amp; usage.
             </h1>
-            <p className="mt-2 text-sm text-vez-mute">
+            <p className="mt-1 break-words text-sm text-vez-mute sm:mt-2">
               What your membership includes, and what you've used this month.
             </p>
           </div>
