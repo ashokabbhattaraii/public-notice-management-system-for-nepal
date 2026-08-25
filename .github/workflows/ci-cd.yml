@@ -145,7 +145,7 @@ jobs:
         with:
           aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-          ecr-repo: ${{ vars.ECR_WEB_REPO || 'suchana-web' }}
+          ecr-repo: ${{ vars.ECR_WEB_REPO || 'suchanaai-web' }}
           dockerfile: apps/web/Dockerfile
           image-tag: ${{ github.sha }}
           # Next.js inlines these into the client bundle at build time (see
@@ -162,8 +162,8 @@ jobs:
       - name: Deploy to Elastic Beanstalk
         uses: ./.github/actions/deploy-beanstalk
         with:
-          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
-          environment-name: ${{ vars.EB_WEB_ENV || 'suchana-web-prod' }}
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchanaai' }}
+          environment-name: ${{ vars.EB_WEB_ENV || 'suchanaai-web-prod' }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           image-uri: ${{ steps.image.outputs.image-uri }}
           container-port: 3535
@@ -188,7 +188,7 @@ jobs:
         with:
           aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-          ecr-repo: ${{ vars.ECR_API_REPO || 'suchana-api' }}
+          ecr-repo: ${{ vars.ECR_API_REPO || 'suchanaai-api' }}
           dockerfile: apps/api/Dockerfile
           image-tag: ${{ github.sha }}
           # Runtime secrets (JWT_SECRET, DATABASE_URL, STRIPE_SECRET_KEY, ...)
@@ -199,8 +199,8 @@ jobs:
       - name: Deploy to Elastic Beanstalk
         uses: ./.github/actions/deploy-beanstalk
         with:
-          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
-          environment-name: ${{ vars.EB_API_ENV || 'suchana-api-prod' }}
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchanaai' }}
+          environment-name: ${{ vars.EB_API_ENV || 'suchanaai-api-prod' }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           image-uri: ${{ steps.image.outputs.image-uri }}
           container-port: 3001
@@ -225,7 +225,7 @@ jobs:
         with:
           aws-role-arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-          ecr-repo: ${{ vars.ECR_AI_REPO || 'suchana-ai-service' }}
+          ecr-repo: ${{ vars.ECR_AI_REPO || 'suchanaai-ai-service' }}
           dockerfile: apps/ai/Dockerfile
           image-tag: ${{ github.sha }}
           # Runtime secrets (GROQ_API_KEY, GEMINI_API_KEY, QDRANT_API_KEY,
@@ -235,8 +235,8 @@ jobs:
       - name: Deploy to Elastic Beanstalk
         uses: ./.github/actions/deploy-beanstalk
         with:
-          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchana-ai' }}
-          environment-name: ${{ vars.EB_AI_ENV || 'suchana-ai-service-prod' }}
+          application-name: ${{ vars.EB_APPLICATION_NAME || 'suchanaai' }}
+          environment-name: ${{ vars.EB_AI_ENV || 'suchanaai-ai-service-prod' }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           image-uri: ${{ steps.image.outputs.image-uri }}
           container-port: 8000
