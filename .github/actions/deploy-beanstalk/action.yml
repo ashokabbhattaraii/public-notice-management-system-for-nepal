@@ -56,3 +56,8 @@ runs:
         version_label: ${{ inputs.version-label }}
         deployment_package: deploy.zip
         wait_for_environment_recovery: 300
+        # version-label is derived from run_number+sha (see ci-cd.yml), so a
+        # re-run of the same workflow run reuses the same label. Without
+        # this, a retry after a failed deploy always errors with "Version
+        # ... already exists" even though nothing about the build changed.
+        use_existing_version_if_available: true
