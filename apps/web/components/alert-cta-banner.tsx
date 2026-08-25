@@ -48,12 +48,15 @@ export function AlertCtaBanner() {
   return (
     <div
       ref={bannerRef}
-      className="fixed bottom-20 left-4 right-20 md:left-auto md:right-24 md:w-[380px] z-50 opacity-0"
+      className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-[380px] z-40 opacity-0"
     >
       <div className="rounded-xl border border-primary/20 bg-card/95 backdrop-blur-xl shadow-2xl p-4 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent pointer-events-none" />
         <button
-          onClick={() => {
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
             setDismissed(true)
             try {
               window.localStorage.setItem(DISMISS_STORAGE_KEY, "1")
@@ -61,17 +64,18 @@ export function AlertCtaBanner() {
               // ignore
             }
           }}
-          className="absolute top-2 right-2 size-6 rounded-full bg-accent/60 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Dismiss"
+          className="absolute top-1 right-1 z-10 flex size-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full bg-accent/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
         >
-          <X className="size-3" />
+          <X className="size-3.5" />
         </button>
         <div className="relative flex items-start gap-3">
           <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
             <Bell className="size-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold pr-4">Never miss a notice</p>
-            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="text-sm font-semibold pr-8">Never miss a notice</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed pr-4">
               Get alerts for jobs, exams & tenders - straight to your phone or email.
             </p>
             <Link href={user ? "/dashboard/alerts" : "/login"}>

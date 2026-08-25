@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -13,7 +13,8 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
-import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, type QuotaDenial } from "@/lib/api"
+import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, isApiError, type QuotaDenial } from "@/lib/api"
+import { ErrorState } from "@/components/ui/error-state"
 import { useAuth } from "@/lib/auth-context"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
@@ -457,6 +458,7 @@ export default function NoticeDetailPage() {
   const [notice, setNotice] = useState<PublicNoticeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [loadError, setLoadError] = useState<unknown>(null)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -507,15 +509,24 @@ export default function NoticeDetailPage() {
     }
   }
 
-  useEffect(() => {
+  const loadNotice = useCallback(() => {
     let cancelled = false
     setLoading(true)
+    setNotFound(false)
+    setLoadError(null)
     fetchNotice(noticeId)
       .then((data) => {
         if (!cancelled) setNotice(data)
       })
-      .catch(() => {
-        if (!cancelled) setNotFound(true)
+      .catch((err) => {
+        if (cancelled) return
+        // A real 404 means the notice doesn't exist — anything else (network
+        // drop, 5xx) is transient, so offer a retry instead of claiming it's gone.
+        if (isApiError(err) && err.status === 404) {
+          setNotFound(true)
+        } else {
+          setLoadError(err)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -524,6 +535,8 @@ export default function NoticeDetailPage() {
       cancelled = true
     }
   }, [noticeId])
+
+  useEffect(() => loadNotice(), [loadNotice])
 
   // If the notice loaded but has no content and has a PDF, the backend is
   // extracting it now. Show an indicator and poll once after a delay.
@@ -601,6 +614,17 @@ export default function NoticeDetailPage() {
           <Loader2 className="size-6 animate-spin text-vez-navy" />
           <p className="text-sm text-vez-mute">Loading notice…</p>
           <p className="text-xs text-vez-mute/60">PDF documents may take a moment to process</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError && !notice) {
+    return (
+      <div className="flex min-h-screen flex-col bg-white font-poppins">
+        <Header />
+        <div className="flex flex-1 items-center justify-center px-6">
+          <ErrorState error={loadError} onRetry={loadNotice} />
         </div>
       </div>
     )

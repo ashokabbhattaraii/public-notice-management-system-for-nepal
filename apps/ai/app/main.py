@@ -21,9 +21,17 @@ from app import scrape_progress
 from app import secure_http
 from app import store
 from app.metrics import metrics  # the registry instance, not the module
-from app.logger import get_logger, set_request_id, setup_logging
+from app.logger import get_logger, get_request_id, set_request_id, setup_logging
 
 logger = get_logger(__name__)
+
+# Hard ceiling on how long any single request may run. The NestJS caller
+# already times out its AI-proxy calls at 30-90s per endpoint (see
+# rag.service.ts / notices.service.ts) — this stays comfortably above the
+# longest of those so a slow-but-alive request still finishes there first,
+# while still guaranteeing this process always replies instead of hanging a
+# connection (and the worker) forever on a stuck downstream call.
+REQUEST_TIMEOUT_SECONDS = 100
 
 
 async def app(scope, receive, send):
@@ -46,9 +54,20 @@ async def app(scope, receive, send):
         await _cors_preflight(send, scope)
         return
 
+    # SSE streams are long-lived by design (they hold the connection open
+    # until the tracked job finishes) — a blanket request timeout would kill
+    # them mid-stream, so only bound the request/response endpoints below.
+    is_sse = path.endswith("/progress/stream")
+
     start = time.perf_counter()
     try:
-        response = await _route(method, path, scope, receive, send)
+        route_call = _route(method, path, scope, receive, send)
+        response = await route_call if is_sse else await asyncio.wait_for(
+            route_call, timeout=REQUEST_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        logger.error("Request timed out on %s %s after %ss", method, path, REQUEST_TIMEOUT_SECONDS)
+        response = (504, {"error": "Request timed out"})
     except Exception as e:
         logger.exception("Unhandled error on %s %s", method, path)
         response = (500, {"error": "Internal server error", "detail": str(e)})
@@ -60,6 +79,11 @@ async def app(scope, receive, send):
         return
 
     status, body = response
+    # Every endpoint builds its own error body ad hoc — stamp the request id
+    # on the way out instead of touching every handler, so any 4xx/5xx from
+    # this service can be correlated with the matching NestJS/web log lines.
+    if status >= 400 and isinstance(body, dict) and "request_id" not in body:
+        body = {**body, "request_id": get_request_id() or "-"}
     elapsed_ms = (time.perf_counter() - start) * 1000
     logger.info(
         "%s %s -> %d (%.0fms)",

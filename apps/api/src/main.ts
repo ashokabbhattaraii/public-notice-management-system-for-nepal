@@ -10,6 +10,7 @@ import helmet from 'helmet';
 // from` would desugar to `.default`, which the package doesn't provide.
 import compression = require('compression');
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { CorrelationMiddleware, StructuredLogger } from './common/logger';
 
 async function bootstrap() {
@@ -66,6 +67,11 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Backstop for anything a controller/service doesn't catch itself (raw
+  // Prisma errors, unexpected bugs) — normalizes the response envelope and
+  // stops internal error details from leaking to clients.
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const config = new DocumentBuilder()
     .setTitle('Public Notice Management API')

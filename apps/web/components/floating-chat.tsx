@@ -371,8 +371,11 @@ export function FloatingChat() {
           ref={fabRef}
           onClick={() => setOpen(true)}
           aria-label="Open chat"
-          className="fixed bottom-6 right-6 z-[60] size-16 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-white text-gray-900 ring-4 ring-white/30"
-          style={{ boxShadow: "0 0 20px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.4)" }}
+          className="fixed right-4 sm:right-6 z-[60] size-14 sm:size-16 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-white text-gray-900 ring-4 ring-white/30"
+          style={{
+            boxShadow: "0 0 20px rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.4)",
+            bottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
         >
           <MessageCircle className="size-6" />
           <span className="absolute -top-1 -right-1 size-5 rounded-full bg-green-400 border-2 border-white flex items-center justify-center animate-pulse">

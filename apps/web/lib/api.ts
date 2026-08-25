@@ -116,6 +116,41 @@ export function isQuotaError(err: unknown): err is QuotaError {
   return err instanceof QuotaError
 }
 
+/**
+ * Thrown when the request never reached the server at all — offline, DNS
+ * failure, connection refused, or it timed out. Distinct from a server-side
+ * error (which has a real HTTP status) so the UI can show "check your
+ * connection" instead of a generic failure message, and so callers can
+ * decide whether retrying is worth offering.
+ */
+export class NetworkError extends Error {
+  constructor(message = "Couldn't reach the server. Check your connection and try again.") {
+    super(message)
+    this.name = "NetworkError"
+  }
+}
+
+export function isNetworkError(err: unknown): err is NetworkError {
+  return err instanceof NetworkError
+}
+
+/**
+ * Thrown for any non-2xx HTTP response (other than the 402 handled by
+ * `QuotaError`). Carries the real status so callers can distinguish "this
+ * doesn't exist" (404) from "the server is having trouble" (5xx) instead of
+ * treating every failure the same way.
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
+
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError
+}
+
 export interface PlanLimits {
   maxDocuments: number | null
   maxAiQuestionsPerMonth: number | null
@@ -331,19 +366,56 @@ async function throwApiError(res: Response): Promise<never> {
     throw new QuotaError(message, parsed.quota as QuotaDenial)
   }
 
-  throw new Error(message || `Request failed: ${res.status}`)
+  throw new ApiError(message || `Request failed: ${res.status}`, res.status)
 }
 
-async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
+/** No caller sets a longer-running request without passing its own signal, so one shared ceiling is enough. */
+const DEFAULT_TIMEOUT_MS = 20_000
+
+/** A GET is safe to retry (no side effects); a single retry papers over a dropped connection or a cold-start blip. */
+const RETRYABLE_METHODS = new Set(["GET", "HEAD"])
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Combines the caller's own abort signal (if any) with an internal timeout, so either can cancel the fetch. */
+function timeoutSignal(callerSignal: AbortSignal | null | undefined, ms: number): AbortSignal {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  callerSignal?.addEventListener("abort", () => controller.abort(), { once: true })
+  controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true })
+  return controller.signal
+}
+
+async function requestJson<T>(path: string, init: RequestInit, attempt = 0): Promise<T> {
   const token = tokenStore.get()
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  })
+  const method = (init.method ?? "GET").toUpperCase()
+
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: timeoutSignal(init.signal, DEFAULT_TIMEOUT_MS),
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    })
+  } catch (err) {
+    // AbortError (our own timeout, not a caller-initiated cancel) and raw
+    // network failures both mean "never got a response" — retry once for
+    // idempotent requests before giving up.
+    const callerAborted = init.signal?.aborted
+    if (!callerAborted && attempt === 0 && RETRYABLE_METHODS.has(method)) {
+      await sleep(400)
+      return requestJson<T>(path, init, attempt + 1)
+    }
+    if (callerAborted) throw err
+    throw new NetworkError()
+  }
+
   if (!res.ok) {
     // A 401 while we believed we were signed in means the session died
     // (expired token, revoked account, storage wiped mid-session). Clear it
@@ -351,6 +423,11 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
     if (res.status === 401 && token && typeof window !== "undefined") {
       tokenStore.clear()
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+    }
+    // A transient 5xx (cold start, brief overload) is worth one retry too.
+    if (res.status >= 500 && attempt === 0 && RETRYABLE_METHODS.has(method)) {
+      await sleep(400)
+      return requestJson<T>(path, init, attempt + 1)
     }
     await throwApiError(res)
   }

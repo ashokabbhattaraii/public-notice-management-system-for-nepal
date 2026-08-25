@@ -7,6 +7,7 @@ import {
   Loader2, Paperclip, Sparkles, RotateCcw, Tag as TagIcon,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
+import { ErrorState } from "@/components/ui/error-state"
 import { useAuth } from "@/lib/auth-context"
 import { fetchNotices, fetchNoticeCategoryCounts, fetchNoticeSources } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
@@ -194,7 +195,7 @@ function NoticesPageContent() {
   const [notices, setNotices] = useState<ScrapedItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const [sources, setSources] = useState<PublicNoticeSource[]>([])
 
@@ -284,7 +285,9 @@ function NoticesPageContent() {
       setTotal(res.meta?.total ?? 0)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load notices")
+      setError(err)
+      setNotices([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
@@ -522,15 +525,13 @@ function NoticesPageContent() {
               </span>
             </div>
 
-            {error && (
-              <div className="mx-4 mt-4 rounded-[14px] bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
-            )}
-
             <div ref={feedRef} className="flex-1 space-y-3 overflow-visible p-3 sm:p-4 md:overflow-y-auto md:overscroll-contain">
               {loading ? (
                 <div className="flex h-full items-center justify-center text-vez-mute">
                   <Loader2 className="size-5 animate-spin" />
                 </div>
+              ) : error ? (
+                <ErrorState error={error} onRetry={load} className="h-full" />
               ) : notices.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center py-16 text-center text-vez-mute">
                   <Filter className="mb-4 size-10 opacity-30" />

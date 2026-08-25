@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
+import { ErrorState } from "@/components/ui/error-state"
 import { UsageMeterBar } from "@/components/billing/upgrade-prompt"
 import {
   fetchBillingSummary,
@@ -36,15 +37,16 @@ function BillingPageContent() {
 
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [openingPortal, setOpeningPortal] = useState(false)
 
   const load = useCallback(async () => {
+    setLoading(true)
     try {
       setSummary(await fetchBillingSummary())
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load your plan")
+      setError(err)
     } finally {
       setLoading(false)
     }
@@ -69,7 +71,7 @@ function BillingPageContent() {
       const { url } = await openBillingPortal()
       window.location.href = url
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open the billing portal")
+      setError(err)
       setOpeningPortal(false)
     }
   }
@@ -83,11 +85,7 @@ function BillingPageContent() {
   }
 
   if (!summary) {
-    return (
-      <div className="rounded-[16px] bg-red-50 px-4 py-3 text-sm text-red-600">
-        {error ?? "Your plan could not be loaded."}
-      </div>
-    )
+    return <ErrorState error={error} title="Your plan could not be loaded" onRetry={load} />
   }
 
   const status = STATUS_COPY[summary.status]
@@ -103,9 +101,12 @@ function BillingPageContent() {
         </div>
       )}
 
-      {error && (
+      {error != null && (
         <div className="flex items-start gap-2 overflow-hidden rounded-[14px] bg-red-50 px-3 py-3 text-sm text-red-600 sm:px-4">
-          <AlertCircle className="mt-0.5 size-4 shrink-0" /> <span className="min-w-0 flex-1 break-words">{error}</span>
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 flex-1 break-words">
+            {error instanceof Error ? error.message : "Could not open the billing portal"}
+          </span>
         </div>
       )}
 
