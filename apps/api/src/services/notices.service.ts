@@ -154,12 +154,12 @@ export class NoticesService {
     // extraction, and `pdfExtractAt` stamps a completion sentinel so a
     // successful notice isn't re-extracted on every subsequent view either.
     if (!notice.contentText && !notice.aiAnalyzedAt) {
-      const pdfUrl = this.findPdfUrl(notice);
-      if (pdfUrl) {
-        this.extractPdfAndCache(notice.id, notice.title, pdfUrl)
+      const attachmentUrl = this.findExtractableAttachmentUrl(notice);
+      if (attachmentUrl) {
+        this.extractPdfAndCache(notice.id, notice.title, attachmentUrl)
           .catch((err: any) => {
             if (err instanceof SingleFlightCooldownError) return; // retry later
-            this.logger.warn(`PDF extraction failed for notice ${notice.id}: ${err.message}`);
+            this.logger.warn(`Attachment extraction failed for notice ${notice.id}: ${err.message}`);
           });
       }
     }
@@ -217,14 +217,25 @@ export class NoticesService {
     return list;
   }
 
-  private findPdfUrl(notice: { attachmentUrl: string | null; attachments: { url: string; mimeType: string | null }[] }): string | null {
+  // Scanned notices are just as often a photographed/screenshotted image
+  // (JPG, PNG) as a PDF — both are OCR-able via the same AI service route,
+  // so both count as "extractable" here.
+  private static readonly IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff'];
+
+  private isExtractableUrl(url: string | null | undefined, mimeType?: string | null): boolean {
+    if (!url) return false;
+    const lower = url.toLowerCase().split('?')[0].split('#')[0];
+    if (mimeType?.includes('pdf') || lower.endsWith('.pdf')) return true;
+    if (mimeType?.startsWith('image/')) return true;
+    return NoticesService.IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  }
+
+  private findExtractableAttachmentUrl(notice: { attachmentUrl: string | null; attachments: { url: string; mimeType: string | null }[] }): string | null {
     // Check attachments table first
-    const pdfAtt = notice.attachments?.find(
-      (a) => a.mimeType?.includes('pdf') || a.url?.toLowerCase().endsWith('.pdf'),
-    );
-    if (pdfAtt) return pdfAtt.url;
+    const match = notice.attachments?.find((a) => this.isExtractableUrl(a.url, a.mimeType));
+    if (match) return match.url;
     // Fall back to legacy attachmentUrl
-    if (notice.attachmentUrl?.toLowerCase().endsWith('.pdf')) return notice.attachmentUrl;
+    if (this.isExtractableUrl(notice.attachmentUrl)) return notice.attachmentUrl;
     if (notice.attachmentUrl?.includes('pdf')) return notice.attachmentUrl;
     return null;
   }
@@ -360,12 +371,12 @@ export class NoticesService {
     });
     if (!notice) throw new NotFoundException(`Notice ${id} not found`);
 
-    const pdfUrl = this.findPdfUrl(notice);
-    if (!pdfUrl) {
+    const attachmentUrl = this.findExtractableAttachmentUrl(notice);
+    if (!attachmentUrl) {
       return {
         id,
         updated: false,
-        reason: 'This notice has no PDF attachment to extract text from.',
+        reason: 'This notice has no PDF or image attachment to extract text from.',
       };
     }
 
@@ -373,7 +384,7 @@ export class NoticesService {
     const before = this.contentQuality(notice.contentText);
 
     try {
-      const meta = await this.extractPdfAndCache(id, notice.title, pdfUrl);
+      const meta = await this.extractPdfAndCache(id, notice.title, attachmentUrl);
       const fresh = await this.prisma.scrapedItem.findUnique({
         where: { id },
         select: { contentText: true },

@@ -60,6 +60,39 @@ _PERMISSIVE_PDF_CONTENT_TYPES = {
 
 _PDF_MAGIC = b"%PDF-"
 
+# Expected content types for scanned-attachment image downloads (a notice's
+# document is sometimes a photographed/scanned JPG or PNG instead of a PDF).
+_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+}
+
+# Same rationale as _PERMISSIVE_PDF_CONTENT_TYPES — verified by magic bytes below.
+_IMAGE_MAGIC_SIGNATURES: dict[bytes, str] = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+    b"GIF87a": "image/gif",
+    b"GIF89a": "image/gif",
+    b"BM": "image/bmp",
+    b"II*\x00": "image/tiff",
+    b"MM\x00*": "image/tiff",
+}
+
+
+def _sniff_image_mime(data: bytes) -> Optional[str]:
+    head = data[:16]
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    for magic, mime in _IMAGE_MAGIC_SIGNATURES.items():
+        if head.startswith(magic):
+            return mime
+    return None
+
 
 def _is_blocked_ip(host: str) -> bool:
     """Check if hostname resolves to a blocked IP address."""
@@ -305,3 +338,52 @@ async def secure_download_pdf(
             )
 
         return data
+
+
+async def secure_download_image(
+    url: str,
+    *,
+    connect_timeout: float = 15.0,
+    read_timeout: float = 45.0,
+    max_size_bytes: int = 20 * 1024 * 1024,  # 20 MB — scanned images run far smaller than the PDF ceiling
+) -> tuple[bytes, str]:
+    """Download a scanned image attachment (JPG/PNG/etc.) with the same SSRF
+    protection as `secure_download_pdf`. Returns (bytes, sniffed_mime_type) —
+    the mime is sniffed from magic bytes, not trusted from the response
+    header, for the same reason `secure_download_pdf` checks for %PDF-.
+    """
+    accepted_types = _IMAGE_CONTENT_TYPES | _PERMISSIVE_PDF_CONTENT_TYPES
+
+    async with SecureHttpClient(
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        total_timeout=read_timeout + connect_timeout + 5,
+        max_redirects=3,
+        allowed_content_types=accepted_types,
+    ) as client:
+        response = await client.get(url, expected_content_types=accepted_types)
+
+        content_length = response.headers.get("content-length")
+        if content_length and int(content_length) > max_size_bytes:
+            raise ValueError(f"File too large: {content_length} bytes (max {max_size_bytes})")
+
+        chunks = []
+        total = 0
+        async for chunk in response.aiter_bytes(chunk_size=8192):
+            total += len(chunk)
+            if total > max_size_bytes:
+                raise ValueError(f"File exceeds size limit ({max_size_bytes} bytes)")
+            chunks.append(chunk)
+
+        data = b"".join(chunks)
+
+        mime = _sniff_image_mime(data)
+        if mime is None:
+            preview = data[:64].decode("utf-8", errors="replace").strip()
+            raise ValueError(
+                f"Downloaded file is not a recognized image (no known image "
+                f"signature; content-type={response.headers.get('content-type', 'none')}, "
+                f"{len(data)} bytes, starts with: {preview!r})"
+            )
+
+        return data, mime

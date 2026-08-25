@@ -16,6 +16,7 @@ import { Header } from "@/components/layout/header"
 import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, isApiError, type QuotaDenial } from "@/lib/api"
 import { ErrorState } from "@/components/ui/error-state"
 import { ChatMarkdown } from "@/components/chat/chat-markdown"
+import { CopyButton } from "@/components/ui/copy-button"
 import { useAuth } from "@/lib/auth-context"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
@@ -539,14 +540,23 @@ export default function NoticeDetailPage() {
 
   useEffect(() => loadNotice(), [loadNotice])
 
-  // If the notice loaded but has no content and has a PDF, the backend is
-  // extracting it now. Show an indicator and poll once after a delay.
+  // If the notice loaded but has no content and has an OCR-able attachment
+  // (PDF or a scanned image), the backend is extracting it now. Show an
+  // indicator and poll once after a delay.
   useEffect(() => {
     if (!notice || notice.contentText) return
-    const hasPdf =
-      notice.attachments?.some((a) => a.mimeType?.includes("pdf") || a.url?.toLowerCase().endsWith(".pdf")) ||
+    const isExtractable = (url: string | null | undefined, mimeType?: string | null) => {
+      if (!url) return false
+      const lower = url.toLowerCase().split("?")[0].split("#")[0]
+      if (mimeType?.includes("pdf") || lower.endsWith(".pdf")) return true
+      if (mimeType?.startsWith("image/")) return true
+      return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))
+    }
+    const hasExtractableAttachment =
+      notice.attachments?.some((a) => isExtractable(a.url, a.mimeType)) ||
+      isExtractable(notice.attachmentUrl) ||
       notice.attachmentUrl?.toLowerCase().includes("pdf")
-    if (!hasPdf) return
+    if (!hasExtractableAttachment) return
 
     setExtracting(true)
     const timer = setTimeout(() => {
@@ -923,7 +933,7 @@ export default function NoticeDetailPage() {
                 ) : extracting ? (
                   <div className="flex flex-col items-center gap-3 py-8 text-center">
                     <Loader2 className="size-6 animate-spin text-vez-navy" />
-                    <p className="text-sm font-medium text-vez-ink">Extracting PDF content…</p>
+                    <p className="text-sm font-medium text-vez-ink">Extracting document content…</p>
                     <p className="text-xs text-vez-mute">Running OCR and AI analysis on the document</p>
                   </div>
                 ) : notice.attachmentUrl || (notice.attachments?.length > 0) ? (
@@ -984,6 +994,7 @@ export default function NoticeDetailPage() {
                             <div className="text-sm leading-relaxed text-vez-ink [&_a]:text-vez-navy [&_code]:text-vez-navy [&_strong]:text-vez-ink [&_th]:text-vez-ink">
                               <ChatMarkdown content={item.a} />
                             </div>
+                            <CopyButton text={item.a} className="-ml-1.5 mt-1" />
                           </div>
                         </div>
                       ))}

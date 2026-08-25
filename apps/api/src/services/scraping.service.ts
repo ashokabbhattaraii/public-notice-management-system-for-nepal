@@ -1041,15 +1041,25 @@ export class ScrapingService {
     }
   }
 
+  // Scanned notices are just as often a photographed/screenshotted image
+  // (JPG, PNG) as a PDF — both are OCR-able via the same AI service route.
+  private static readonly IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff'];
+
+  private isExtractableUrl(url: string | null | undefined, mimeType?: string | null): boolean {
+    if (!url) return false;
+    const lower = url.toLowerCase().split('?')[0].split('#')[0];
+    if (mimeType?.includes('pdf') || lower.endsWith('.pdf')) return true;
+    if (mimeType?.startsWith('image/')) return true;
+    return ScrapingService.IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  }
+
   private findPdfUrl(
     attachmentUrl: string | null,
     attachments: RawAttachment[],
   ): string | null {
-    const pdfAtt = attachments?.find(
-      (a) => a.mime_type?.includes('pdf') || a.url?.toLowerCase().endsWith('.pdf'),
-    );
-    if (pdfAtt) return pdfAtt.url;
-    if (attachmentUrl?.toLowerCase().endsWith('.pdf')) return attachmentUrl;
+    const match = attachments?.find((a) => this.isExtractableUrl(a.url, a.mime_type));
+    if (match) return match.url;
+    if (this.isExtractableUrl(attachmentUrl)) return attachmentUrl;
     if (attachmentUrl?.includes('pdf')) return attachmentUrl;
     return null;
   }

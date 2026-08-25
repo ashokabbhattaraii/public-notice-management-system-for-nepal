@@ -2,9 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText } from "lucide-react"
+import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText, Maximize2, Minimize2 } from "lucide-react"
 import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { cn } from "@/lib/utils"
 import { searchNotices, askNoticeQuestion, isQuotaError, NoticeSearchResponse, type QuotaDenial } from "@/lib/api"
 import { useNoticeContext } from "@/lib/notice-context"
@@ -40,6 +41,27 @@ const NOTICE_SUGGESTIONS = [
   "What action should I take?",
 ]
 
+// Resizing only applies to the floating card layout (sm: and up) — the
+// mobile bottom sheet is intentionally full-width/fixed-height.
+const DEFAULT_SIZE = { width: 360, height: 520 }
+const EXPANDED_SIZE = { width: 480, height: 680 }
+const MIN_SIZE = { width: 320, height: 360 }
+const SIZE_STORAGE_KEY = "pnm_chat_size"
+
+interface ChatSize {
+  width: number
+  height: number
+}
+
+function clampSize(size: ChatSize): ChatSize {
+  const maxWidth = typeof window !== "undefined" ? window.innerWidth - 32 : 720
+  const maxHeight = typeof window !== "undefined" ? window.innerHeight - 96 : 800
+  return {
+    width: Math.min(Math.max(size.width, MIN_SIZE.width), maxWidth),
+    height: Math.min(Math.max(size.height, MIN_SIZE.height), maxHeight),
+  }
+}
+
 export function FloatingChat() {
   const pathname = usePathname()
   const { activeNotice } = useNoticeContext()
@@ -52,6 +74,91 @@ export function FloatingChat() {
   const messagesEnd = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
   const prevNoticeId = useRef<string | null>(null)
+
+  // Custom size the user dragged/toggled to — null means "use the default
+  // responsive Tailwind sizing" (no inline override, so mobile's full-width
+  // bottom sheet is untouched).
+  const [size, setSize] = useState<ChatSize | null>(null)
+  const [isDesktop, setIsDesktop] = useState(false)
+  const resizingRef = useRef<{ startX: number; startY: number; startSize: ChatSize } | null>(null)
+
+  // Resizing is a floating-card-only affordance — track the sm: breakpoint
+  // so drag/maximize never applies to the mobile bottom sheet.
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 640px)")
+    setIsDesktop(mql.matches)
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(SIZE_STORAGE_KEY)
+      if (saved) setSize(clampSize(JSON.parse(saved)))
+    } catch {
+      // ignore — falls back to default responsive sizing
+    }
+  }, [])
+
+  const persistSize = useCallback((next: ChatSize) => {
+    setSize(next)
+    try {
+      window.localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const toggleMaximize = useCallback(() => {
+    const isExpanded = size && size.width >= EXPANDED_SIZE.width
+    persistSize(clampSize(isExpanded ? DEFAULT_SIZE : EXPANDED_SIZE))
+  }, [size, persistSize])
+
+  // Dragged from the top-left grip — the panel is anchored bottom-right, so
+  // growing width/height means moving the opposite (top-left) edge outward,
+  // i.e. subtracting the pointer's delta rather than adding it.
+  //
+  // Window-level listeners (not pointer capture) track the drag: they keep
+  // receiving move/up events no matter where the cursor ends up, without
+  // depending on setPointerCapture succeeding on every input source. Setting
+  // `user-select: none` on <body> for the duration is what actually stops
+  // the page underneath from showing a text-selection highlight while
+  // dragging past it.
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    const base = size ?? DEFAULT_SIZE
+    resizingRef.current = { startX: e.clientX, startY: e.clientY, startSize: base }
+    document.body.style.userSelect = "none"
+
+    const onMove = (ev: PointerEvent) => {
+      const drag = resizingRef.current
+      if (!drag) return
+      const next = clampSize({
+        width: drag.startSize.width - (ev.clientX - drag.startX),
+        height: drag.startSize.height - (ev.clientY - drag.startY),
+      })
+      setSize(next)
+    }
+    const onUp = () => {
+      resizingRef.current = null
+      document.body.style.userSelect = ""
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      setSize((current) => {
+        if (current) {
+          try {
+            window.localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(current))
+          } catch {
+            // ignore
+          }
+        }
+        return current
+      })
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }, [size])
 
   // Reset messages when switching between notices
   useEffect(() => {
@@ -154,16 +261,33 @@ export function FloatingChat() {
       {open && (
         <div
           ref={chatRef}
+          style={isDesktop && size ? { width: size.width, height: size.height, maxHeight: "none" } : undefined}
           className={cn(
             "fixed z-[60] flex flex-col overflow-hidden border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl",
             "inset-x-0 bottom-0 h-[85vh] rounded-t-2xl",
             // Smaller footprint than before (was 400x540, ~75vh) — it was
             // covering page controls (action buttons, title) on narrower or
             // shorter desktop viewports. max-h keeps it well clear of the
-            // top of the page even on short windows.
+            // top of the page even on short windows. Overridden by `style`
+            // above once the user has dragged/maximized to a custom size.
             "sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[65vh] sm:max-h-[480px] sm:w-[360px] sm:rounded-2xl",
           )}
         >
+          {/* Resize grip — floating-card layout only; drag to grow toward the
+              top-left since the panel is anchored bottom-right. */}
+          {isDesktop && (
+            <div
+              onPointerDown={handleResizeStart}
+              role="separator"
+              aria-label="Resize chat window"
+              className="absolute left-0 top-0 z-10 flex size-5 touch-none select-none items-start justify-start p-1 text-muted-foreground/50 hover:text-muted-foreground cursor-nwse-resize"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="pointer-events-none">
+                <path d="M9 1L1 9M9 5L5 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border/60 bg-primary/5">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -175,15 +299,33 @@ export function FloatingChat() {
                 <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{subtitle}</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              onClick={() => setOpen(false)}
-              aria-label="Close chat"
-            >
-              <X className="size-4" />
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              {isDesktop && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={toggleMaximize}
+                  aria-label={size && size.width >= EXPANDED_SIZE.width ? "Restore chat size" : "Expand chat"}
+                  title={size && size.width >= EXPANDED_SIZE.width ? "Restore size" : "Expand"}
+                >
+                  {size && size.width >= EXPANDED_SIZE.width ? (
+                    <Minimize2 className="size-3.5" />
+                  ) : (
+                    <Maximize2 className="size-3.5" />
+                  )}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setOpen(false)}
+                aria-label="Close chat"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Context badge */}
@@ -248,10 +390,15 @@ export function FloatingChat() {
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     )}
                   </div>
-                  {msg.contextUsed === "notice" && (
-                    <p className="mt-0.5 text-[9px] text-muted-foreground flex items-center gap-1">
-                      <FileText className="size-2.5" /> From current notice
-                    </p>
+                  {msg.role === "assistant" && (
+                    <div className="mt-0.5 flex items-center gap-2">
+                      {msg.contextUsed === "notice" && (
+                        <p className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                          <FileText className="size-2.5" /> From current notice
+                        </p>
+                      )}
+                      <CopyButton text={msg.content} className="-ml-1.5" />
+                    </div>
                   )}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-1.5 space-y-1">

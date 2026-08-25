@@ -997,10 +997,28 @@ async def _notices_analyze(receive) -> tuple[int, dict]:
     return 200, {"analyzed": True, **result}
 
 
+# Scanned attachments served as an image (photo of a notice board, a
+# screenshotted circular) rather than a PDF — extension is the same
+# signal the NestJS API uses to decide whether an attachment is OCR-able.
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff")
+
+_IMAGE_MIME_EXTENSION = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+}
+
+
 async def _notices_extract_pdf(receive) -> tuple[int, dict]:
     """POST /notices/extract-pdf — body: {url: string, title?: string}.
-    Downloads a PDF from the URL with SSRF protection, extracts text via OCR if needed,
-    then runs AI analysis. Returns {content_text, is_ocr, summary, summary_ne, key_facts, tags}."""
+    Despite the name (kept stable — scraping.service.ts and notices.service.ts
+    both call this route), downloads either a PDF or a scanned image
+    attachment — picked by the URL's extension — with SSRF protection,
+    extracts text via OCR if needed, then runs AI analysis. Returns
+    {content_text, is_ocr, summary, summary_ne, key_facts, tags}."""
     import tempfile
 
     body = await _read_body(receive)
@@ -1014,33 +1032,53 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
     if not url:
         return 400, {"error": "Field 'url' is required"}
 
-    # Secure PDF download with SSRF protection
-    try:
-        pdf_bytes = await secure_http.secure_download_pdf(
-            url,
-            connect_timeout=5.0,
-            read_timeout=30.0,
-            max_size_bytes=50 * 1024 * 1024,  # 50 MB
-        )
-    except ValueError as e:
-        logger.warning("Secure PDF download failed for %s: %s", url, e)
-        return 400, {"error": str(e)}
-    except Exception as e:
-        logger.warning("PDF download failed for %s: %s", url, e)
-        return 502, {"error": f"Could not download PDF: {str(e)}"}
+    is_image = url.split("?")[0].split("#")[0].lower().endswith(_IMAGE_EXTENSIONS)
 
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(pdf_bytes)
+    if is_image:
+        try:
+            file_bytes, mime = await secure_http.secure_download_image(
+                url, connect_timeout=5.0, read_timeout=30.0, max_size_bytes=20 * 1024 * 1024,
+            )
+        except ValueError as e:
+            logger.warning("Secure image download failed for %s: %s", url, e)
+            return 400, {"error": str(e)}
+        except Exception as e:
+            logger.warning("Image download failed for %s: %s", url, e)
+            return 502, {"error": f"Could not download image: {str(e)}"}
+
+        suffix = _IMAGE_MIME_EXTENSION.get(mime, ".jpg")
+        mime_for_extractor = mime
+    else:
+        # Secure PDF download with SSRF protection
+        try:
+            file_bytes = await secure_http.secure_download_pdf(
+                url,
+                connect_timeout=5.0,
+                read_timeout=30.0,
+                max_size_bytes=50 * 1024 * 1024,  # 50 MB
+            )
+        except ValueError as e:
+            logger.warning("Secure PDF download failed for %s: %s", url, e)
+            return 400, {"error": str(e)}
+        except Exception as e:
+            logger.warning("PDF download failed for %s: %s", url, e)
+            return 502, {"error": f"Could not download PDF: {str(e)}"}
+
+        suffix = ".pdf"
+        mime_for_extractor = "application/pdf"
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
         result = await asyncio.to_thread(
-            extractor.extract_text, tmp_path, "application/pdf"
+            extractor.extract_text, tmp_path, mime_for_extractor
         )
     except Exception as e:
         Path(tmp_path).unlink(missing_ok=True)
-        logger.exception("PDF extraction failed for %s", url)
-        return 422, {"error": f"PDF extraction failed: {str(e)}"}
+        logger.exception("%s extraction failed for %s", "Image" if is_image else "PDF", url)
+        return 422, {"error": f"Extraction failed: {str(e)}"}
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
