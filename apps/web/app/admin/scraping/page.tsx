@@ -1075,12 +1075,12 @@ function AdminScrapingPageContent() {
                       <table className="w-full text-left text-xs">
                         <thead>
                           <tr className="border-b border-vez-line text-vez-mute">
-                            <th className="py-2.5 pr-3 font-medium">Status</th>
+                            <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Status</th>
                             <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Started</th>
-                            <th className="py-2.5 pr-3 font-medium">Source</th>
+                            <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Source</th>
                             <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Duration</th>
-                            <th className="py-2.5 pr-3 font-medium">Outcome</th>
-                            <th className="py-2.5 font-medium">Details</th>
+                            <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Outcome</th>
+                            <th className="whitespace-nowrap py-2.5 font-medium">Details</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1095,9 +1095,9 @@ function AdminScrapingPageContent() {
                                 key={run.id}
                                 className="border-b border-vez-line/60 transition-colors last:border-0 hover:bg-vez-surface/60"
                               >
-                                <td className="py-3 pr-3">
+                                <td className="whitespace-nowrap py-3 pr-3">
                                   <span
-                                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium capitalize ${
+                                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-medium capitalize ${
                                       run.status === "SUCCESS"
                                         ? "bg-vez-sky/30 text-vez-navy"
                                         : run.status === "FAILED"
@@ -1170,7 +1170,7 @@ function AdminScrapingPageContent() {
                                       <span className="truncate">{run.error ?? "Scrape failed"}</span>
                                     </span>
                                   ) : run.status === "RUNNING" ? (
-                                    <span className="flex items-center gap-1.5 text-vez-mute">
+                                    <span className="flex items-center gap-1.5 whitespace-nowrap text-vez-mute">
                                       <Loader2 className="size-3 animate-spin" /> scraping…
                                     </span>
                                   ) : run.itemsSummarized > 0 ? (

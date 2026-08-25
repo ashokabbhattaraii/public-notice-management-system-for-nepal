@@ -3,8 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
 import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { searchNotices, askNoticeQuestion, isQuotaError, NoticeSearchResponse, type QuotaDenial } from "@/lib/api"
@@ -25,50 +24,6 @@ interface Message {
   content: string
   sources?: Source[]
   contextUsed?: "notice" | "general"
-}
-
-/**
- * Assistant replies are Markdown (bullets, **bold**, and GFM tables for
- * schedules/fee scales). Sized down to fit the compact chat bubble.
- */
-function ChatMarkdown({ content }: { content: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>,
-        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-            {children}
-          </a>
-        ),
-        h1: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
-        h2: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
-        h3: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
-        code: ({ children }) => (
-          <code className="rounded bg-foreground/10 px-1 py-0.5 font-mono text-[10px]">{children}</code>
-        ),
-        blockquote: ({ children }) => (
-          <blockquote className="mb-1.5 border-l-2 border-border pl-2 opacity-80 last:mb-0">{children}</blockquote>
-        ),
-        table: ({ children }) => (
-          <div className="mb-1.5 -mx-1 overflow-x-auto last:mb-0">
-            <table className="w-full border-collapse text-[11px]">{children}</table>
-          </div>
-        ),
-        thead: ({ children }) => <thead className="border-b border-border/70">{children}</thead>,
-        tr: ({ children }) => <tr className="border-b border-border/40 last:border-0">{children}</tr>,
-        th: ({ children }) => <th className="px-1.5 py-1 text-left font-semibold">{children}</th>,
-        td: ({ children }) => <td className="px-1.5 py-1 align-top">{children}</td>,
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  )
 }
 
 const GENERAL_SUGGESTIONS = [

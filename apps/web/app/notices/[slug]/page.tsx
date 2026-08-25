@@ -15,6 +15,7 @@ import {
 import { Header } from "@/components/layout/header"
 import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, isApiError, type QuotaDenial } from "@/lib/api"
 import { ErrorState } from "@/components/ui/error-state"
+import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { useAuth } from "@/lib/auth-context"
 import { categoryLabel } from "@/lib/types"
 import { useNoticeContext } from "@/lib/notice-context"
@@ -980,7 +981,9 @@ export default function NoticeDetailPage() {
                               <Sparkles className="size-3 text-vez-navy" />
                               <span className="text-xs text-vez-navy">Suchana AI</span>
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-vez-ink">{item.a}</p>
+                            <div className="text-sm leading-relaxed text-vez-ink [&_a]:text-vez-navy [&_code]:text-vez-navy [&_strong]:text-vez-ink [&_th]:text-vez-ink">
+                              <ChatMarkdown content={item.a} />
+                            </div>
                           </div>
                         </div>
                       ))}
