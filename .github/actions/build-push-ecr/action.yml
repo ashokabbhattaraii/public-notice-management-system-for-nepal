@@ -32,9 +32,6 @@ outputs:
 runs:
   using: composite
   steps:
-
-    
-   
     # id-token: write must be granted by the calling workflow's job — a
     # composite action can't declare permissions of its own, it only ever
     # inherits the job it runs inside.
