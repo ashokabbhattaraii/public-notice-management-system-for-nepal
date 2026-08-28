@@ -601,6 +601,11 @@ export async function fetchScrapeRunProgress(runId: string): Promise<ScrapeRunPr
   return apiFetch(`/admin/scraping/runs/${runId}/progress`)
 }
 
+/** Retry a specific run (typically FAILED) by re-running its source. */
+export async function retryScrapeRun(runId: string): Promise<{ runId: string }> {
+  return apiFetch(`/admin/scraping/runs/${runId}/retry`, { method: "POST" })
+}
+
 /**
  * One-time sitemap detection (robots.txt → /sitemap.xml → best child).
  * Persists the cached sitemap URL on the source; safe to call again.

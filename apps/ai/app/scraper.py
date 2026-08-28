@@ -481,18 +481,34 @@ async def _detect_schema_llm(html: str, category: str) -> dict | None:
 # --- crawling ---
 
 
-async def _fetch_raw_html(crawler: AsyncWebCrawler, url: str) -> str | None:
+def _record_failure(
+    failures: list[dict] | None, url: str, stage: str, error: str | None
+) -> None:
+    """Append a structured per-URL failure so callers (NestJS, the admin UI)
+    can show exactly which page failed and why, instead of only an aggregate
+    run-level error string or a line buried in this service's stdout log."""
+    if failures is None:
+        return
+    failures.append({"url": url, "stage": stage, "error": error or "Unknown error"})
+
+
+async def _fetch_raw_html(
+    crawler: AsyncWebCrawler, url: str, failures: list[dict] | None = None
+) -> str | None:
     result = await crawler.arun(
         url=url,
         config=CrawlerRunConfig(cache_mode=CacheMode.BYPASS),
     )
     if not result.success:
         logger.warning("Raw fetch failed for %s: %s", url, result.error_message)
+        _record_failure(failures, url, "raw_fetch", result.error_message)
         return None
     return result.html
 
 
-async def _extract_with_schema(crawler: AsyncWebCrawler, url: str, schema: dict) -> list[dict]:
+async def _extract_with_schema(
+    crawler: AsyncWebCrawler, url: str, schema: dict, failures: list[dict] | None = None
+) -> list[dict]:
     result = await crawler.arun(
         url=url,
         config=CrawlerRunConfig(
@@ -502,15 +518,22 @@ async def _extract_with_schema(crawler: AsyncWebCrawler, url: str, schema: dict)
     )
     if not result.success:
         logger.warning("Listing crawl failed for %s: %s", url, result.error_message)
+        _record_failure(failures, url, "listing", result.error_message)
         return []
     try:
         return json.loads(result.extracted_content or "[]")
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("Listing extraction returned invalid JSON for %s: %s", url, e)
+        _record_failure(failures, url, "listing", f"Extraction returned invalid JSON: {e}")
         return []
 
 
 async def _resolve_schema(
-    crawler: AsyncWebCrawler, listing_url: str, category: str, cached_schema: dict | None
+    crawler: AsyncWebCrawler,
+    listing_url: str,
+    category: str,
+    cached_schema: dict | None,
+    failures: list[dict] | None = None,
 ) -> tuple[dict | None, bool]:
     """Return (schema, is_newly_detected). Tries the cached schema first;
     on zero rows (or no cache), re-detects: LLM first when an API key is
@@ -518,29 +541,32 @@ async def _resolve_schema(
     "recent posts" widgets, and the cost is paid once and then cached),
     falling back to free structural heuristics otherwise."""
     if cached_schema:
-        rows = await _extract_with_schema(crawler, listing_url, cached_schema)
+        rows = await _extract_with_schema(crawler, listing_url, cached_schema, failures)
         if rows:
             return cached_schema, False
         logger.info("Cached schema for %s/%s yielded no rows; re-detecting", listing_url, category)
 
-    html = await _fetch_raw_html(crawler, listing_url)
+    html = await _fetch_raw_html(crawler, listing_url, failures)
     if not html:
         return None, False
 
     if config.GROQ_API_KEY:
         schema = await _detect_schema_llm(html, category)
         if schema:
-            rows = await _extract_with_schema(crawler, listing_url, schema)
+            rows = await _extract_with_schema(crawler, listing_url, schema, failures)
             if rows:
                 return schema, True
 
     schema = _detect_schema_heuristic(html, listing_url)
     if schema:
-        rows = await _extract_with_schema(crawler, listing_url, schema)
+        rows = await _extract_with_schema(crawler, listing_url, schema, failures)
         if rows:
             return schema, True
 
     logger.warning("Could not detect a working schema for %s (%s)", listing_url, category)
+    _record_failure(
+        failures, listing_url, "schema_detection", "Could not detect a working listing pattern"
+    )
     return None, False
 
 
@@ -676,7 +702,9 @@ def _find_attachment_in_scripts(html: str, base_url: str) -> str | None:
     return _absolute_url(base_url, match.group(1)) if match else None
 
 
-async def _crawl_detail_generic(crawler: AsyncWebCrawler, url: str, base_url: str) -> dict | None:
+async def _crawl_detail_generic(
+    crawler: AsyncWebCrawler, url: str, base_url: str, failures: list[dict] | None = None
+) -> dict | None:
     """Fetch an article/detail page generically (no per-site schema)."""
     result = await crawler.arun(
         url=url,
@@ -684,6 +712,7 @@ async def _crawl_detail_generic(crawler: AsyncWebCrawler, url: str, base_url: st
     )
     if not result.success:
         logger.warning("Detail crawl failed for %s: %s", url, result.error_message)
+        _record_failure(failures, url, "detail", result.error_message)
         return None
 
     soup = BeautifulSoup(result.html or "", "html.parser")
@@ -1519,17 +1548,21 @@ async def scrape_source(
     summarize_concurrency: int | None = None,
     pagination: PaginationConfig | None = None,
     on_progress=None,
-) -> tuple[list[ScrapedItem], dict[str, dict]]:
+) -> tuple[list[ScrapedItem], dict[str, dict], list[dict]]:
     """Scrape an admin-configured source's notice/news listings with concurrent
     AI summarization. `summarize_concurrency` caps in-flight LLM calls (from
     the admin `scraping.summarizeConcurrency` setting); None → env default.
-    Returns (items, schemas_used)."""
+    Returns (items, schemas_used, failures) — `failures` is a structured list
+    of every page/URL that failed (stage: schema_detection/listing/detail,
+    with crawl4ai's own error message), even when the run otherwise succeeds
+    with a partial item set, so the caller can show *why* and *where*."""
     cached_schemas = cached_schemas or {}
     known_urls = known_urls or set()
     pagination = pagination or PaginationConfig()
     report = on_progress or (lambda _msg: None)
     items: list[ScrapedItem] = []
     schemas_used: dict[str, dict] = {}
+    failures: list[dict] = []
     seen_urls: set[str] = set()
     summarize_tasks: list[asyncio.Task] = []
     semaphore = _summarize_semaphore(summarize_concurrency)
@@ -1547,7 +1580,7 @@ async def scrape_source(
 
             report(f"Resolving extraction pattern for {category.title()}…")
             schema, is_new = await _resolve_schema(
-                crawler, listing_url, category, cached_schemas.get(category)
+                crawler, listing_url, category, cached_schemas.get(category), failures
             )
             if not schema:
                 report(f"Could not detect a listing pattern for {category.title()}; skipping")
@@ -1563,7 +1596,7 @@ async def scrape_source(
                 if not url:
                     break
                 report(f"Crawling {category.title()} listing, page {page_index + 1}…")
-                rows = await _extract_with_schema(crawler, url, schema)
+                rows = await _extract_with_schema(crawler, url, schema, failures)
                 if not rows:
                     break
 
@@ -1616,7 +1649,7 @@ async def scrape_source(
                     # reliable source of one.
                     if fetch_detail and (source_url not in known_urls or not _looks_like_title(title)):
                         report(f"Fetching detail: {(title or source_url)[:60]}")
-                        detail = await _crawl_detail_generic(crawler, source_url, base_url)
+                        detail = await _crawl_detail_generic(crawler, source_url, base_url, failures)
                         if detail:
                             content_text = detail.get("content_text")
                             content_html = detail.get("content_html")
@@ -1713,14 +1746,18 @@ async def scrape_source(
         failed = len(results) - succeeded
         report(f"Summarization complete: {succeeded} succeeded, {failed} failed/skipped")
 
-    report(f"Scrape complete — {len(items)} item(s) total")
+    report(
+        f"Scrape complete — {len(items)} item(s) total"
+        + (f", {len(failures)} page(s)/URL(s) failed" if failures else "")
+    )
     logger.info(
-        "Scrape produced %d item(s) for base_url=%s categories=%s",
+        "Scrape produced %d item(s) for base_url=%s categories=%s (%d failure(s))",
         len(items),
         base_url,
         list(category_urls.keys()),
+        len(failures),
     )
-    return items, schemas_used
+    return items, schemas_used, failures
 
 
 async def check_listing(
@@ -1741,7 +1778,7 @@ async def check_listing(
     Returns (new_urls, total_seen).
     """
     known = set(known_urls or ())
-    items, _ = await scrape_source(
+    items, _, _ = await scrape_source(
         base_url=base_url,
         category_urls=category_urls,
         cached_schemas=cached_schemas,
@@ -1761,7 +1798,7 @@ async def scrape_sitemap_urls(
     known_urls: set[str] | None = None,
     summarize_concurrency: int | None = None,
     on_progress=None,
-) -> tuple[list[ScrapedItem], dict[str, dict]]:
+) -> tuple[list[ScrapedItem], dict[str, dict], list[dict]]:
     """Scrape an explicit list of article URLs directly — the sitemap
     fast-path's own full crawl. The sitemap already tells us exactly which
     detail pages exist, so there is no listing page to parse and no
@@ -1772,12 +1809,13 @@ async def scrape_sitemap_urls(
     This is the fallback that keeps data flowing for sites whose category
     listing URLs 404 or are otherwise unusable (mohp.gov.np serves only an
     SVG error page at /category/* — not anti-bot, just 404), yet expose a
-    healthy articles sitemap. Returns (items, schemas_used) with an empty
-    schemas dict for API compatibility.
+    healthy articles sitemap. Returns (items, schemas_used, failures) with an
+    empty schemas dict for API compatibility.
     """
     known_urls = known_urls or set()
     report = on_progress or (lambda _msg: None)
     items: list[ScrapedItem] = []
+    failures: list[dict] = []
     summarize_tasks: list[asyncio.Task] = []
     seen_urls: set[str] = set()
     rejected = 0
@@ -1812,7 +1850,7 @@ async def scrape_sitemap_urls(
             meta = None
 
             report(f"Fetching detail ({index + 1}/{len(urls)}): {source_url[:90]}")
-            detail = await _crawl_detail_generic(crawler, source_url, base_url)
+            detail = await _crawl_detail_generic(crawler, source_url, base_url, failures)
             if detail:
                 if _looks_like_title(detail.get("title")):
                     title = _clean_text(detail["title"])
@@ -1873,11 +1911,13 @@ async def scrape_sitemap_urls(
     report(
         f"Sitemap scrape complete — {len(items)} item(s) total"
         + (f", {rejected} URL(s) rejected (not a notice)" if rejected else "")
+        + (f", {len(failures)} URL(s) failed to fetch" if failures else "")
     )
     logger.info(
-        "Sitemap scrape produced %d item(s) from %d URL(s) for base_url=%s",
+        "Sitemap scrape produced %d item(s) from %d URL(s) for base_url=%s (%d failure(s))",
         len(items),
         len(urls),
         base_url,
+        len(failures),
     )
-    return items, {}
+    return items, {}, failures

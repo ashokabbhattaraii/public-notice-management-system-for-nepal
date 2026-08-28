@@ -22,6 +22,17 @@ import * as crypto from 'crypto';
  */
 const EXTRACTION_QUALITY_FLOOR = 0.55;
 
+/**
+ * One page/URL the AI service's crawler (crawl4ai) failed to fetch or parse
+ * during a run — surfaced by the scraper instead of being discarded into its
+ * own stdout log, so the admin can see exactly where and why a run failed.
+ */
+interface ScrapeFailure {
+  url: string;
+  stage: 'schema_detection' | 'listing' | 'detail' | 'raw_fetch' | string;
+  error: string;
+}
+
 interface RawAttachment {
   url: string;
   label: string | null;
@@ -251,6 +262,22 @@ export class ScrapingService {
   }
 
   /**
+   * Retry a specific (typically FAILED) run from the admin Logs view: looks
+   * up which source the run belonged to and kicks off a fresh full run for
+   * it via the normal runSource() path — same lock/lifecycle as "Run now",
+   * just reachable directly from a failed run row instead of hunting down
+   * the matching source card.
+   */
+  async retryRun(runId: string) {
+    const run = await this.prisma.scrapeRun.findUnique({ where: { id: runId } });
+    if (!run) throw new NotFoundException(`Scrape run ${runId} not found`);
+    if (!run.sourceId) {
+      throw new ConflictException('This run has no associated source to retry');
+    }
+    return this.runSource(run.sourceId);
+  }
+
+  /**
    * Convenience bulk trigger for the admin UI: runs every enabled source that
    * isn't already (freshly) RUNNING. Each source goes through the same
    * runSource() path — the DB-backed lock prevents overlap, and disabled or
@@ -326,11 +353,12 @@ export class ScrapingService {
       this.logger.warn(
         `Reclaiming stale scrape run ${run.id} (started ${run.startedAt.toISOString()}) as FAILED`,
       );
+      const message = `Abandoned run reclaimed by scheduler (started ${run.startedAt.toISOString()}) — the crawl likely hung or the server restarted mid-run`;
       await this.prisma.scrapeRun.update({
         where: { id: run.id },
         data: {
           status: ScrapeRunStatus.FAILED,
-          error: `Abandoned run reclaimed by scheduler (started ${run.startedAt.toISOString()})`,
+          error: message,
           finishedAt: new Date(),
         },
       });
@@ -339,7 +367,12 @@ export class ScrapingService {
       if (run.sourceId) {
         await this.prisma.scrapeSource.update({
           where: { id: run.sourceId },
-          data: { lastRunAt: new Date(), lastStatus: ScrapeRunStatus.FAILED },
+          data: {
+            lastRunAt: new Date(),
+            lastStatus: ScrapeRunStatus.FAILED,
+            lastError: message,
+            lastFailedUrls: Prisma.JsonNull,
+          },
         });
       }
     }
@@ -550,6 +583,7 @@ export class ScrapingService {
 
       const items: RawScrapedItem[] = response.data.items ?? [];
       const schemas: Record<string, unknown> = response.data.schemas ?? {};
+      const failedUrls: ScrapeFailure[] = response.data.failed_urls ?? [];
 
       // Listing crawl produced nothing but a sitemap exists — some sites'
       // category URLs 404 while the sitemap stays healthy (mohp.gov.np).
@@ -576,8 +610,10 @@ export class ScrapingService {
             ),
           );
           const sitemapItems: RawScrapedItem[] = sitemapResponse.data.items ?? [];
+          const sitemapFailures: ScrapeFailure[] = sitemapResponse.data.failed_urls ?? [];
+          failedUrls.push(...sitemapFailures);
           if (sitemapItems.length) {
-            const freshIds = await this.persistItems(runId, source, sitemapItems, schemas);
+            const freshIds = await this.persistItems(runId, source, sitemapItems, schemas, failedUrls);
             if (freshIds.length) {
               this.embedNewNotices(source.id, freshIds).catch((err: any) => {
                 this.logger.warn(`Background embedding failed: ${err.message}`);
@@ -588,7 +624,7 @@ export class ScrapingService {
         }
       }
 
-      const freshIds = await this.persistItems(runId, source, items, schemas);
+      const freshIds = await this.persistItems(runId, source, items, schemas, failedUrls);
 
       // Embed newly summarized notices into vector store (fire-and-forget)
       if (freshIds.length) {
@@ -597,18 +633,27 @@ export class ScrapingService {
         });
       }
     } catch (err: any) {
-      this.logger.error(`Scrape run failed for source ${source.id}: ${err.message}`);
+      // No per-URL detail available here — the AI service call itself failed
+      // (network error, timeout, non-2xx before any page was even crawled),
+      // so there's nothing more granular than the one error message.
+      const message = err.response?.data?.error ?? err.message;
+      this.logger.error(`Scrape run failed for source ${source.id}: ${message}`);
       await this.prisma.scrapeRun.update({
         where: { id: runId },
         data: {
           status: ScrapeRunStatus.FAILED,
-          error: err.message,
+          error: message,
           finishedAt: new Date(),
         },
       });
       await this.prisma.scrapeSource.update({
         where: { id: source.id },
-        data: { lastRunAt: new Date(), lastStatus: ScrapeRunStatus.FAILED },
+        data: {
+          lastRunAt: new Date(),
+          lastStatus: ScrapeRunStatus.FAILED,
+          lastError: message,
+          lastFailedUrls: Prisma.JsonNull,
+        },
       });
     }
   }
@@ -652,7 +697,8 @@ export class ScrapingService {
       );
 
       const items: RawScrapedItem[] = response.data.items ?? [];
-      const freshIds = await this.persistItems(runId, source, items, {});
+      const failedUrls: ScrapeFailure[] = response.data.failed_urls ?? [];
+      const freshIds = await this.persistItems(runId, source, items, {}, failedUrls);
 
       // Embed newly summarized notices into vector store (fire-and-forget)
       if (freshIds.length) {
@@ -661,18 +707,24 @@ export class ScrapingService {
         });
       }
     } catch (err: any) {
-      this.logger.error(`Sitemap scrape run failed for source ${source.id}: ${err.message}`);
+      const message = err.response?.data?.error ?? err.message;
+      this.logger.error(`Sitemap scrape run failed for source ${source.id}: ${message}`);
       await this.prisma.scrapeRun.update({
         where: { id: runId },
         data: {
           status: ScrapeRunStatus.FAILED,
-          error: err.message,
+          error: message,
           finishedAt: new Date(),
         },
       });
       await this.prisma.scrapeSource.update({
         where: { id: source.id },
-        data: { lastRunAt: new Date(), lastStatus: ScrapeRunStatus.FAILED },
+        data: {
+          lastRunAt: new Date(),
+          lastStatus: ScrapeRunStatus.FAILED,
+          lastError: message,
+          lastFailedUrls: Prisma.JsonNull,
+        },
       });
     }
   }
@@ -763,6 +815,7 @@ export class ScrapingService {
     source: ScrapeSource,
     items: RawScrapedItem[],
     schemas: Record<string, unknown>,
+    failedUrls: ScrapeFailure[] = [],
   ): Promise<string[]> {
     /* eslint-disable-next-line no-param-reassign */
     // Defence in depth: the scraper already rejects non-notice rows, but a
@@ -928,16 +981,30 @@ export class ScrapingService {
       }
     }
 
+    // A run that fetched nothing at all — every listing/detail page it tried
+    // errored — is a failure, not "nothing new today". Without this check
+    // it silently reports SUCCESS with itemsFound: 0, which is exactly what
+    // made MOFA/NRB-style outages invisible: the source card just showed
+    // "0 items scraped" forever with no failed/error signal anywhere.
+    const allAttemptsFailed = items.length === 0 && failedUrls.length > 0;
+    const status = allAttemptsFailed ? ScrapeRunStatus.FAILED : ScrapeRunStatus.SUCCESS;
+    const aggregateError = allAttemptsFailed
+      ? `All ${failedUrls.length} page(s)/URL(s) failed to load — ${failedUrls[0].stage}: ${failedUrls[0].error}` +
+        (failedUrls.length > 1 ? ` (+${failedUrls.length - 1} more)` : '')
+      : null;
+
     await this.prisma.scrapeRun.update({
       where: { id: runId },
       data: {
-        status: ScrapeRunStatus.SUCCESS,
+        status,
         itemsFound: items.length,
         itemsNew,
         itemsUpdated,
         itemsSkipped,
         itemsSummarized,
         itemsSummaryFailed,
+        error: aggregateError,
+        failedUrls: failedUrls.length ? (failedUrls as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         finishedAt: new Date(),
       },
     });
@@ -946,7 +1013,9 @@ export class ScrapingService {
       where: { id: source.id },
       data: {
         lastRunAt: new Date(),
-        lastStatus: ScrapeRunStatus.SUCCESS,
+        lastStatus: status,
+        lastError: aggregateError,
+        lastFailedUrls: failedUrls.length ? (failedUrls as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         ...(schemas.NOTICE ? { noticeSchema: schemas.NOTICE as Prisma.InputJsonValue } : {}),
         ...(schemas.NEWS ? { newsSchema: schemas.NEWS as Prisma.InputJsonValue } : {}),
         ...(schemas.PRESS_RELEASE ? { pressReleaseSchema: schemas.PRESS_RELEASE as Prisma.InputJsonValue } : {}),

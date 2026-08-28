@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
+  Sparkles,
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
   Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -32,6 +33,7 @@ const navGroups = [
     links: [
       { href: "/admin/scraping", label: "Web scraping", icon: Globe, errorBadge: true },
       { href: "/admin/alerts", label: "Alert channels", icon: Bell },
+      { href: "/admin/ai", label: "AI & Models", icon: Sparkles },
     ],
   },
   {

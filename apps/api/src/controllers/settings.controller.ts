@@ -206,8 +206,12 @@ export class AdminAiHealthController {
       );
       return response.data;
     } catch (err: any) {
+      // axios connection errors often carry an empty `message`, which used to
+      // surface in the admin panel as a bare "…health check:" with no reason.
+      const reason =
+        err?.message || err?.code || err?.response?.statusText || 'the service did not respond';
       throw new ServiceUnavailableException(
-        `Could not reach the AI service for a health check: ${err.message}`,
+        `Could not reach the AI service at ${baseUrl} — ${reason}`,
       );
     }
   }

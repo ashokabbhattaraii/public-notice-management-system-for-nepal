@@ -252,6 +252,11 @@ model ScrapeSource {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   lastRunAt         DateTime? @map("last_run_at")
   lastStatus        ScrapeRunStatus? @map("last_status")
+  // Denormalized copy of the most recent run's error/failedUrls so the admin
+  // source card can show "why it failed" without a second query per card.
+  // Cleared (set null) whenever a run finishes with no failures.
+  lastError         String?   @map("last_error")
+  lastFailedUrls    Json?     @map("last_failed_urls")
 
   items ScrapedItem[]
   runs  ScrapeRun[]
@@ -330,6 +335,12 @@ model ScrapeRun {
   itemsSummarized  Int             @default(0) @map("items_summarized")
   itemsSummaryFailed Int           @default(0) @map("items_summary_failed")
   error            String?
+  // Structured per-page/per-URL failures for this run:
+  // [{ url, stage: "schema_detection"|"listing"|"detail"|"raw_fetch", error }].
+  // Populated even on an otherwise-SUCCESS run (partial failures), so the
+  // admin can see exactly which page failed and why, not just an aggregate
+  // one-line message.
+  failedUrls       Json?           @map("failed_urls")
   startedAt        DateTime        @default(now()) @map("started_at")
   finishedAt       DateTime?       @map("finished_at")
 

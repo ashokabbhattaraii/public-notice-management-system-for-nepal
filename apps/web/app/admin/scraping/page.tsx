@@ -19,6 +19,7 @@ import {
   Ban,
   PlayCircle,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Timer,
   Link2,
@@ -27,6 +28,7 @@ import {
   Zap,
   Rocket,
   ChevronLeft,
+  RefreshCw,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
@@ -38,6 +40,7 @@ import {
   runScrapeSource,
   fetchScrapeRuns,
   fetchScrapeRunProgress,
+  retryScrapeRun,
   detectScrapeSitemap,
   checkScrapeSitemap,
   fetchSchedulerStatus,
@@ -249,6 +252,8 @@ function AdminScrapingPageContent() {
   const [logStatusFilter, setLogStatusFilter] = useState<"" | ScrapeRunStatus>("")
   const [logLoading, setLogLoading] = useState(false)
   const [logError, setLogError] = useState<string | null>(null)
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+  const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
   // Whether any run on the current page is still RUNNING — drives the live
   // auto-refresh of the logs table without spamming the API when idle.
   const hasLiveRunsRef = useRef(false)
@@ -518,6 +523,22 @@ function AdminScrapingPageContent() {
         next.delete(id)
         return next
       })
+    }
+  }
+
+  /** Retry a specific run (e.g. FAILED) directly from the Logs tab. */
+  async function handleRetryRun(run: ScrapeRun) {
+    setRetryingRunId(run.id)
+    try {
+      const { runId } = await retryScrapeRun(run.id)
+      toast.success("Retry started")
+      if (run.sourceId) pollProgress(run.sourceId, runId)
+      await loadLogs(true)
+      await loadAll()
+    } catch (err) {
+      setLogError(err instanceof Error ? err.message : "Retry failed")
+    } finally {
+      setRetryingRunId(null)
     }
   }
 
@@ -905,6 +926,34 @@ function AdminScrapingPageContent() {
                         </p>
                       )}
 
+                      {/* Why the last run failed — aggregate reason plus which specific page(s)/URL(s) errored */}
+                      {source.lastStatus === "FAILED" && !isRunning && (source.lastError || (source.lastFailedUrls?.length ?? 0) > 0) && (
+                        <div className="mb-4 rounded-[12px] border border-red-100 bg-red-50/60 px-3 py-2.5 text-xs">
+                          <p className="flex items-start gap-1.5 text-red-700">
+                            <AlertCircle className="mt-0.5 size-3 shrink-0" />
+                            <span className="break-words">{source.lastError || "Scrape failed"}</span>
+                          </p>
+                          {source.lastFailedUrls && source.lastFailedUrls.length > 0 && (
+                            <ul className="mt-2 max-h-32 space-y-1.5 overflow-y-auto border-t border-red-100 pt-2">
+                              {source.lastFailedUrls.slice(0, 8).map((f, i) => (
+                                <li key={i} className="text-red-600/90">
+                                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                                    {f.stage}
+                                  </span>{" "}
+                                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="break-all underline hover:text-red-800">
+                                    {f.url}
+                                  </a>
+                                  <span className="block text-red-600/70">{f.error}</span>
+                                </li>
+                              ))}
+                              {source.lastFailedUrls.length > 8 && (
+                                <li className="text-red-600/70">+{source.lastFailedUrls.length - 8} more</li>
+                              )}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+
                       {/* Live progress messages while a run is in flight */}
                       {isRunning && progress && (
                         <div className="mb-4 max-h-32 space-y-1 overflow-y-auto rounded-[12px] bg-vez-navy/[0.04] px-3 py-2.5 text-xs">
@@ -1080,7 +1129,8 @@ function AdminScrapingPageContent() {
                             <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Source</th>
                             <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Duration</th>
                             <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Outcome</th>
-                            <th className="whitespace-nowrap py-2.5 font-medium">Details</th>
+                            <th className="whitespace-nowrap py-2.5 pr-3 font-medium">Details</th>
+                            <th className="whitespace-nowrap py-2.5 font-medium">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1090,9 +1140,11 @@ function AdminScrapingPageContent() {
                               run.status === "RUNNING" || !run.finishedAt
                                 ? null
                                 : new Date(run.finishedAt).getTime() - started.getTime()
+                            const hasFailureDetail = (run.failedUrls?.length ?? 0) > 0
+                            const isExpanded = expandedRunId === run.id
                             return (
+                              <React.Fragment key={run.id}>
                               <tr
-                                key={run.id}
                                 className="border-b border-vez-line/60 transition-colors last:border-0 hover:bg-vez-surface/60"
                               >
                                 <td className="whitespace-nowrap py-3 pr-3">
@@ -1160,15 +1212,19 @@ function AdminScrapingPageContent() {
                                     )}
                                   </span>
                                 </td>
-                                <td className="max-w-[260px] py-3">
+                                <td className="max-w-[260px] py-3 pr-3">
                                   {run.status === "FAILED" ? (
-                                    <span
-                                      className="flex items-center gap-1.5 text-red-600"
+                                    <button
+                                      onClick={() => hasFailureDetail && setExpandedRunId(isExpanded ? null : run.id)}
+                                      className={`flex items-center gap-1.5 text-red-600 ${hasFailureDetail ? "cursor-pointer hover:underline" : "cursor-default"}`}
                                       title={run.error ?? undefined}
                                     >
                                       <AlertCircle className="size-3 shrink-0" />
                                       <span className="truncate">{run.error ?? "Scrape failed"}</span>
-                                    </span>
+                                      {hasFailureDetail && (
+                                        isExpanded ? <ChevronUp className="size-3 shrink-0" /> : <ChevronDown className="size-3 shrink-0" />
+                                      )}
+                                    </button>
                                   ) : run.status === "RUNNING" ? (
                                     <span className="flex items-center gap-1.5 whitespace-nowrap text-vez-mute">
                                       <Loader2 className="size-3 animate-spin" /> scraping…
@@ -1179,7 +1235,51 @@ function AdminScrapingPageContent() {
                                     <span className="text-vez-mute">—</span>
                                   )}
                                 </td>
+                                <td className="whitespace-nowrap py-3">
+                                  {run.status === "FAILED" && (
+                                    <button
+                                      onClick={() => handleRetryRun(run)}
+                                      disabled={retryingRunId === run.id || !run.sourceId}
+                                      className="flex items-center gap-1.5 rounded-full border border-vez-line px-3 py-1 text-[11px] text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-50"
+                                    >
+                                      {retryingRunId === run.id ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="size-3" />
+                                      )}
+                                      Retry
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
+                              {isExpanded && hasFailureDetail && (
+                                <tr className="border-b border-vez-line/60 bg-red-50/40 last:border-0">
+                                  <td colSpan={7} className="px-3 py-3">
+                                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-red-700">
+                                      {run.failedUrls!.length} page(s)/URL(s) failed
+                                    </p>
+                                    <ul className="max-h-48 space-y-2 overflow-y-auto text-xs">
+                                      {run.failedUrls!.map((f, i) => (
+                                        <li key={i} className="rounded-[10px] bg-white px-3 py-2">
+                                          <span className="mr-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-red-700">
+                                            {f.stage}
+                                          </span>
+                                          <a
+                                            href={f.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="break-all text-vez-navy underline"
+                                          >
+                                            {f.url}
+                                          </a>
+                                          <p className="mt-1 text-vez-mute">{f.error}</p>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </td>
+                                </tr>
+                              )}
+                              </React.Fragment>
                             )
                           })}
                         </tbody>

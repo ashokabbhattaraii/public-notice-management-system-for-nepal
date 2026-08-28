@@ -743,7 +743,7 @@ async def _scrape_source(receive) -> tuple[int, dict]:
         on_progress = lambda msg: scrape_progress.log(run_id, msg)  # noqa: E731
 
     try:
-        items, schemas_used = await scraper.scrape_source(
+        items, schemas_used, failed_urls = await scraper.scrape_source(
             base_url=base_url,
             category_urls=category_urls,
             cached_schemas=cached_schemas,
@@ -780,6 +780,7 @@ async def _scrape_source(receive) -> tuple[int, dict]:
                 for item in items
             ],
             "schemas": schemas_used,
+            "failed_urls": failed_urls,
         }
     except Exception as e:
         logger.exception("Scrape failed for base_url=%s", base_url)
@@ -959,7 +960,7 @@ async def _scrape_sitemap_crawl(receive) -> tuple[int, dict]:
         on_progress = lambda msg: scrape_progress.log(run_id, msg)  # noqa: E731
 
     try:
-        items, _ = await scraper.scrape_sitemap_urls(
+        items, _, failed_urls = await scraper.scrape_sitemap_urls(
             base_url=base_url,
             urls=urls,
             known_urls=known_urls,
@@ -993,6 +994,7 @@ async def _scrape_sitemap_crawl(receive) -> tuple[int, dict]:
                 for item in items
             ],
             "schemas": {},
+            "failed_urls": failed_urls,
         }
     except Exception as e:
         logger.exception("Sitemap crawl failed for base_url=%s", base_url)

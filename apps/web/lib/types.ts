@@ -328,6 +328,13 @@ export interface PublicNoticeSource {
 
 export type ScrapeRunStatus = "RUNNING" | "SUCCESS" | "FAILED"
 
+/** One page/URL crawl4ai failed to fetch or parse during a run. */
+export interface ScrapeFailure {
+  url: string
+  stage: "schema_detection" | "listing" | "detail" | "raw_fetch" | string
+  error: string
+}
+
 export interface ScrapeRun {
   id: string
   sourceId: string | null
@@ -339,6 +346,7 @@ export interface ScrapeRun {
   itemsSkipped: number
   itemsSummarized: number
   error: string | null
+  failedUrls: ScrapeFailure[] | null
   startedAt: string
   finishedAt: string | null
 }
@@ -367,6 +375,8 @@ export interface ScrapeSource {
   updatedAt: string
   lastRunAt: string | null
   lastStatus: ScrapeRunStatus | null
+  lastError: string | null
+  lastFailedUrls: ScrapeFailure[] | null
   itemCount: number
 }
 

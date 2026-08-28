@@ -185,6 +185,12 @@ export class ScrapingController {
     return this.scrapingService.getRunProgress(id);
   }
 
+  /** Re-run the source a given run belongs to — retry directly from a failed run row. */
+  @Post('runs/:id/retry')
+  async retryRun(@Param('id', ParseUUIDPipe) id: string) {
+    return this.scrapingService.retryRun(id);
+  }
+
   /** Admin correction: update category, tags, and trigger re-classification. */
   @Patch('items/:id')
   async correctNotice(
