@@ -10,9 +10,10 @@ import { API_URL } from "@/lib/api"
  * the database directly — this route's only job is the redirect.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  return NextResponse.redirect(`${API_URL}/attachments/${id}/file`)
+  const { search } = new URL(request.url)
+  return NextResponse.redirect(`${API_URL}/attachments/${id}/file${search}`)
 }

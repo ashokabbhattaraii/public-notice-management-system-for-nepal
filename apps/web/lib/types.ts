@@ -297,8 +297,28 @@ export interface PublicNoticeDetail extends ScrapedItem {
   keyFacts: string[] | null
   tags: string[] | null
   attachments: Attachment[]
-  metadata: Record<string, string> | null
+  metadata: NoticeMetadata | null
   sourceSlug: string | null
+}
+
+/**
+ * Mostly string values (deadline, reference number, issuing office), but
+ * also carries `qrCodes` — structured QR-code detections from the PDF
+ * extractor — which the "Details" grid explicitly excludes and a dedicated
+ * section renders instead.
+ */
+export interface NoticeMetadata {
+  [key: string]: string | NoticeQrCode[] | undefined
+  qrCodes?: NoticeQrCode[]
+}
+
+/** A QR code detected in a notice's PDF attachment (payment/link QRs, etc). */
+export interface NoticeQrCode {
+  page: number
+  /** Decoded payload — typically a URL. */
+  data: string
+  /** Cropped PNG of the code itself, base64-encoded (no data: prefix). */
+  image: string | null
 }
 
 export interface PublicNoticeSource {
@@ -392,7 +412,36 @@ export interface ScrapeRunProgress {
 
 // ── Admin settings ─────────────────────────────────────────────────────
 
-export type SettingType = "boolean" | "number" | "cron" | "text" | "textarea" | "select"
+export type SettingType =
+  | "boolean"
+  | "number"
+  | "cron"
+  | "text"
+  | "textarea"
+  | "select"
+  | "secret"
+  | "order"
+
+/** One LLM provider's live status, from GET /admin/ai/health. */
+export interface AiProviderHealth {
+  provider: string
+  label: string
+  model: string
+  /** False when the admin has removed it from the priority order. */
+  enabled: boolean
+  configured: boolean
+  ok: boolean
+  latencyMs: number | null
+  error: string | null
+}
+
+export interface AiHealthSnapshot {
+  priority: string[]
+  providers: AiProviderHealth[]
+  /** Which provider a real request would land on right now, if any. */
+  activeProvider: string | null
+  healthy: boolean
+}
 
 export interface SettingOption {
   value: string
@@ -414,6 +463,10 @@ export interface SettingField {
   step?: number
   options?: SettingOption[]
   placeholder?: string
+  /** `secret` fields only: true once a key is stored (value itself is never sent). */
+  configured?: boolean
+  /** `secret` fields only: masked preview, e.g. "••••8i830K". */
+  preview?: string
 }
 
 export interface SettingGroup {

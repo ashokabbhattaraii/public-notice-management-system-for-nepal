@@ -1,13 +1,21 @@
 import {
   Body,
   BadRequestException,
+  CanActivate,
   Controller,
   Delete,
+  ExecutionContext,
+  ForbiddenException,
   Get,
+  Injectable,
   Param,
   Put,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -96,5 +104,111 @@ export class PublicSettingsController {
   @Get()
   async publicSettings() {
     return this.settings.publicSettings();
+  }
+}
+
+/**
+ * Service-to-service auth for InternalAiConfigController: a shared secret in
+ * a header, not a user JWT — the caller (apps/ai) has no user identity to
+ * present. Fails closed on both ends: if the server has no secret configured
+ * at all, the route is treated as disabled (503) rather than silently open;
+ * any mismatch is a plain 403 with no detail about which part was wrong.
+ */
+@Injectable()
+class InternalServiceGuard implements CanActivate {
+  constructor(private readonly config: ConfigService) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const expected = this.config.get<string>('INTERNAL_SERVICE_SECRET');
+    if (!expected) {
+      throw new ServiceUnavailableException(
+        'INTERNAL_SERVICE_SECRET is not configured on this server.',
+      );
+    }
+    const request = context.switchToHttp().getRequest();
+    const provided = request.headers['x-internal-secret'];
+    if (typeof provided !== 'string' || provided !== expected) {
+      throw new ForbiddenException('Invalid internal service secret.');
+    }
+    return true;
+  }
+}
+
+/**
+ * Lets the AI service (apps/ai) pick up admin-configured LLM API
+ * keys/models on a short polling interval, without a redeploy and without
+ * ever putting a decrypted key through a user-facing endpoint. Only fields
+ * the admin has actually overridden are included — null means "keep your
+ * own env-var default", so an unconfigured field here never blanks out a
+ * working env-based key on the AI service.
+ */
+@Controller('internal/ai-config')
+@UseGuards(InternalServiceGuard)
+export class InternalAiConfigController {
+  constructor(private readonly settings: SettingsService) {}
+
+  @Get()
+  async get() {
+    const [
+      groqApiKey,
+      geminiApiKey,
+      openCodeZenApiKey,
+      groqModel,
+      geminiModel,
+      openCodeZenModel,
+      providerPriority,
+    ] = await Promise.all([
+      this.settings.getSecret('ai.groqApiKey'),
+      this.settings.getSecret('ai.geminiApiKey'),
+      this.settings.getSecret('ai.openCodeZenApiKey'),
+      this.settings.getIfOverridden('ai.groqModel'),
+      this.settings.getIfOverridden('ai.geminiModel'),
+      this.settings.getIfOverridden('ai.openCodeZenModel'),
+      this.settings.getIfOverridden('ai.providerPriority'),
+    ]);
+    return {
+      groqApiKey,
+      geminiApiKey,
+      openCodeZenApiKey,
+      groqModel,
+      geminiModel,
+      openCodeZenModel,
+      providerPriority,
+    };
+  }
+}
+
+/**
+ * Live LLM provider health for the admin panel. Proxies to the AI service's
+ * /llm/health, which makes a real (tiny) call to each configured provider —
+ * so this reports what an actual request would hit right now, including the
+ * effect of any priority/key change saved seconds ago.
+ */
+@Controller('admin/ai')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.admin)
+export class AdminAiHealthController {
+  constructor(
+    private readonly http: HttpService,
+    private readonly config: ConfigService,
+  ) {}
+
+  @Get('health')
+  async health() {
+    const baseUrl =
+      this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
+    try {
+      const response = await firstValueFrom(
+        // Generous timeout: this fans out to three external providers, and a
+        // rate-limited or slow one is exactly the case an admin is here to
+        // diagnose — a premature timeout would hide it behind a generic error.
+        this.http.get(`${baseUrl}/llm/health`, { timeout: 45000 }),
+      );
+      return response.data;
+    } catch (err: any) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI service for a health check: ${err.message}`,
+      );
+    }
   }
 }

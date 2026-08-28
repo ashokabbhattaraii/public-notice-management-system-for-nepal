@@ -311,6 +311,21 @@ export class NoticesService {
         if (response.data.category_confidence !== undefined) data.aiCategoryConfidence = response.data.category_confidence;
       }
 
+      // QR codes (payment/link QRs embedded in the PDF) ride in `metadata`
+      // alongside whatever structured fields (deadline, reference number)
+      // already live there — read-modify-write since Prisma has no partial
+      // JSON merge, and this only costs an extra query on the (rare) notices
+      // that actually contain one.
+      const qrCodes = Array.isArray(response.data.qr_codes) ? response.data.qr_codes : [];
+      if (qrCodes.length > 0) {
+        const current = await this.prisma.scrapedItem.findUnique({ where: { id }, select: { metadata: true } });
+        const existingMetadata = (current?.metadata as Record<string, unknown> | null) ?? {};
+        data.metadata = {
+          ...existingMetadata,
+          qrCodes: qrCodes.map((q: any) => ({ page: q.page, data: q.data, image: q.image_base64 })),
+        };
+      }
+
       await this.prisma.scrapedItem.update({ where: { id }, data });
       this.logger.log(
         `Extracted notice ${id}: ${meta.chars} chars, quality=${meta.quality ?? 'n/a'}, method=${meta.method ?? 'n/a'}`,

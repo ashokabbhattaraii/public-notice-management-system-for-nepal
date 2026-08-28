@@ -11,8 +11,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'stream';
 
 export interface PresignedUrlOptions {
-  /** Sets Content-Disposition so the browser downloads with this filename. */
+  /** Sets Content-Disposition so the browser downloads/displays with this filename. */
   filename?: string;
+  /** "attachment" forces Save As; "inline" lets the browser render it (img/iframe preview). Defaults to "attachment". */
+  disposition?: 'inline' | 'attachment';
   contentType?: string;
   expiresInSeconds?: number;
 }
@@ -107,14 +109,33 @@ export class S3StorageService {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
-      ResponseContentDisposition: opts.filename
-        ? `attachment; filename="${opts.filename.replace(/"/g, '')}"`
-        : undefined,
+      ResponseContentDisposition: this.buildContentDisposition(opts),
       ResponseContentType: opts.contentType,
     });
     return getSignedUrl(this.client, command, {
       expiresIn: opts.expiresInSeconds ?? S3StorageService.DEFAULT_PRESIGN_TTL_SECONDS,
     });
+  }
+
+  /**
+   * HTTP header values must be Latin-1 — many scraped notice titles are
+   * Devanagari, so a naive `filename="..."` would put non-ASCII bytes
+   * straight into the header and get rejected by S3 (or mangled by the
+   * browser) at download time. RFC 6266 fixes this: keep a stripped ASCII
+   * `filename` for old clients, and carry the real name UTF-8/percent-encoded
+   * in `filename*`, which every modern browser prefers over the fallback.
+   */
+  private buildContentDisposition(opts: PresignedUrlOptions): string | undefined {
+    const type = opts.disposition ?? 'attachment';
+    if (!opts.filename) return type;
+
+    const asciiFallback =
+      opts.filename
+        .replace(/[^\x20-\x7e]/g, '')
+        .replace(/"/g, '')
+        .trim() || 'file';
+    const encoded = encodeURIComponent(opts.filename);
+    return `${type}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
   }
 
   /** Key for a user-uploaded / system-seeded RAG document. */

@@ -177,9 +177,24 @@ def _text_quality(text: str) -> float:
     # 12% stopwords ⇒ full marks; real prose clears this comfortably.
     score = min(1.0, stopword_ratio / 0.12)
 
+    # Some PDFs' glyph/kerning tables make pypdf insert a space mid-word
+    # ("P eople sta ying abr oad"), which shatters real words into short
+    # fragments that still coincidentally hit the stopword list ("or", "at",
+    # "as", "an") — that alone reaches the 12% stopword mark just as easily as
+    # clean prose, so this and the stopword check are deliberately separate
+    # signals. Genuine English naturally carries a fair share of 2-letter
+    # words ("to", "of", "in", "is" are all stopwords), so the threshold sits
+    # above that baseline rather than at zero: this fired at a 27% short-token
+    # ratio on real corrupted output and stayed clear of a clean same-document
+    # extraction sitting at 15%.
+    short_tokens = sum(1 for t in tokens if len(t) <= 2)
+    short_ratio = short_tokens / len(tokens)
+    if short_ratio > 0.20:
+        score -= min(0.6, (short_ratio - 0.20) * 3.0)
+
     # A little Devanagari present but below the threshold above still counts for
     # something — mixed-script documents shouldn't be judged on English alone.
-    return max(score, min(0.6, devanagari_ratio * 4))
+    return max(0.0, max(score, min(0.6, devanagari_ratio * 4)))
 
 
 def _scrub_latin_fragments(line: str) -> str:
@@ -277,6 +292,152 @@ def _normalize_text(text: str) -> str:
     return text.strip()
 
 
+_DEDUPE_MIN_LEN = 24
+
+
+def _dedupe_paragraphs(text: str) -> str:
+    """Drop paragraphs that are exact repeats of an earlier one.
+
+    Multi-column government notices (letterhead/footer spanning the full page
+    width, alongside two text columns) routinely make `pdftotext -layout` — and
+    occasionally pypdf — re-emit the same boilerplate block once per column
+    band it crosses ("Office of the Prime Minister and Council of Minister"
+    showing up three times in a row is this, not a rendering bug downstream).
+    Neither extractor does true reading-order reconstruction, so the fix is
+    applied here rather than trying to out-guess column layout.
+
+    Paragraph-level (not line-level) and exact-match only, so legitimately
+    repeated short lines (a bullet, a bank name appearing in both a table and
+    prose) survive — only accidental re-emission of a whole identical block
+    is removed. Short paragraphs are left alone entirely: below
+    `_DEDUPE_MIN_LEN` chars, a repeat is far more likely to be a real
+    coincidence (a lone "2026" on its own line) than a rendering artifact.
+    """
+    paragraphs = text.split("\n\n")
+    seen: set[str] = set()
+    kept: list[str] = []
+    for para in paragraphs:
+        key = re.sub(r"\s+", " ", para).strip()
+        if len(key) >= _DEDUPE_MIN_LEN and key in seen:
+            logger.debug("Dropping duplicate paragraph: %r", key[:60])
+            continue
+        if len(key) >= _DEDUPE_MIN_LEN:
+            seen.add(key)
+        kept.append(para)
+    return "\n\n".join(kept)
+
+
+def _extract_tables(path: Path) -> list[str]:
+    """Pull bordered/ruled tables out of a PDF as GFM markdown tables.
+
+    A separate pass from the main text extraction (pdfplumber's table
+    detection is geometry-based — ruled lines and cell alignment — which
+    `pypdf`/`pdftotext`'s plain text streams throw away entirely). Tables are
+    appended after the main text rather than spliced inline: precisely
+    reproducing a table's position within a linear text stream isn't reliable
+    across extractors, whereas appending them intact, clearly, is.
+    """
+    try:
+        import pdfplumber
+    except ImportError:
+        return []
+
+    tables_md: list[str] = []
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                try:
+                    raw_tables = page.extract_tables()
+                except Exception as e:
+                    logger.debug("Table extraction failed on page %d: %s", page_num, e)
+                    continue
+                for table in raw_tables:
+                    # Skip 1x1 "tables" — pdfplumber's ruled-line detector
+                    # occasionally flags a bordered callout box as a table.
+                    if len(table) < 2 or len(table[0]) < 2:
+                        continue
+                    rows = [[(cell or "").strip().replace("\n", " ") for cell in row] for row in table]
+                    header, body = rows[0], rows[1:]
+                    md = ["| " + " | ".join(header) + " |", "| " + " | ".join(["---"] * len(header)) + " |"]
+                    md.extend("| " + " | ".join(row) + " |" for row in body)
+                    tables_md.append(f"Table (page {page_num}):\n" + "\n".join(md))
+    except Exception as e:
+        logger.warning("Table extraction failed for %s: %s", path.name, e)
+        return []
+
+    return tables_md
+
+
+# Hard cap so a pathological PDF (hundreds of small graphics that superficially
+# resemble QR modules) can't turn a notice extraction into a long CPU-bound scan.
+_MAX_QR_CODES = 20
+_QR_RENDER_DPI = 200
+
+
+def _extract_qr_codes(path: Path) -> list[dict]:
+    """Detect and decode QR codes rendered on the page (payment QRs, links).
+
+    Renders each page to an image (the same pdf2image path OCR uses, just at
+    a lower DPI — QR detection needs the modules legible, not OCR-grade text)
+    and runs OpenCV's built-in QR detector, which ships as pure pip wheels
+    with no system `libzbar` dependency to install alongside poppler/tesseract.
+    Each hit is returned as its decoded payload plus a cropped PNG of the code
+    itself (small — typically a few KB — so it travels inline as base64
+    rather than needing a separate storage round-trip).
+    """
+    try:
+        import cv2
+        import numpy as np
+        from pdf2image import convert_from_path
+    except ImportError:
+        return []
+
+    try:
+        images = convert_from_path(str(path), dpi=_QR_RENDER_DPI)
+    except Exception as e:
+        logger.debug("QR scan: could not render %s: %s", path.name, e)
+        return []
+
+    detector = cv2.QRCodeDetector()
+    results: list[dict] = []
+
+    for page_num, pil_img in enumerate(images, start=1):
+        if len(results) >= _MAX_QR_CODES:
+            break
+        try:
+            arr = cv2.cvtColor(np.array(pil_img.convert("RGB")), cv2.COLOR_RGB2BGR)
+            ok, decoded_info, points, _ = detector.detectAndDecodeMulti(arr)
+        except Exception as e:
+            logger.debug("QR scan failed on page %d of %s: %s", page_num, path.name, e)
+            continue
+        if not ok:
+            continue
+
+        for i, data in enumerate(decoded_info):
+            if not data or len(results) >= _MAX_QR_CODES:
+                continue
+            try:
+                import base64
+
+                quad = points[i]
+                xs, ys = quad[:, 0], quad[:, 1]
+                pad = 10
+                x0, x1 = max(0, int(xs.min()) - pad), min(arr.shape[1], int(xs.max()) + pad)
+                y0, y1 = max(0, int(ys.min()) - pad), min(arr.shape[0], int(ys.max()) + pad)
+                crop = arr[y0:y1, x0:x1]
+                ok_enc, buf = cv2.imencode(".png", crop)
+                image_b64 = base64.b64encode(buf.tobytes()).decode("ascii") if ok_enc else None
+            except Exception as e:
+                logger.debug("QR crop/encode failed on page %d: %s", page_num, e)
+                image_b64 = None
+
+            results.append({"page": page_num, "data": data, "image_base64": image_b64})
+
+    if results:
+        logger.info("Detected %d QR code(s) in %s", len(results), path.name)
+    return results
+
+
 def extract_text(file_path: str, mime_type: str) -> dict:
     """Extract text from a document file.
 
@@ -300,8 +461,11 @@ def extract_text(file_path: str, mime_type: str) -> dict:
     result["text"] = _normalize_text(result["text"])
     if result.get("is_ocr"):
         result["text"] = _normalize_text(_strip_ocr_noise(result["text"]))
+    result["text"] = _dedupe_paragraphs(result["text"])
     result.setdefault("method", "native")
     result.setdefault("quality", round(_text_quality(result["text"]), 3))
+    result.setdefault("tables", [])
+    result.setdefault("qr_codes", [])
 
     logger.info(
         "Extracted %d chars from %s (method=%s, ocr=%s, pages=%d, quality=%.2f)",
@@ -352,6 +516,12 @@ def _pdftotext(path: Path) -> str:
 
 def _extract_pdf(path: Path) -> dict:
     """Score every extractor's output and return the best one."""
+    # Geometry-based (tables) and render-based (QR codes) passes are
+    # independent of which text extractor wins below, so run them once up
+    # front and attach to whichever result path returns.
+    tables = _extract_tables(path)
+    qr_codes = _extract_qr_codes(path)
+
     try:
         native_text, page_count = _pypdf_text(path)
     except Exception as e:
@@ -390,6 +560,8 @@ def _extract_pdf(path: Path) -> dict:
                     "page_count": ocr["page_count"],
                     "quality": round(ocr_score, 3),
                     "method": f"ocr:{ocr.get('langs', '?')}",
+                    "tables": tables,
+                    "qr_codes": qr_codes,
                 }
         else:
             logger.warning("OCR produced no text; keeping native extraction")
@@ -400,6 +572,8 @@ def _extract_pdf(path: Path) -> dict:
         "page_count": page_count,
         "quality": round(best[0], 3),
         "method": best[1],
+        "tables": tables,
+        "qr_codes": qr_codes,
     }
 
 

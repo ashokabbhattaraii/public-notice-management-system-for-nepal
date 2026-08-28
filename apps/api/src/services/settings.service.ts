@@ -1,10 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CronJob } from 'cron';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Setting-type contract. `cron` is validated with the same `cron` library the
- * scheduler runs on, so a validator here and the runtime agree.
+ * scheduler runs on, so a validator here and the runtime agree. `secret` is
+ * encrypted at rest (see encryptSecret/decryptSecret) and never round-trips
+ * to the frontend in plaintext — listAll() returns a masked preview instead.
  */
 export type SettingType =
   | 'boolean'
@@ -12,7 +16,12 @@ export type SettingType =
   | 'cron'
   | 'text'
   | 'textarea'
-  | 'select';
+  | 'select'
+  | 'secret'
+  // Ordered, toggleable subset of `options` stored comma-separated. Order is
+  // meaningful (it IS the value); omitted options are disabled, not merely
+  // unselected. Used for LLM provider fallback priority.
+  | 'order';
 
 export interface SettingDefinition {
   key: string;
@@ -32,6 +41,10 @@ export interface SettingDefinition {
 export interface SettingRow extends SettingDefinition {
   value: string;
   overridden: boolean;
+  /** Secret fields only: true when a key is stored, without exposing it. */
+  configured?: boolean;
+  /** Secret fields only: masked last-4-chars preview, e.g. "••••8i830K". */
+  preview?: string;
 }
 
 export interface SettingGroupMeta {
@@ -71,6 +84,12 @@ export class SettingsService implements OnModuleInit {
       id: 'site',
       label: 'Branding & access',
       description: 'Public site identity and the maintenance-mode switch.',
+    },
+    {
+      id: 'ai',
+      label: 'AI & Models',
+      description:
+        'LLM provider API keys and model selection, applied to the AI service without a redeploy. Keys are encrypted at rest and never shown again once saved.',
     },
   ];
 
@@ -187,13 +206,132 @@ export class SettingsService implements OnModuleInit {
       type: 'boolean',
       default: 'false',
     },
+    {
+      key: 'ai.providerPriority',
+      group: 'ai',
+      label: 'Provider priority & fallback',
+      description:
+        'Order in which LLM providers are tried — the first one that answers wins, the rest are fallbacks. Drag to reorder; switch a provider off to stop it being used at all without deleting its key.',
+      type: 'order',
+      default: 'gemini,groq,opencode',
+      options: [
+        { value: 'gemini', label: 'Google Gemini' },
+        { value: 'groq', label: 'Groq' },
+        { value: 'opencode', label: 'OpenCode Zen' },
+      ],
+    },
+    {
+      key: 'ai.geminiApiKey',
+      group: 'ai',
+      label: 'Gemini API key',
+      description:
+        'Primary LLM provider for chat answers, notice summaries and classification. Get a key at aistudio.google.com. Leave unset to use this server\'s GEMINI_API_KEY environment variable instead.',
+      type: 'secret',
+      default: '',
+      placeholder: 'AIza…',
+    },
+    {
+      key: 'ai.geminiModel',
+      group: 'ai',
+      label: 'Gemini model',
+      description: 'Model name passed to the Gemini generateContent API.',
+      type: 'text',
+      default: 'gemini-3.6-flash',
+      placeholder: 'gemini-3.6-flash',
+    },
+    {
+      key: 'ai.groqApiKey',
+      group: 'ai',
+      label: 'Groq API key',
+      description:
+        'Fallback LLM provider, tried when Gemini fails or is unconfigured. Get a key at console.groq.com. Leave unset to use this server\'s GROQ_API_KEY environment variable instead.',
+      type: 'secret',
+      default: '',
+      placeholder: 'gsk_…',
+    },
+    {
+      key: 'ai.groqModel',
+      group: 'ai',
+      label: 'Groq model',
+      description: 'Model name passed to the Groq chat completions API.',
+      type: 'text',
+      default: 'openai/gpt-oss-120b',
+      placeholder: 'openai/gpt-oss-120b',
+    },
+    {
+      key: 'ai.openCodeZenApiKey',
+      group: 'ai',
+      label: 'OpenCode Zen API key',
+      description:
+        'Third-tier free fallback, tried only when both Gemini and Groq fail or are unconfigured.',
+      type: 'secret',
+      default: '',
+    },
+    {
+      key: 'ai.openCodeZenModel',
+      group: 'ai',
+      label: 'OpenCode Zen model',
+      description: 'Model name passed to the OpenCode Zen chat completions API.',
+      type: 'text',
+      default: 'deepseek-v4-flash-free',
+      placeholder: 'deepseek-v4-flash-free',
+    },
   ];
 
   private readonly definitionByKey = new Map(
     this.definitions.map((d) => [d.key, d]),
   );
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  // ── Secret encryption (AES-256-GCM) ─────────────────────────────────────
+  //
+  // API keys are never stored in plaintext. The key column already holds
+  // arbitrary strings (`app_settings.value`), so the ciphertext just goes in
+  // that same column — no schema change needed. Format: "v1:<iv>:<tag>:<ct>",
+  // each part base64. GCM's auth tag means a tampered row fails to decrypt
+  // loudly rather than silently returning garbage.
+
+  private encryptionKey(): Buffer {
+    const raw = this.config.get<string>('SETTINGS_ENCRYPTION_KEY');
+    if (!raw) {
+      throw new Error(
+        'SETTINGS_ENCRYPTION_KEY is not configured on this server — cannot store or read secret settings.',
+      );
+    }
+    const key = Buffer.from(raw, 'base64');
+    if (key.length !== 32) {
+      throw new Error('SETTINGS_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+    }
+    return key;
+  }
+
+  private encryptSecret(plain: string): string {
+    const key = this.encryptionKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return ['v1', iv.toString('base64'), tag.toString('base64'), ciphertext.toString('base64')].join(':');
+  }
+
+  private decryptSecret(stored: string): string {
+    const [version, ivB64, tagB64, dataB64] = stored.split(':');
+    if (version !== 'v1' || !ivB64 || !tagB64 || !dataB64) {
+      throw new Error('Unrecognized secret encoding.');
+    }
+    const key = this.encryptionKey();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+    const plain = Buffer.concat([
+      decipher.update(Buffer.from(dataB64, 'base64')),
+      decipher.final(),
+    ]);
+    return plain.toString('utf8');
+  }
 
   /** Migrate the pre-settings-page `auto_scraping` row into the new key. */
   async onModuleInit() {
@@ -250,11 +388,42 @@ export class SettingsService implements OnModuleInit {
     if (!def) throw new Error(`Unknown setting key: ${key}`);
     const error = this.validate(def, value);
     if (error) throw new Error(error);
+    const stored = def.type === 'secret' ? this.encryptSecret(value) : value;
     await this.prisma.appSetting.upsert({
       where: { key },
-      create: { key, value },
-      update: { value },
+      create: { key, value: stored },
+      update: { value: stored },
     });
+  }
+
+  /**
+   * Decrypted value of a `secret`-type setting, or null if it's never been
+   * set. Server-side use only (e.g. the internal AI-config endpoint) —
+   * never wire this into anything a browser response can reach.
+   */
+  async getSecret(key: string): Promise<string | null> {
+    const def = this.definitionByKey.get(key);
+    if (!def || def.type !== 'secret') return null;
+    const row = await this.prisma.appSetting.findUnique({ where: { key } });
+    if (!row) return null;
+    try {
+      return this.decryptSecret(row.value);
+    } catch (e: any) {
+      this.logger.warn(`Failed to decrypt secret setting "${key}": ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Raw persisted value, or null if this key has never been overridden.
+   * Unlike getEffective(), does NOT fall back to the schema default — used
+   * by the internal AI-config sync to distinguish "admin explicitly chose
+   * this model" from "no override, keep the AI service's own env default"
+   * even though those can coincidentally be the same string.
+   */
+  async getIfOverridden(key: string): Promise<string | null> {
+    const row = await this.prisma.appSetting.findUnique({ where: { key } });
+    return row ? row.value : null;
   }
 
   /** Remove the persisted row so the schema default takes over again. */
@@ -268,15 +437,32 @@ export class SettingsService implements OnModuleInit {
    * Schema definitions merged with persisted values for the admin UI.
    * Unknown persisted keys (written by a future version) are preserved in the
    * DB but not surfaced, so downgrades don't lose data.
+   *
+   * `secret` fields never put the real value (encrypted or not) on the wire —
+   * `value` is always "" and `configured`/`preview` communicate state instead.
+   * The frontend's dirty-tracking already treats "" as the baseline, so
+   * typing a new key is what marks the field dirty, not the masked display.
    */
   async listAll(): Promise<SettingRow[]> {
     const rows = await this.prisma.appSetting.findMany();
     const byKey = new Map(rows.map((r) => [r.key, r.value]));
-    return this.definitions.map((d) => ({
-      ...d,
-      value: byKey.get(d.key) ?? d.default,
-      overridden: byKey.has(d.key),
-    }));
+    return this.definitions.map((d) => {
+      const stored = byKey.get(d.key);
+      if (d.type === 'secret') {
+        const configured = stored !== undefined && stored !== '';
+        let preview: string | undefined;
+        if (configured) {
+          try {
+            const real = this.decryptSecret(stored!);
+            preview = `••••${real.length > 4 ? real.slice(-4) : real}`;
+          } catch {
+            preview = undefined;
+          }
+        }
+        return { ...d, value: '', overridden: configured, configured, preview };
+      }
+      return { ...d, value: stored ?? d.default, overridden: stored !== undefined };
+    });
   }
 
   /**
@@ -298,12 +484,20 @@ export class SettingsService implements OnModuleInit {
         errors.push({ key, message: errMsg });
         continue;
       }
+      const stored = def.type === 'secret' ? this.encryptSecret(value) : value;
       await this.prisma.appSetting.upsert({
         where: { key },
-        create: { key, value },
-        update: { value },
+        create: { key, value: stored },
+        update: { value: stored },
       });
-      applied.push({ key, value });
+      if (def.type === 'secret') {
+        // Audit trail for credential changes — key name and length only,
+        // never the value itself, in application logs or anywhere else.
+        this.logger.log(`Secret setting "${key}" updated (${value.length} chars).`);
+      }
+      // Echoed back in the response as confirmation of what was applied —
+      // the plaintext the admin just typed, not what's now stored encrypted.
+      applied.push({ key, value: def.type === 'secret' ? '••••••••' : value });
     }
     return { applied, errors };
   }
@@ -337,6 +531,21 @@ export class SettingsService implements OnModuleInit {
       case 'text':
       case 'textarea':
         return value.trim().length > 0 ? null : 'Cannot be empty.';
+      case 'secret':
+        return value.trim().length >= 10
+          ? null
+          : 'That looks too short for a real API key — check you copied the full value.';
+      case 'order': {
+        const known = new Set((def.options ?? []).map((o) => o.value));
+        const parts = value.split(',').map((p) => p.trim()).filter(Boolean);
+        if (parts.length === 0) {
+          return 'Enable at least one provider — otherwise no AI features can run.';
+        }
+        const unknown = parts.filter((p) => !known.has(p));
+        if (unknown.length) return `Unknown option(s): ${unknown.join(', ')}.`;
+        if (new Set(parts).size !== parts.length) return 'Each option may appear only once.';
+        return null;
+      }
       default:
         return null;
     }

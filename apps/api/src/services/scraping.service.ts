@@ -1198,11 +1198,36 @@ export class ScrapingService {
     });
   }
 
-  /** Re-run full AI analysis on an existing notice (contentText required). */
+  /**
+   * Re-run full AI analysis on an existing notice (contentText required).
+   * Legacy/PDF-only notices may not have contentText yet if the extraction
+   * pipeline hasn't visited them — attempt an on-demand extraction from the
+   * attachment before giving up, same as the lazy path in NoticesService.
+   */
   async reClassifyNotice(id: string) {
-    const item = await this.prisma.scrapedItem.findUnique({ where: { id } });
+    let item = await this.prisma.scrapedItem.findUnique({
+      where: { id },
+      include: { attachments: true },
+    });
     if (!item) throw new NotFoundException(`Scraped item ${id} not found`);
+
     if (!item.contentText) {
+      const attachmentUrl = this.findPdfUrl(
+        item.attachmentUrl,
+        item.attachments.map((a) => ({
+          url: a.url,
+          mime_type: a.mimeType,
+          label: a.label,
+          size_bytes: a.sizeBytes,
+        })),
+      );
+      if (attachmentUrl) {
+        await this.extractPdfForNotice(id, item.title, attachmentUrl);
+        item = await this.prisma.scrapedItem.findUnique({ where: { id }, include: { attachments: true } });
+      }
+    }
+
+    if (!item?.contentText) {
       throw new BadRequestException('Notice has no contentText to re-classify');
     }
     // Delegate to the AI service's analyze endpoint; it will run classification + summary

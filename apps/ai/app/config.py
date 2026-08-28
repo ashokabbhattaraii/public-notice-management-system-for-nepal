@@ -48,6 +48,13 @@ CHUNK_OVERLAP: int = _env_int("CHUNK_OVERLAP", 120)
 # Chunks embedded per model.encode() call; keeps memory bounded on large docs.
 EMBEDDING_BATCH_SIZE: int = _env_int("EMBEDDING_BATCH_SIZE", 32)
 
+# Admin-managed override sync (see app/ai_config_sync.py) — polls apps/api's
+# encrypted settings store for admin-configured keys/models, mutating the
+# module attributes below in place. Leave INTERNAL_SERVICE_SECRET empty to
+# disable the sync entirely and run purely off this file's static values.
+API_INTERNAL_URL: str = _env("API_INTERNAL_URL", "http://localhost:5005")
+INTERNAL_SERVICE_SECRET: str = _env("INTERNAL_SERVICE_SECRET")
+
 GROQ_API_KEY: str = _env("GROQ_API_KEY")
 GROQ_API_KEYS: list[str] = [k.strip() for k in _env("GROQ_API_KEYS", "").split(",") if k.strip()] or ([GROQ_API_KEY] if GROQ_API_KEY else [])
 # llama-3.3-70b-versatile was retired from Groq's catalog (404 model_not_found).
@@ -64,6 +71,15 @@ GEMINI_MODEL: str = _env("GEMINI_MODEL", "gemini-3.6-flash")
 OPENCODE_ZEN_API_KEY: str = _env("OPENCODE_ZEN_API_KEY")
 OPENCODE_ZEN_BASE_URL: str = _env("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1/chat/completions")
 OPENCODE_ZEN_MODEL: str = _env("OPENCODE_ZEN_MODEL", "deepseek-v4-flash-free")
+
+# Order in which LLM providers are tried; the first one that returns a
+# non-empty answer wins. Providers omitted here are never called at all, which
+# is how an admin disables one without deleting its key. Overridable live from
+# the admin settings panel (see ai_config_sync.py) — this env value is only
+# the fallback default.
+LLM_PROVIDER_PRIORITY: list[str] = [
+    p.strip() for p in _env("LLM_PROVIDER_PRIORITY", "gemini,groq,opencode").split(",") if p.strip()
+]
 
 # Retrieval tuning: hits scoring below the threshold are dropped from context.
 # E5-family models compress cosine similarity into ~0.7-0.9; observed in

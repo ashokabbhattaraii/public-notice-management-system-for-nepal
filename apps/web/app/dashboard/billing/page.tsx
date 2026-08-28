@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import {
   AlertCircle,
@@ -36,23 +36,33 @@ const STATUS_COPY: Record<BillingSummary["status"], { label: string; tone: strin
 }
 
 function BillingPageContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
-  const justCheckedOut = searchParams.get("checkout") === "success"
+  // Captured once on mount rather than derived from searchParams on every
+  // render — the effect below strips the query param right after, and if
+  // this were derived live it would flip back to false the instant that
+  // happens, hiding the "payment received" banner immediately.
+  const [justCheckedOut] = useState(() => searchParams.get("checkout") === "success")
 
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [openingPortal, setOpeningPortal] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading state so background refreshes (post-checkout
+  // polling, the manual Refresh button while data is already on screen)
+  // don't blank the whole page back to a spinner — only the very first load
+  // does that.
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     try {
-      setSummary(await fetchBillingSummary())
+      const data = await fetchBillingSummary()
+      setSummary(data)
       setError(null)
     } catch (err) {
-      setError(err)
+      if (!opts.silent) setError(err)
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }, [])
 
@@ -60,13 +70,17 @@ function BillingPageContent() {
     void load()
   }, [load])
 
-  // Stripe's webhook lands a moment after the redirect back, so the first read
-  // can still show the old plan. One delayed refresh covers that gap.
+  // Stripe's webhook lands a moment after the redirect back, so the first
+  // read can still show the old plan. A couple of silent background
+  // refreshes cover that gap without flashing the page. The query param is
+  // also stripped immediately so reloading this URL later doesn't replay
+  // the banner and these refreshes for a purchase that already happened.
   useEffect(() => {
     if (!justCheckedOut) return
-    const timer = setTimeout(() => void load(), 2500)
-    return () => clearTimeout(timer)
-  }, [justCheckedOut, load])
+    router.replace("/dashboard/billing", { scroll: false })
+    const timers = [2500, 6000].map((delay) => setTimeout(() => void load({ silent: true }), delay))
+    return () => timers.forEach(clearTimeout)
+  }, [justCheckedOut, load, router])
 
   const handlePortal = async () => {
     setOpeningPortal(true)
@@ -229,7 +243,7 @@ function BillingPageContent() {
             </p>
           </div>
           <button
-            onClick={() => void load()}
+            onClick={() => void load({ silent: true })}
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-vez-line px-3 py-1.5 text-xs text-vez-ink transition-colors hover:bg-vez-surface sm:px-3.5"
           >
             <RefreshCw className="size-3 shrink-0" /> Refresh

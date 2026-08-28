@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Query,
   Res,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
@@ -39,19 +40,35 @@ export class AttachmentsController {
   ) {}
 
   @Get(':id/file')
-  async getFile(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+  async getFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('mode') mode: string | undefined,
+    @Res() res: Response,
+  ) {
     const attachment = await this.prisma.attachment.findUnique({ where: { id } });
     if (!attachment) {
       throw new NotFoundException('Attachment not found');
     }
+    const disposition = mode === 'download' ? 'attachment' : 'inline';
 
     if (attachment.storageKey && attachment.downloadedAt) {
-      const url = await this.storage.getPresignedDownloadUrl(attachment.storageKey, {
-        filename: attachment.label ?? undefined,
-        contentType: attachment.mimeType ?? undefined,
-      });
-      res.redirect(302, url);
-      return;
+      // The DB row can outlive the object (bucket lifecycle rule, manual
+      // deletion) — verify before redirecting, otherwise the browser lands on
+      // a raw S3 "NoSuchKey" XML page instead of the file. When that happens,
+      // fall through and re-fetch from the original source below.
+      const exists = await this.storage.objectExists(attachment.storageKey);
+      if (exists) {
+        const url = await this.storage.getPresignedDownloadUrl(attachment.storageKey, {
+          filename: attachment.label ?? undefined,
+          contentType: attachment.mimeType ?? undefined,
+          disposition,
+        });
+        res.redirect(302, url);
+        return;
+      }
+      this.logger.warn(
+        `Attachment ${id} has storageKey ${attachment.storageKey} but the S3 object is missing; re-fetching from source`,
+      );
     }
 
     await this.assertSafeUrl(attachment.url);
@@ -95,6 +112,7 @@ export class AttachmentsController {
     const signedUrl = await this.storage.getPresignedDownloadUrl(storageKey, {
       filename: attachment.label ?? undefined,
       contentType,
+      disposition,
     });
     res.redirect(302, signedUrl);
   }

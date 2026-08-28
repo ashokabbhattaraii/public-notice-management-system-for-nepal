@@ -23,6 +23,7 @@ import {
   SettingsView,
   SettingApplyResult,
   PublicSiteSettings,
+  AiHealthSnapshot,
 } from "./types"
 
 // `||` (not `??`) deliberately — an unset GitHub Actions build-time Variable
@@ -659,6 +660,15 @@ export async function updateSettings(values: Record<string, string>): Promise<Se
 /** Revert one setting to its schema default. */
 export async function resetSetting(key: string): Promise<{ key: string; reset: boolean }> {
   return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, { method: "DELETE" })
+}
+
+/**
+ * Live LLM provider health — makes a real probe call to each configured
+ * provider, so it is slow by nature (seconds, not milliseconds) and is only
+ * ever triggered by an explicit admin action, never on page load.
+ */
+export async function fetchAiHealth(): Promise<AiHealthSnapshot> {
+  return apiFetch("/admin/ai/health")
 }
 
 /** Public subset (site.title/description) for the footer. */

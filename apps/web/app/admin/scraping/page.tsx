@@ -1507,11 +1507,14 @@ function AdminScrapingPageContent() {
                             <input
                               type="number"
                               min={1}
-                              max={20}
+                              max={100}
                               value={form.maxPages}
                               onChange={(e) => setForm({ ...form, maxPages: Number(e.target.value) || 1 })}
                               className="h-10 w-full rounded-[10px] border border-vez-line bg-white px-3 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
                             />
+                            <p className="mt-1 text-[11px] text-vez-mute">
+                              Higher values crawl deeper into a source&apos;s archive so more historical government notices get captured. HTML-only sources (no sitemap) run a full crawl per poll, so pair a high page count with a slower auto-poll interval.
+                            </p>
                           </div>
                         </div>
                       )}

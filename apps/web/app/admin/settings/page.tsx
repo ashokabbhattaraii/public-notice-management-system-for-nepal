@@ -13,10 +13,16 @@ import {
   Minus,
   Plus,
   ChevronDown,
+  ChevronUp,
   X,
   Timer,
   CalendarClock,
   Info,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Activity,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
@@ -24,8 +30,9 @@ import {
   fetchSettings,
   updateSettings,
   resetSetting,
+  fetchAiHealth,
 } from "@/lib/api"
-import { SettingField, SettingGroup, SettingsView } from "@/lib/types"
+import { AiHealthSnapshot, SettingField, SettingGroup, SettingsView } from "@/lib/types"
 import {
   parseCron,
   cronNextOccurrences,
@@ -149,6 +156,19 @@ export default function AdminSettingsPage() {
         case "text":
         case "textarea":
           return value.trim().length ? null : "Cannot be empty."
+        case "secret":
+          return value.trim().length >= 10
+            ? null
+            : "That looks too short for a real API key — check you copied the full value."
+        case "order": {
+          const parts = value.split(",").map((p) => p.trim()).filter(Boolean)
+          if (!parts.length) return "Enable at least one provider — otherwise no AI features can run."
+          const known = new Set((field.options ?? []).map((o) => o.value))
+          const unknown = parts.filter((p) => !known.has(p))
+          if (unknown.length) return `Unknown option(s): ${unknown.join(", ")}.`
+          if (new Set(parts).size !== parts.length) return "Each option may appear only once."
+          return null
+        }
         default:
           return null
       }
@@ -400,6 +420,8 @@ export default function AdminSettingsPage() {
                   </div>
                   <p className="mb-4 px-1 text-sm text-vez-mute">{g.description}</p>
 
+                  {g.id === "ai" && <AiHealthPanel dirty={dirtyCount > 0} />}
+
                   <div className="overflow-hidden rounded-[20px] bg-white">
                     {g.fields.map((field, i) => (
                       <div
@@ -637,6 +659,14 @@ function FieldInput({
     )
   }
 
+  if (field.type === "secret") {
+    return <SecretInput field={field} value={value} onChange={onChange} />
+  }
+
+  if (field.type === "order") {
+    return <OrderInput field={field} value={value} onChange={onChange} />
+  }
+
   if (field.type === "textarea") {
     return (
       <textarea
@@ -656,6 +686,315 @@ function FieldInput({
       placeholder={field.placeholder}
       className={inputClass + " w-64 sm:w-80"}
     />
+  )
+}
+
+/* ── Secret input: masked by default, never pre-filled with the real value ─
+   The server never sends the actual key back (see SettingRow.configured/
+   preview) — "value" here is always "" until the admin types a brand new
+   one. Revealing the input is local UI state only; it does NOT mark the
+   field dirty by itself, only actually typing a replacement does. */
+
+function SecretInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SettingField
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const [show, setShow] = useState(false)
+
+  if (!revealed) {
+    return (
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
+            field.configured ? "bg-emerald-50 text-emerald-700" : "bg-vez-surface text-vez-mute"
+          }`}
+        >
+          {field.configured ? (
+            <>
+              <ShieldCheck className="size-3.5" /> Configured{field.preview ? ` · ${field.preview}` : ""}
+            </>
+          ) : (
+            <>
+              <KeyRound className="size-3.5" /> Not configured
+            </>
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={() => setRevealed(true)}
+          className="rounded-full border border-vez-line px-3.5 py-1.5 text-xs text-vez-ink transition-colors hover:bg-vez-surface"
+        >
+          {field.configured ? "Change" : "Set key"}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"}
+          autoComplete="off"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder || "Paste new API key"}
+          className={inputClass + " w-64 pr-11 sm:w-80"}
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-ink"
+          aria-label={show ? "Hide key" : "Show key"}
+        >
+          {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setRevealed(false)
+          setShow(false)
+          onChange(field.value)
+        }}
+        className="text-xs text-vez-mute transition-colors hover:text-vez-ink"
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+/* ── Live provider health ──────────────────────────────────────────────
+   Never auto-runs: each check makes a real billable call to every
+   configured provider, so it fires only when an admin asks. Results go
+   stale the moment settings change, which `dirty` surfaces rather than
+   silently showing a status that no longer matches what's on screen. */
+
+function AiHealthPanel({ dirty }: { dirty: boolean }) {
+  const [snapshot, setSnapshot] = useState<AiHealthSnapshot | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
+
+  const run = async () => {
+    setChecking(true)
+    setError(null)
+    try {
+      setSnapshot(await fetchAiHealth())
+      setCheckedAt(new Date())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Health check failed.")
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-[20px] border border-vez-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-medium text-vez-ink">
+            <Activity className="size-4 text-vez-navy" /> Provider health
+          </p>
+          <p className="mt-0.5 text-xs text-vez-mute">
+            {checkedAt
+              ? `Last checked ${checkedAt.toLocaleTimeString()}`
+              : "Sends one tiny real request to each configured provider."}
+          </p>
+        </div>
+        <button
+          onClick={run}
+          disabled={checking}
+          className="flex shrink-0 items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {checking ? <Loader2 className="size-4 animate-spin" /> : <Activity className="size-4" />}
+          {checking ? "Checking…" : "Run health check"}
+        </button>
+      </div>
+
+      {dirty && (
+        <p className="flex items-start gap-2 border-t border-vez-line bg-amber-50/60 px-6 py-2.5 text-xs text-amber-800">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          You have unsaved changes — save first, then re-check. Results below reflect what is
+          currently saved, not what is on screen.
+        </p>
+      )}
+
+      {error && (
+        <p className="flex items-start gap-2 border-t border-vez-line bg-red-50 px-6 py-2.5 text-xs text-red-600">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
+        </p>
+      )}
+
+      {snapshot && (
+        <div className="border-t border-vez-line">
+          <p className="px-6 py-2.5 text-xs text-vez-mute">
+            {snapshot.healthy ? (
+              <>
+                Requests are currently served by{" "}
+                <span className="font-medium text-vez-ink">
+                  {snapshot.providers.find((p) => p.provider === snapshot.activeProvider)?.label ??
+                    snapshot.activeProvider}
+                </span>
+                .
+              </>
+            ) : (
+              <span className="text-red-600">
+                No provider is answering — AI features fall back to non-LLM extractive output.
+              </span>
+            )}
+          </p>
+          {snapshot.providers.map((p) => (
+            <div
+              key={p.provider}
+              className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-vez-line px-6 py-3 ${
+                p.enabled ? "" : "bg-vez-surface/40"
+              }`}
+            >
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  !p.enabled
+                    ? "bg-vez-line"
+                    : p.ok
+                      ? "bg-green-500"
+                      : p.configured
+                        ? "bg-red-500"
+                        : "bg-vez-line"
+                }`}
+              />
+              <span
+                className={`text-sm ${p.enabled ? "text-vez-ink" : "text-vez-mute line-through"}`}
+              >
+                {p.label}
+              </span>
+              <span className="font-mono text-[11px] text-vez-mute">{p.model}</span>
+              {p.provider === snapshot.activeProvider && (
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                  in use
+                </span>
+              )}
+              {p.latencyMs !== null && (
+                <span className="text-[11px] tabular-nums text-vez-mute">{p.latencyMs} ms</span>
+              )}
+              {p.error && (
+                <span className="w-full text-xs text-vez-mute md:w-auto md:flex-1 md:text-right">
+                  {p.error}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Ordered provider priority (reorder + enable/disable) ──────────────
+   The stored value IS the order: "gemini,groq,opencode" means try Gemini
+   first and fall back rightwards. An option missing from the value is
+   disabled outright, which is why disabled entries render below the list
+   rather than being hidden — an admin needs to see a key they've switched
+   off, not wonder where it went. */
+
+function OrderInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SettingField
+  value: string
+  onChange: (v: string) => void
+}) {
+  const options = field.options ?? []
+  const enabled = value.split(",").map((p) => p.trim()).filter(Boolean)
+  const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v
+  const disabled = options.map((o) => o.value).filter((v) => !enabled.includes(v))
+
+  const move = (index: number, delta: number) => {
+    const next = [...enabled]
+    const target = index + delta
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onChange(next.join(","))
+  }
+
+  return (
+    <div className="w-full min-w-0 space-y-2 md:w-80">
+      {enabled.map((v, i) => (
+        <div
+          key={v}
+          className="flex items-center gap-2 rounded-[12px] border border-vez-line bg-white px-3 py-2"
+        >
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-vez-navy text-[11px] font-medium text-white">
+            {i + 1}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-vez-ink">{labelOf(v)}</span>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => move(i, -1)}
+              disabled={i === 0}
+              aria-label={`Move ${labelOf(v)} up`}
+              className="flex size-7 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
+            >
+              <ChevronUp className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => move(i, 1)}
+              disabled={i === enabled.length - 1}
+              aria-label={`Move ${labelOf(v)} down`}
+              className="flex size-7 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange(enabled.filter((x) => x !== v).join(","))}
+              disabled={enabled.length === 1}
+              title={
+                enabled.length === 1
+                  ? "At least one provider must stay enabled"
+                  : `Disable ${labelOf(v)}`
+              }
+              aria-label={`Disable ${labelOf(v)}`}
+              className="flex size-7 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-vez-mute"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {disabled.map((v) => (
+        <div
+          key={v}
+          className="flex items-center gap-2 rounded-[12px] border border-dashed border-vez-line bg-vez-surface/40 px-3 py-2"
+        >
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-vez-line/60 text-[11px] text-vez-mute">
+            —
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-vez-mute line-through">
+            {labelOf(v)}
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange([...enabled, v].join(","))}
+            className="shrink-0 rounded-full border border-vez-line px-2.5 py-1 text-[11px] text-vez-ink transition-colors hover:bg-white"
+          >
+            Enable
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }
 

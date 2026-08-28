@@ -28,6 +28,10 @@ export class CreateScrapeSourceDto {
   newsListUrl?: string;
 
   @IsOptional()
+  @IsUrl({ require_tld: false })
+  pressReleaseListUrl?: string;
+
+  @IsOptional()
   @IsEnum(ScrapePaginationType)
   paginationType?: ScrapePaginationType;
 
@@ -44,7 +48,7 @@ export class CreateScrapeSourceDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(20)
+  @Max(100)
   maxPages?: number;
 
   @IsOptional()
@@ -77,6 +81,10 @@ export class UpdateScrapeSourceDto {
   newsListUrl?: string;
 
   @IsOptional()
+  @IsUrl({ require_tld: false })
+  pressReleaseListUrl?: string;
+
+  @IsOptional()
   @IsBoolean()
   enabled?: boolean;
 
@@ -97,7 +105,7 @@ export class UpdateScrapeSourceDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(20)
+  @Max(100)
   maxPages?: number;
 
   @IsOptional()

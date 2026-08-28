@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
+from app import ai_config_sync
 from app import chunker
 from app import config
 from app import embeddings
@@ -229,6 +230,7 @@ async def _warmup() -> None:
 
 async def _handle_lifespan(scope, receive, send):
     warmup_task: Optional[asyncio.Task] = None
+    ai_config_task: Optional[asyncio.Task] = None
     while True:
         message = await receive()
         if message["type"] == "lifespan.startup":
@@ -247,11 +249,18 @@ async def _handle_lifespan(scope, receive, send):
             # refused" on a cold model cache.
             warmup_task = asyncio.create_task(_warmup())
 
+            # Picks up admin-configured LLM keys/models from apps/api on a
+            # timer (see ai_config_sync.py); a no-op loop if the shared
+            # secret isn't configured, so this is always safe to start.
+            ai_config_task = asyncio.create_task(ai_config_sync.sync_loop())
+
             await send({"type": "lifespan.startup.complete"})
         elif message["type"] == "lifespan.shutdown":
             logger.info("Shutting down pnm-ai")
             if warmup_task and not warmup_task.done():
                 warmup_task.cancel()
+            if ai_config_task and not ai_config_task.done():
+                ai_config_task.cancel()
             await send({"type": "lifespan.shutdown.complete"})
             return
 
@@ -262,6 +271,12 @@ async def _route(method: str, path: str, scope: dict, receive, send) -> tuple[in
 
     if method == "GET" and path == "/health":
         return await _health()
+
+    if method == "GET" and path == "/llm/health":
+        # Live per-provider probe for the admin "AI & Models" panel. Makes a
+        # real (tiny) call to each provider, so it is deliberately NOT part
+        # of /health, which load balancers poll frequently.
+        return 200, await llm.health_snapshot()
 
     if method == "POST" and path == "/documents":
         return await _upload_document(scope, receive)
@@ -1102,9 +1117,19 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
 
     analysis = None
     try:
+        # Analyzed on the prose alone — tables appended below are structural,
+        # not something a summary/key-facts pass benefits from reading.
         analysis = await llm.analyze_notice(title or "Untitled", text)
     except Exception as e:
         logger.warning("Analysis after PDF extraction failed: %s", e)
+
+    tables = result.get("tables") or []
+    if tables:
+        # Appended rather than spliced inline — see _extract_tables' docstring
+        # for why reproducing a table's original position isn't reliable.
+        text = text + "\n\n" + "\n\n".join(tables)
+
+    qr_codes = result.get("qr_codes") or []
 
     response = {
         "content_text": text,
@@ -1115,9 +1140,14 @@ async def _notices_extract_pdf(receive) -> tuple[int, dict]:
         "quality": result.get("quality"),
         "method": result.get("method"),
         "analyzed": analysis is not None,
+        "qr_codes": qr_codes,
     }
     if analysis:
         response.update(analysis)
+    logger.info(
+        "PDF extraction response: %d chars, %d table(s), %d QR code(s)",
+        len(text), len(tables), len(qr_codes),
+    )
     return 200, response
 
 

@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import re
+import time
 
 import httpx
 import numpy as np
@@ -137,7 +138,7 @@ def is_small_talk(message: str) -> bool:
 async def generate_answer(
     question: str, context_chunks: list[dict], language: str = "en"
 ) -> str:
-    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+    if not any_provider_configured():
         logger.info("No LLM key configured; using extractive fallback")
         return _extractive_fallback(question, context_chunks)
 
@@ -172,7 +173,7 @@ async def generate_chat(
     """Conversational reply. `context_hint` names what the user is looking at
     (e.g. a notice title) so the invitation to ask something fits the screen
     they're on."""
-    if config.GEMINI_API_KEY or config.GROQ_API_KEY:
+    if any_provider_configured():
         hint = (
             f"\n\nThe user is currently viewing {context_hint}. If you invite a "
             "question, make it about that."
@@ -195,7 +196,7 @@ async def generate_chat(
 
 
 async def generate_no_results(question: str, language: str = "en") -> str:
-    if config.GEMINI_API_KEY or config.GROQ_API_KEY:
+    if any_provider_configured():
         messages = [
             {
                 "role": "system",
@@ -218,7 +219,7 @@ Reply with exactly one word:
 
 
 async def classify_intent(message: str) -> str | None:
-    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+    if not any_provider_configured():
         return None
     result = await _llm_chat(
         [
@@ -238,28 +239,108 @@ async def classify_intent(message: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+# One entry per supported provider. Keyed by the stable id used in
+# config.LLM_PROVIDER_PRIORITY and in the admin settings panel, so the
+# ordering an admin drags into place maps straight onto dispatch order here.
+PROVIDERS: tuple[str, ...] = ("gemini", "groq", "opencode")
+
+PROVIDER_LABELS: dict[str, str] = {
+    "gemini": "Google Gemini",
+    "groq": "Groq",
+    "opencode": "OpenCode Zen",
+}
+
+
+def provider_api_key(provider: str) -> str:
+    return {
+        "gemini": config.GEMINI_API_KEY,
+        "groq": config.GROQ_API_KEY,
+        "opencode": config.OPENCODE_ZEN_API_KEY,
+    }.get(provider, "")
+
+
+def provider_model(provider: str) -> str:
+    return {
+        "gemini": config.GEMINI_MODEL,
+        "groq": config.GROQ_MODEL,
+        "opencode": config.OPENCODE_ZEN_MODEL,
+    }.get(provider, "")
+
+
+def _provider_call(provider: str):
+    return {
+        "gemini": _gemini_chat,
+        "groq": _groq_chat,
+        "opencode": _opencode_chat,
+    }.get(provider)
+
+
+def any_provider_configured() -> bool:
+    """True when at least one enabled provider has an API key.
+
+    Callers use this to decide between an LLM path and a non-LLM fallback
+    (extractive answers, canned greetings). Checking the whole active order —
+    rather than naming two providers inline, as this module used to — means a
+    deployment configured with only the third-tier provider still gets real
+    LLM answers instead of silently degrading to extractive output.
+    """
+    return any(provider_api_key(p) for p in active_provider_order())
+
+
+def active_provider_order() -> list[str]:
+    """Configured priority, filtered to providers that actually exist.
+
+    An unknown id (typo in env, or a provider removed in a later version but
+    still listed in a stale DB setting) is dropped rather than crashing
+    dispatch. If that leaves nothing usable, fall back to the built-in order
+    so a bad setting can never silently disable every LLM.
+    """
+    ordered = [p for p in config.LLM_PROVIDER_PRIORITY if p in PROVIDERS]
+    return ordered or list(PROVIDERS)
+
+
 async def _llm_chat(
     messages: list[dict], max_tokens: int, temperature: float
 ) -> str | None:
-    """Try Gemini, then Groq, then OpenCode Zen (free tier) — first non-empty
-    answer wins. gpt-oss/deepseek-style reasoning models can return HTTP 200
-    with empty `content` if max_tokens is exhausted mid-reasoning, which must
-    count as a failure here, not a blank "successful" answer."""
-    if config.GEMINI_API_KEY:
-        result = await _gemini_chat(messages, max_tokens, temperature)
+    """Try each configured provider in admin-defined priority order — the
+    first non-empty answer wins. gpt-oss/deepseek-style reasoning models can
+    return HTTP 200 with empty `content` if max_tokens is exhausted
+    mid-reasoning, which must count as a failure here, not a blank
+    "successful" answer.
+
+    Providers with no API key are skipped silently (not an error — that's
+    just an unconfigured tier), and a provider left out of the priority list
+    is never called at all.
+    """
+    order = active_provider_order()
+    attempted: list[str] = []
+
+    for provider in order:
+        if not provider_api_key(provider):
+            continue
+        call = _provider_call(provider)
+        if call is None:
+            continue
+
+        attempted.append(provider)
+        result = await call(messages, max_tokens, temperature)
         if result:
             return result
-        logger.warning("Gemini failed or returned empty; falling back to Groq")
 
-    if config.GROQ_API_KEY:
-        result = await _groq_chat(messages, max_tokens, temperature)
-        if result:
-            return result
-        logger.warning("Groq failed or returned empty; falling back to OpenCode Zen")
+        remaining = [
+            p for p in order[order.index(provider) + 1 :]
+            if provider_api_key(p)
+        ]
+        logger.warning(
+            "%s failed or returned empty; %s",
+            PROVIDER_LABELS.get(provider, provider),
+            f"falling back to {PROVIDER_LABELS.get(remaining[0], remaining[0])}"
+            if remaining
+            else "no fallback providers remain",
+        )
 
-    if config.OPENCODE_ZEN_API_KEY:
-        return await _opencode_chat(messages, max_tokens, temperature)
-
+    if not attempted:
+        logger.info("No LLM provider is configured (priority=%s)", ",".join(order))
     return None
 
 
@@ -482,6 +563,151 @@ def _clean_answer(text: str) -> str:
     return text.strip()
 
 
+# ---------------------------------------------------------------------------
+# Provider health probes (admin panel)
+# ---------------------------------------------------------------------------
+
+# Deliberately separate from the _*_chat functions above: those retry, rotate
+# keys and swallow the HTTP status to return a clean str|None for callers. A
+# health check wants the opposite — one attempt, no retry, and the actual
+# failure reason surfaced so an admin can tell "bad key" (401) apart from
+# "rate limited" (429) or "wrong model name" (404).
+_HEALTH_TIMEOUT_SECONDS = 12.0
+_HEALTH_MESSAGES = [{"role": "user", "content": "ping"}]
+
+
+def _describe_http_failure(status: int, body: str) -> str:
+    if status in (401, 403):
+        return "Authentication failed — the API key is invalid or revoked."
+    if status == 404:
+        return "Model not found — check the model name for this provider."
+    if status == 429:
+        return "Rate limited — the key works but the quota is currently exhausted."
+    if status >= 500:
+        return f"Provider is having problems (HTTP {status})."
+    return f"HTTP {status}: {body[:160]}"
+
+
+async def _probe_gemini() -> tuple[bool, str | None]:
+    url = GEMINI_API_URL.format(model=config.GEMINI_MODEL) + f"?key={config.GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
+        "generationConfig": {"maxOutputTokens": 8, "temperature": 0.0},
+    }
+    async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
+        response = await client.post(url, json=payload)
+    if response.status_code != 200:
+        return False, _describe_http_failure(response.status_code, response.text)
+    return True, None
+
+
+async def _probe_openai_compatible(url: str, api_key: str, model: str) -> tuple[bool, str | None]:
+    """Shared probe for Groq and OpenCode Zen — both speak the OpenAI schema."""
+    payload = {
+        "model": model,
+        "messages": _HEALTH_MESSAGES,
+        "max_tokens": 8,
+        "temperature": 0.0,
+    }
+    async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
+        response = await client.post(
+            url,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+        )
+    if response.status_code != 200:
+        return False, _describe_http_failure(response.status_code, response.text)
+    return True, None
+
+
+async def _probe_provider(provider: str) -> tuple[bool, str | None]:
+    if provider == "gemini":
+        return await _probe_gemini()
+    if provider == "groq":
+        return await _probe_openai_compatible(GROQ_API_URL, config.GROQ_API_KEY, config.GROQ_MODEL)
+    if provider == "opencode":
+        return await _probe_openai_compatible(
+            config.OPENCODE_ZEN_BASE_URL, config.OPENCODE_ZEN_API_KEY, config.OPENCODE_ZEN_MODEL
+        )
+    return False, "Unknown provider."
+
+
+async def health_snapshot() -> dict:
+    """Live status of every provider, in the order dispatch would try them.
+
+    Probes run concurrently — three sequential round-trips to external APIs
+    would make the admin panel feel broken on a slow provider. Unconfigured
+    providers are reported without a network call at all, so a partially
+    configured install still returns fast.
+    """
+    order = active_provider_order()
+    disabled = [p for p in PROVIDERS if p not in order]
+
+    async def one(provider: str) -> dict:
+        base = {
+            "provider": provider,
+            "label": PROVIDER_LABELS.get(provider, provider),
+            "model": provider_model(provider),
+            "enabled": True,
+            "configured": bool(provider_api_key(provider)),
+        }
+        if not base["configured"]:
+            return {**base, "ok": False, "latencyMs": None, "error": "No API key configured."}
+
+        started = time.perf_counter()
+        try:
+            ok, error = await _probe_provider(provider)
+        except httpx.HTTPError as e:
+            return {
+                **base,
+                "ok": False,
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "error": f"Could not reach the provider: {e}",
+            }
+        except Exception as e:  # never let one provider's failure break the panel
+            logger.exception("Health probe crashed for %s", provider)
+            return {
+                **base,
+                "ok": False,
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "error": f"Probe failed: {e}",
+            }
+        return {
+            **base,
+            "ok": ok,
+            "latencyMs": round((time.perf_counter() - started) * 1000),
+            "error": error,
+        }
+
+    results = list(await asyncio.gather(*(one(p) for p in order)))
+
+    # Providers the admin has switched off still appear, so the panel shows
+    # the full picture rather than silently hiding a key that exists but is
+    # deliberately never used.
+    for provider in disabled:
+        results.append(
+            {
+                "provider": provider,
+                "label": PROVIDER_LABELS.get(provider, provider),
+                "model": provider_model(provider),
+                "enabled": False,
+                "configured": bool(provider_api_key(provider)),
+                "ok": False,
+                "latencyMs": None,
+                "error": "Disabled — not in the active provider priority.",
+            }
+        )
+
+    active = next((r for r in results if r["enabled"] and r["ok"]), None)
+    return {
+        "priority": order,
+        "providers": results,
+        # Which provider a real request would actually land on right now.
+        "activeProvider": active["provider"] if active else None,
+        "healthy": active is not None,
+    }
+
+
 def _split_sentences(text: str) -> list[str]:
     """Splits `text` into standalone, rankable units for the extractive
     fallback. Processes line-by-line rather than collapsing the whole block
@@ -601,7 +827,7 @@ Rules:
 
 
 async def analyze_notice(title: str, content: str) -> dict | None:
-    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+    if not any_provider_configured():
         return None
 
     trimmed_content = content[:8000]
@@ -649,7 +875,7 @@ async def analyze_notice(title: str, content: str) -> dict | None:
 async def answer_notice_question(title: str, content: str, question: str) -> str:
     """`content` is the assembled context block built by the API layer — it may
     hold labelled sections (facts, attachments, summary, key points, text)."""
-    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+    if not any_provider_configured():
         return _extractive_fallback(question, [{"content": content, "title": title}])
 
     # Generous cap: the block leads with the reliable sections, so a long

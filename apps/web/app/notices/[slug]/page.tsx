@@ -10,7 +10,7 @@ import {
   Paperclip, FileImage, Download, Sparkles,
   CheckCircle, Tag, MessageSquare, Send, ArrowRight,
   AlertTriangle, Clock, Timer, ChevronDown, ChevronUp,
-  RefreshCw,
+  RefreshCw, QrCode,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { fetchNotice, askNoticeQuestion, reextractNotice, isQuotaError, isApiError, type QuotaDenial } from "@/lib/api"
@@ -51,8 +51,9 @@ function attachmentLabel(url: string): string {
  * `attachmentUrl` column and no real Attachment row) has no id to look up,
  * so it falls back to linking the original external URL directly.
  */
-function attachmentFileUrl(att: { id: string; url: string }): string {
-  return att.id === "legacy" ? att.url : `/api/files/attachment/${att.id}`
+function attachmentFileUrl(att: { id: string; url: string }, mode: "inline" | "download" = "inline"): string {
+  if (att.id === "legacy") return att.url
+  return `/api/files/attachment/${att.id}?mode=${mode}`
 }
 
 function formatDate(d: string) {
@@ -81,7 +82,18 @@ function deadlineLabel(d: string): { text: string; color: "red" | "amber" | "gre
   return { text: `${days} days remaining`, color: "green" }
 }
 
-type BlockType = "heading" | "numbered-heading" | "subheading" | "paragraph" | "list-item" | "address" | "separator" | "divider" | "related"
+type BlockType = "heading" | "numbered-heading" | "subheading" | "paragraph" | "list-item" | "address" | "separator" | "divider" | "related" | "table"
+
+/** Parses a `| a | b | c |` row into `["a", "b", "c"]`. */
+function parseTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "")
+  return trimmed.split("|").map((c) => c.trim())
+}
+
+/** A GFM separator row: `| --- | :--- | ---: |`. */
+function isTableSeparatorRow(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c))
+}
 
 function preprocessContent(raw: string): string {
   let text = raw
@@ -124,7 +136,7 @@ function preprocessContent(raw: string): string {
 
 function FormattedContent({ text }: { text: string }) {
   const lines = preprocessContent(text).split("\n")
-  const blocks: Array<{ type: BlockType; content: string; number?: string }> = []
+  const blocks: Array<{ type: BlockType; content: string; number?: string; caption?: string; rows?: string[][] }> = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
@@ -133,6 +145,26 @@ function FormattedContent({ text }: { text: string }) {
         blocks.push({ type: "separator", content: "" })
       }
       continue
+    }
+
+    // Tables appended by the PDF extractor: a "Table (page N):" caption
+    // followed by GFM pipe rows (header, then a --- separator, then body).
+    const tableCaptionMatch = /^Table \(page \d+\):$/i.test(line)
+    if (tableCaptionMatch) {
+      const rows: string[][] = []
+      let j = i + 1
+      while (j < lines.length && lines[j].trim().startsWith("|")) {
+        const cells = parseTableRow(lines[j])
+        if (!isTableSeparatorRow(cells)) rows.push(cells)
+        j++
+      }
+      if (rows.length > 0) {
+        blocks.push({ type: "table", content: "", caption: line, rows })
+        i = j - 1
+        continue
+      }
+      // No pipe rows followed — not actually a table, fall through and let
+      // it render as an ordinary line below.
     }
 
     // *** dividers
@@ -236,6 +268,38 @@ function FormattedContent({ text }: { text: string }) {
     if (block.type === "related") { inRelated = true; idx++; continue }
     if (inRelated) { idx++; continue }
     if (block.type === "separator") { idx++; continue }
+
+    if (block.type === "table" && block.rows) {
+      const [header, ...body] = block.rows
+      rendered.push(
+        <div key={idx} className="my-6 overflow-x-auto rounded-[14px] border border-vez-line">
+          <table className="w-full min-w-[480px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-vez-line bg-vez-surface/60">
+                {header.map((cell, c) => (
+                  <th key={c} className="px-4 py-2.5 text-left font-medium text-vez-ink">
+                    {cell}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row, r) => (
+                <tr key={r} className={r % 2 === 1 ? "bg-vez-surface/30" : undefined}>
+                  {row.map((cell, c) => (
+                    <td key={c} className="border-t border-vez-line px-4 py-2.5 text-vez-ink/90">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+      idx++
+      continue
+    }
 
     if (block.type === "divider") {
       rendered.push(
@@ -368,9 +432,10 @@ function AttachmentSection({
                 </p>
               </div>
               <a
-                href={attachmentFileUrl(att)}
+                href={attachmentFileUrl(att, "download")}
                 target="_blank"
                 rel="noopener noreferrer"
+                download={att.label || attachmentLabel(att.url)}
                 className="flex items-center gap-2 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90"
               >
                 <Download className="size-3.5" /> Download
@@ -872,19 +937,57 @@ export default function NoticeDetailPage() {
               </section>
             )}
 
-            {/* Metadata — non-deadline fields */}
-            {notice.metadata && Object.keys(notice.metadata).filter(k => k !== "deadline").length > 0 && (
+            {/* Metadata — non-deadline, non-qrCodes fields (qrCodes gets its own section below) */}
+            {notice.metadata && Object.keys(notice.metadata).filter(k => k !== "deadline" && k !== "qrCodes").length > 0 && (
               <section>
                 <h2 className="mb-3 text-lg text-vez-ink">Details</h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {Object.entries(notice.metadata)
-                    .filter(([k]) => k !== "deadline")
+                    .filter(([k]) => k !== "deadline" && k !== "qrCodes")
                     .map(([key, value]) => (
                       <div key={key} className="rounded-[12px] bg-vez-surface p-4">
                         <p className="text-xs text-vez-mute capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</p>
                         <p className="text-sm text-vez-ink">{String(value)}</p>
                       </div>
                     ))}
+                </div>
+              </section>
+            )}
+
+            {/* QR codes detected in the PDF attachment — payment/link QRs are
+                common in government relief/donation notices, and the extractor
+                decodes their payload as well as cropping the code itself. */}
+            {notice.metadata?.qrCodes && notice.metadata.qrCodes.length > 0 && (
+              <section>
+                <div className="mb-3 flex items-center gap-2">
+                  <QrCode className="size-5 text-vez-navy" />
+                  <h2 className="text-lg text-vez-ink">QR Codes</h2>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {notice.metadata.qrCodes.map((qr, i) => (
+                    <div key={i} className="flex flex-col items-center gap-3 rounded-[14px] border border-vez-line bg-white p-4 text-center">
+                      {qr.image && (
+                        <img
+                          src={`data:image/png;base64,${qr.image}`}
+                          alt={`QR code from page ${qr.page}`}
+                          className="size-32 rounded-lg border border-vez-line/60 object-contain"
+                        />
+                      )}
+                      <p className="text-xs text-vez-mute">Page {qr.page}</p>
+                      {/^https?:\/\//i.test(qr.data) ? (
+                        <a
+                          href={qr.data}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="break-all text-sm text-vez-navy underline underline-offset-2"
+                        >
+                          {qr.data}
+                        </a>
+                      ) : (
+                        <p className="break-all text-sm text-vez-ink">{qr.data}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </section>
             )}
