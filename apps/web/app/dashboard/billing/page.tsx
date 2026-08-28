@@ -7,10 +7,14 @@ import { Suspense } from "react"
 import {
   AlertCircle,
   ArrowUpRight,
+  Bell,
   CheckCircle,
   CreditCard,
+  FileText,
   Loader2,
+  MessageSquare,
   RefreshCw,
+  Send,
 } from "lucide-react"
 import { Header } from "@/components/layout/header"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
@@ -91,6 +95,14 @@ function BillingPageContent() {
   const status = STATUS_COPY[summary.status]
   const periodEnd = summary.currentPeriodEnd ? new Date(summary.currentPeriodEnd) : null
   const usage = summary.usage
+  const isPaid = summary.plan.tier !== "FREE"
+
+  const meters = [
+    { label: "AI questions", icon: MessageSquare, ...usage.aiQuestions },
+    { label: "Documents", icon: FileText, ...usage.documents },
+    { label: "Alert rules", icon: Bell, ...usage.alertRules },
+    { label: "WhatsApp alerts", icon: Send, ...usage.whatsappNotifications },
+  ]
 
   return (
     <div className="w-full max-w-full min-w-0 space-y-4 overflow-x-hidden sm:space-y-6">
@@ -110,31 +122,52 @@ function BillingPageContent() {
         </div>
       )}
 
-      {/* Current plan */}
-      <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-vez-line bg-white p-4 sm:p-6">
-        <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      {/* Current plan — gradient hero for paid tiers, quieter card for Free */}
+      <section
+        className={`w-full max-w-full min-w-0 overflow-hidden rounded-[24px] p-5 sm:p-8 ${
+          isPaid
+            ? "bg-gradient-to-br from-vez-navy to-[#0b2a52] text-white shadow-lg shadow-vez-navy/15"
+            : "border border-vez-line bg-white"
+        }`}
+      >
+        <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 flex-1 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-              <h2 className="break-words text-lg text-vez-ink sm:text-xl">{summary.plan.name}</h2>
-              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${status.tone}`}>
+              <span
+                className={`text-[11px] uppercase tracking-wide ${isPaid ? "text-white/60" : "text-vez-mute"}`}
+              >
+                Current plan
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+              <h2 className={`break-words text-2xl sm:text-3xl ${isPaid ? "text-white" : "text-vez-ink"}`}>
+                {summary.plan.name}
+              </h2>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                  isPaid ? "bg-white/15 text-white" : status.tone
+                }`}
+              >
                 {status.label}
               </span>
               {summary.cancelAtPeriodEnd && (
-                <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700">
+                <span className="shrink-0 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-medium text-amber-100">
                   Cancels at period end
                 </span>
               )}
             </div>
             {summary.plan.tagline && (
-              <p className="mt-1 break-words text-sm text-vez-mute">{summary.plan.tagline}</p>
+              <p className={`mt-1.5 break-words text-sm ${isPaid ? "text-white/70" : "text-vez-mute"}`}>
+                {summary.plan.tagline}
+              </p>
             )}
-            <p className="mt-2 break-words text-sm text-vez-ink">
+            <p className={`mt-3 break-words text-sm ${isPaid ? "text-white/90" : "text-vez-ink"}`}>
               {formatPlanPrice(summary.plan.priceMonthlyCents, summary.plan.currency)}
               {summary.plan.priceMonthlyCents > 0 && (
-                <span className="text-vez-mute"> / month</span>
+                <span className={isPaid ? "text-white/60" : "text-vez-mute"}> / month</span>
               )}
               {periodEnd && (
-                <span className="text-vez-mute">
+                <span className={isPaid ? "text-white/60" : "text-vez-mute"}>
                   {" · "}
                   {summary.cancelAtPeriodEnd ? "ends" : "renews"} {periodEnd.toLocaleDateString()}
                 </span>
@@ -145,7 +178,9 @@ function BillingPageContent() {
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Link
               href="/pricing"
-              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2.5 text-sm text-white transition-opacity hover:opacity-90 sm:px-5"
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm transition-opacity hover:opacity-90 sm:px-5 ${
+                isPaid ? "bg-white text-vez-navy" : "bg-vez-navy text-white"
+              }`}
             >
               {summary.plan.tier === "MAX" ? "Compare plans" : "Upgrade"}
               <ArrowUpRight className="size-3.5 shrink-0" />
@@ -155,7 +190,11 @@ function BillingPageContent() {
               <button
                 onClick={handlePortal}
                 disabled={openingPortal}
-                className="flex items-center gap-1.5 rounded-full border border-vez-line px-4 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface disabled:opacity-60 sm:px-5"
+                className={`flex items-center gap-1.5 rounded-full border px-4 py-2.5 text-sm transition-colors disabled:opacity-60 sm:px-5 ${
+                  isPaid
+                    ? "border-white/25 text-white hover:bg-white/10"
+                    : "border-vez-line text-vez-ink hover:bg-vez-surface"
+                }`}
               >
                 {openingPortal ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -169,7 +208,11 @@ function BillingPageContent() {
         </div>
 
         {summary.status === "PAST_DUE" && (
-          <p className="mt-4 break-words rounded-[12px] bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800">
+          <p
+            className={`mt-5 break-words rounded-[12px] px-3.5 py-2.5 text-xs leading-relaxed ${
+              isPaid ? "bg-amber-400/15 text-amber-100" : "bg-amber-50 text-amber-800"
+            }`}
+          >
             We couldn&apos;t take the last payment. Your plan keeps working until the end of the current
             period — update your card in &quot;Manage billing&quot; to avoid losing access.
           </p>
@@ -177,10 +220,10 @@ function BillingPageContent() {
       </section>
 
       {/* Usage */}
-      <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[20px] border border-vez-line bg-white p-4 sm:p-6">
-        <div className="mb-4 flex min-w-0 items-center justify-between gap-2 sm:mb-5">
+      <section className="w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border border-vez-line bg-white p-5 sm:p-8">
+        <div className="mb-5 flex min-w-0 items-center justify-between gap-2 sm:mb-6">
           <div className="min-w-0 flex-1 overflow-hidden">
-            <h3 className="break-words text-sm font-medium text-vez-ink sm:text-base">This month&apos;s usage</h3>
+            <h3 className="break-words text-base font-medium text-vez-ink">This month&apos;s usage</h3>
             <p className="mt-0.5 break-words text-xs text-vez-mute">
               Resets {new Date(usage.periodEnd).toLocaleDateString()}
             </p>
@@ -193,48 +236,39 @@ function BillingPageContent() {
           </button>
         </div>
 
-        <div className="grid w-full min-w-0 grid-cols-1 gap-4 overflow-hidden sm:gap-5 lg:grid-cols-2">
-          <UsageMeterBar
-            label="AI questions"
-            used={usage.aiQuestions.used}
-            limit={usage.aiQuestions.limit}
-          />
-          <UsageMeterBar
-            label="Documents"
-            used={usage.documents.used}
-            limit={usage.documents.limit}
-          />
-          <UsageMeterBar
-            label="Alert rules"
-            used={usage.alertRules.used}
-            limit={usage.alertRules.limit}
-          />
-          <UsageMeterBar
-            label="WhatsApp alerts"
-            used={usage.whatsappNotifications.used}
-            limit={usage.whatsappNotifications.limit}
-          />
+        <div className="grid w-full min-w-0 grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
+          {meters.map((m) => (
+            <div
+              key={m.label}
+              className="min-w-0 overflow-hidden rounded-[16px] bg-vez-surface/60 p-4"
+            >
+              <div className="mb-3 flex size-9 items-center justify-center rounded-xl bg-white">
+                <m.icon className="size-4 text-vez-navy" />
+              </div>
+              <UsageMeterBar label={m.label} used={m.used} limit={m.limit} />
+            </div>
+          ))}
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 border-t border-vez-line pt-5 text-xs text-vez-mute sm:gap-4 lg:grid-cols-4">
+        <div className="mt-7 grid grid-cols-2 gap-3 border-t border-vez-line pt-6 text-xs text-vez-mute sm:gap-4 lg:grid-cols-4">
           <div className="min-w-0 overflow-hidden">
-            <p className="break-words text-vez-ink">{summary.limits.maxUploadMb} MB</p>
+            <p className="break-words text-base text-vez-ink">{summary.limits.maxUploadMb} MB</p>
             <p className="break-words">Max upload size</p>
           </div>
           <div className="min-w-0 overflow-hidden">
-            <p className="break-words text-vez-ink">
+            <p className="break-words text-base text-vez-ink">
               {summary.limits.allowInstantAlerts ? "Instant" : "Daily digest"}
             </p>
             <p className="break-words">Alert delivery</p>
           </div>
           <div className="min-w-0 overflow-hidden">
-            <p className="break-words text-vez-ink">
+            <p className="break-words text-base text-vez-ink">
               {summary.limits.maxDocuments === null ? "Unlimited" : summary.limits.maxDocuments}
             </p>
             <p className="break-words">Document limit</p>
           </div>
           <div className="min-w-0 overflow-hidden">
-            <p className="break-words text-vez-ink">
+            <p className="break-words text-base text-vez-ink">
               {summary.limits.maxAiQuestionsPerMonth === null
                 ? "Unlimited"
                 : summary.limits.maxAiQuestionsPerMonth}
@@ -252,7 +286,7 @@ export default function BillingPage() {
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white font-poppins">
       <Header />
       <DashboardLayout>
-        <div className="mx-auto w-full max-w-3xl min-w-0 overflow-hidden">
+        <div className="w-full max-w-full min-w-0 overflow-hidden">
           <div className="mb-6 w-full max-w-full min-w-0 overflow-hidden sm:mb-8">
             <h1 className="break-words text-[clamp(22px,6vw,40px)] font-normal leading-tight tracking-[-0.03em] text-vez-ink">
               Plan &amp; usage.
