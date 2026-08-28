@@ -15,6 +15,10 @@ import {
   Timer,
   CalendarClock,
   Info,
+  FileText,
+  Globe,
+  SlidersHorizontal,
+  type LucideIcon,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { SecretInput } from "@/components/admin/secret-input"
@@ -33,6 +37,18 @@ import {
 
 const inputClass =
   "h-11 w-full rounded-full border border-vez-line bg-white px-5 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+
+/** Icon + accent color per settings group, for the card-grid overview. */
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  scheduling: Timer,
+  content: FileText,
+  site: Globe,
+}
+const GROUP_ACCENTS: Record<string, string> = {
+  scheduling: "bg-amber-50 text-amber-600",
+  content: "bg-vez-sky/30 text-vez-navy",
+  site: "bg-emerald-50 text-emerald-600",
+}
 
 interface ServerError {
   key: string
@@ -366,108 +382,113 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-          {/* ── Left rail ─────────────────────────────────────────── */}
-          <aside className="lg:sticky lg:top-0 lg:h-fit">
-            <div className="rounded-[20px] bg-white p-4">
-              <div className="relative mb-4">
-                <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search settings…"
-                  className="h-10 w-full rounded-full border border-vez-line bg-white pl-10 pr-4 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-ink"
-                    aria-label="Clear search"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-              </div>
+        {/* ── Search + group overview grid ─────────────────────────── */}
+        <div className="mb-8 rounded-[20px] bg-white p-5">
+          <div className="relative mb-5 max-w-md">
+            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-vez-mute" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search settings…"
+              className="h-10 w-full rounded-full border border-vez-line bg-white pl-10 pr-9 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-sky"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-vez-mute hover:text-vez-ink"
+                aria-label="Clear search"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
 
-              {search && (
-                <p className="mb-3 px-1 text-xs text-vez-mute">
-                  {matchCount === 0
-                    ? "No matching settings"
-                    : `${matchCount} setting${matchCount === 1 ? "" : "s"} match`}
-                </p>
-              )}
+          {search && (
+            <p className="mb-3 text-xs text-vez-mute">
+              {matchCount === 0 ? "No matching settings" : `${matchCount} setting${matchCount === 1 ? "" : "s"} match`}
+            </p>
+          )}
 
-              <div className="space-y-1.5">
-                {view?.groups.filter((g) => g.id !== AI_GROUP).map((g) => {
-                  const shown = filteredGroups.some((fg) => fg.id === g.id)
-                  const dirtyInGroup = view.settings.filter(
-                    (s) => s.group === g.id && isDirty(s.key),
-                  ).length
-                  return (
-                    <button
-                      key={g.id}
-                      onClick={() => scrollToGroup(g.id)}
-                      className={`flex w-full items-center gap-2.5 rounded-full px-4 py-2.5 text-sm transition-colors ${
-                        activeGroup === g.id
-                          ? "bg-vez-navy text-white"
-                          : "text-vez-mute hover:bg-vez-surface hover:text-vez-navy"
-                      } ${search && !shown ? "opacity-40" : ""}`}
-                    >
-                      <span className="flex-1 text-left">{g.label}</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {view?.groups.filter((g) => g.id !== AI_GROUP).map((g) => {
+              const shown = filteredGroups.some((fg) => fg.id === g.id)
+              const totalInGroup = view.settings.filter((s) => s.group === g.id).length
+              const dirtyInGroup = view.settings.filter(
+                (s) => s.group === g.id && isDirty(s.key),
+              ).length
+              const Icon = GROUP_ICONS[g.id] ?? SlidersHorizontal
+              const accent = GROUP_ACCENTS[g.id] ?? "bg-vez-surface text-vez-navy"
+              const active = activeGroup === g.id
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => scrollToGroup(g.id)}
+                  className={`rounded-[16px] border p-4 text-left transition-colors ${
+                    active ? "border-vez-navy bg-vez-navy/[0.03]" : "border-vez-line hover:bg-vez-surface/60"
+                  } ${search && !shown ? "opacity-40" : ""}`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className={`flex size-9 items-center justify-center rounded-full ${accent}`}>
+                      <Icon className="size-4" />
+                    </span>
+                    <div className="flex items-center gap-1.5">
                       {dirtyInGroup > 0 && (
                         <span className="flex size-5 items-center justify-center rounded-full bg-amber-400 text-[10px] font-medium text-white">
                           {dirtyInGroup}
                         </span>
                       )}
                       {g.changed > 0 && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] ${
-                            activeGroup === g.id ? "bg-white/20 text-white" : "bg-vez-navy/10 text-vez-navy"
-                          }`}
-                        >
-                          {g.changed}
+                        <span className="rounded-full bg-vez-navy/10 px-2 py-0.5 text-[10px] text-vez-navy">
+                          {g.changed} changed
                         </span>
                       )}
-                    </button>
-                  )
-                })}
-              </div>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-vez-ink">{g.label}</p>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-vez-mute">{g.description}</p>
+                  <p className="mt-2 text-[11px] text-vez-mute">
+                    {totalInGroup} setting{totalInGroup === 1 ? "" : "s"}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
 
-              <div className="mt-4 rounded-[14px] bg-vez-surface px-4 py-3 text-xs text-vez-mute">
-                <p className="flex items-center gap-1.5 text-vez-ink">
-                  <Info className="size-3.5" /> How this works
-                </p>
-                <p className="mt-1 leading-relaxed">
-                  Values marked with a number chip are overrides. Reset restores the built-in
-                  default. Scraping changes are applied to the live scheduler immediately.
-                </p>
-              </div>
+          <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-vez-surface px-4 py-3 text-xs text-vez-mute">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
+            <p className="leading-relaxed">
+              Values marked with a number chip are overrides. Reset restores the built-in default.
+              Scraping changes are applied to the live scheduler immediately.
+            </p>
+          </div>
+        </div>
+
+        {/* ── Group sections ────────────────────────────────────────── */}
+        <div className="min-w-0">
+          {loading && (
+            <div className="flex items-center gap-3 rounded-[20px] bg-white p-10 text-sm text-vez-mute">
+              <Loader2 className="size-4 animate-spin text-vez-navy" /> Loading settings…
             </div>
-          </aside>
+          )}
 
-          {/* ── Main column ───────────────────────────────────────── */}
-          <div className="min-w-0">
-            {loading && (
-              <div className="flex items-center gap-3 rounded-[20px] bg-white p-10 text-sm text-vez-mute">
-                <Loader2 className="size-4 animate-spin text-vez-navy" /> Loading settings…
-              </div>
-            )}
+          {!loading && !view && (
+            <div className="rounded-[20px] bg-white p-10 text-center text-sm text-vez-mute">
+              No settings available.
+            </div>
+          )}
 
-            {!loading && !view && (
-              <div className="rounded-[20px] bg-white p-10 text-center text-sm text-vez-mute">
-                No settings available.
-              </div>
-            )}
+          {!loading && view && filteredGroups.length === 0 && (
+            <div className="rounded-[20px] bg-white p-10 text-center text-sm text-vez-mute">
+              No settings match “{search}”.
+            </div>
+          )}
 
-            {!loading && view && filteredGroups.length === 0 && (
-              <div className="rounded-[20px] bg-white p-10 text-center text-sm text-vez-mute">
-                No settings match “{search}”.
-              </div>
-            )}
-
-            {!loading &&
-              view &&
-              filteredGroups.map((g) => (
+          {!loading &&
+            view &&
+            filteredGroups.map((g) => {
+              const Icon = GROUP_ICONS[g.id] ?? SlidersHorizontal
+              const accent = GROUP_ACCENTS[g.id] ?? "bg-vez-surface text-vez-navy"
+              return (
                 <div
                   key={g.id}
                   data-group-id={g.id}
@@ -476,61 +497,44 @@ export default function AdminSettingsPage() {
                   }}
                   className="mb-8 scroll-mt-4"
                 >
-                  {/* Stronger heading hierarchy: the group title now clearly
-                      outranks the setting labels inside it, which is what made
-                      the old flat stack hard to scan. */}
-                  <div className="mb-4 border-b border-vez-line px-1 pb-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h2 className="text-xl font-medium tracking-[-0.01em] text-vez-ink">
-                        {g.label}
-                      </h2>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-vez-mute">
-                          {g.fields.length} setting{g.fields.length === 1 ? "" : "s"}
-                        </span>
+                  <div className="mb-4 flex items-center gap-3 px-1">
+                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${accent}`}>
+                      <Icon className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-medium tracking-[-0.01em] text-vez-ink">{g.label}</h2>
                         {g.fields.some((s) => isDirty(s.key)) && (
                           <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-medium text-amber-700">
                             unsaved changes
                           </span>
                         )}
                       </div>
+                      <p className="text-sm text-vez-mute">{g.description}</p>
                     </div>
-                    <p className="mt-1 max-w-2xl text-sm text-vez-mute">{g.description}</p>
                   </div>
 
-                  <div className="overflow-hidden rounded-[20px] border border-vez-line bg-white">
-                    {g.fields.map((field, i) => {
-                      // Wide controls get their own full-width line below the
-                      // label instead of being squeezed into the right-hand
-                      // column, which is what made these rows feel cramped.
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {g.fields.map((field) => {
+                      // Wide controls get their own full-width card instead of
+                      // being squeezed into a half-width column.
                       const wide = field.type === "textarea" || field.type === "order"
                       const control = (
-                        <>
-                          <FieldInput
-                            field={field}
-                            value={draft[field.key] ?? field.value}
-                            onChange={(v) => setValue(field.key, v)}
-                          />
-                          {field.overridden && (
-                            <button
-                              onClick={() => doReset(field.key)}
-                              title="Reset to default"
-                              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-vez-line text-vez-mute transition-colors hover:border-vez-navy/30 hover:text-vez-navy"
-                            >
-                              <RotateCcw className="size-3.5" />
-                            </button>
-                          )}
-                        </>
+                        <FieldInput
+                          field={field}
+                          value={draft[field.key] ?? field.value}
+                          onChange={(v) => setValue(field.key, v)}
+                        />
                       )
 
                       return (
                         <div
                           key={field.key}
-                          className={`px-6 py-5 ${i > 0 ? "border-t border-vez-line" : ""} ${
-                            isDirty(field.key) ? "bg-amber-50/40" : ""
+                          className={`rounded-[16px] border p-5 transition-colors ${wide ? "md:col-span-2" : ""} ${
+                            isDirty(field.key) ? "border-amber-300 bg-amber-50/40" : "border-vez-line bg-white"
                           }`}
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                          <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                             <div className="flex min-w-0 flex-wrap items-center gap-2">
                               <p className="text-sm font-medium text-vez-ink">{field.label}</p>
                               {/* Only "Changed" is shown — the absence of it already
@@ -547,16 +551,24 @@ export default function AdminSettingsPage() {
                                 </span>
                               )}
                             </div>
-                            {!wide && (
-                              <div className="flex shrink-0 items-center gap-2">{control}</div>
+                            {field.overridden && (
+                              <button
+                                onClick={() => doReset(field.key)}
+                                title="Reset to default"
+                                className="flex size-7 shrink-0 items-center justify-center rounded-full border border-vez-line text-vez-mute transition-colors hover:border-vez-navy/30 hover:text-vez-navy"
+                              >
+                                <RotateCcw className="size-3.5" />
+                              </button>
                             )}
                           </div>
 
                           {field.description && (
-                            <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-vez-mute">
+                            <p className="mb-3 text-[13px] leading-relaxed text-vez-mute">
                               {field.description}
                             </p>
                           )}
+
+                          <div>{control}</div>
 
                           {/* What this row deviates from. Shown only once a
                               value differs from the built-in default, so an
@@ -565,15 +577,13 @@ export default function AdminSettingsPage() {
                           {(field.overridden || isDirty(field.key)) &&
                             field.type !== "secret" &&
                             field.default !== "" && (
-                              <p className="mt-1.5 text-xs text-vez-mute/80">
+                              <p className="mt-2 text-xs text-vez-mute/80">
                                 Default:{" "}
                                 <code className="rounded bg-vez-surface px-1.5 py-0.5 font-mono text-[11px] text-vez-ink/70">
                                   {formatDefault(field)}
                                 </code>
                               </p>
                             )}
-
-                          {wide && <div className="mt-3 flex items-start gap-2">{control}</div>}
 
                           {field.type === "cron" && (
                             <CronPreview value={draft[field.key] ?? field.value} />
@@ -588,10 +598,11 @@ export default function AdminSettingsPage() {
                     })}
                   </div>
                 </div>
-              ))}
+              )
+            })}
 
-            {/* Save bar */}
-            {view && (
+          {/* Save bar */}
+          {view && (
               <div className="sticky bottom-4 z-10 mt-8">
                 <div
                   className={`flex flex-wrap items-center gap-3 rounded-[20px] border p-4 pr-4 shadow-lg shadow-vez-navy/5 sm:pr-24 ${
@@ -663,7 +674,6 @@ export default function AdminSettingsPage() {
               </div>
             )}
           </div>
-        </div>
       </AdminLayout>
     </div>
   )

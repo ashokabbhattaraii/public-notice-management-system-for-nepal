@@ -217,7 +217,7 @@ export default function AdminAiPage() {
             <Loader2 className="size-4 animate-spin text-vez-navy" /> Loading AI settings…
           </div>
         ) : (
-          <div className="max-w-4xl space-y-4">
+          <div className="max-w-6xl space-y-4">
             {/* ── Fallback order + health trigger ─────────────────────── */}
             <section className="overflow-hidden rounded-[20px] border border-vez-line bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
@@ -290,82 +290,53 @@ export default function AdminAiPage() {
               )}
             </section>
 
-            {/* ── One card per provider ───────────────────────────────── */}
-            {ordered.map((id) => {
-              const provider = PROVIDERS.find((p) => p.id === id)
-              if (!provider) return null
-              const keyField = byKey.get(provider.keyKey)
-              const modelField = byKey.get(provider.modelKey)
-              if (!keyField || !modelField) return null
+            {/* ── Provider card grid ──────────────────────────────────── */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {ordered.map((id) => {
+                const provider = PROVIDERS.find((p) => p.id === id)
+                if (!provider) return null
+                const keyField = byKey.get(provider.keyKey)
+                const modelField = byKey.get(provider.modelKey)
+                if (!keyField || !modelField) return null
 
-              const isEnabled = priority.includes(id)
-              const rank = priority.indexOf(id)
-              const h = healthFor(id)
-              const inUse = health?.activeProvider === id
+                const isEnabled = priority.includes(id)
+                const rank = priority.indexOf(id)
+                const h = healthFor(id)
+                const inUse = health?.activeProvider === id
 
-              return (
-                <section
-                  key={id}
-                  className={`overflow-hidden rounded-[20px] border transition-colors ${
-                    isEnabled ? "border-vez-line bg-white" : "border-dashed border-vez-line bg-vez-surface/30"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center gap-2.5 border-b border-vez-line px-6 py-4">
-                    <span
-                      className={`size-2.5 shrink-0 rounded-full ${
-                        !isEnabled
-                          ? "bg-vez-line"
-                          : h?.ok
-                            ? "bg-green-500"
-                            : h
-                              ? "bg-red-500"
-                              : keyField.configured
-                                ? "bg-vez-sky"
-                                : "bg-vez-line"
-                      }`}
-                    />
-                    {isEnabled && (
-                      <span className="flex size-5 items-center justify-center rounded-full bg-vez-navy text-[10px] font-medium text-white">
-                        {rank + 1}
-                      </span>
-                    )}
-                    <h2
-                      className={`text-base ${isEnabled ? "text-vez-ink" : "text-vez-mute line-through"}`}
-                    >
-                      {provider.label}
-                    </h2>
-                    {inUse && (
-                      <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-medium text-green-700">
-                        in use
-                      </span>
-                    )}
-                    {!isEnabled && (
-                      <span className="rounded-full bg-vez-line/50 px-2.5 py-0.5 text-[10px] font-medium text-vez-mute">
-                        disabled
-                      </span>
-                    )}
-
-                    <div className="ml-auto flex shrink-0 items-center gap-1">
-                      {isEnabled && (
-                        <>
-                          <button
-                            onClick={() => movePriority(id, -1)}
-                            disabled={rank === 0}
-                            aria-label={`Move ${provider.label} up`}
-                            className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
-                          >
-                            <ArrowUp className="size-3.5" />
-                          </button>
-                          <button
-                            onClick={() => movePriority(id, 1)}
-                            disabled={rank === priority.length - 1}
-                            aria-label={`Move ${provider.label} down`}
-                            className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
-                          >
-                            <ArrowDown className="size-3.5" />
-                          </button>
-                        </>
-                      )}
+                return (
+                  <section
+                    key={id}
+                    className={`flex flex-col overflow-hidden rounded-[20px] border transition-colors ${
+                      isEnabled ? "border-vez-line bg-white" : "border-dashed border-vez-line bg-vez-surface/30"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b border-vez-line px-5 py-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`size-2.5 shrink-0 rounded-full ${
+                            !isEnabled
+                              ? "bg-vez-line"
+                              : h?.ok
+                                ? "bg-green-500"
+                                : h
+                                  ? "bg-red-500"
+                                  : keyField.configured
+                                    ? "bg-vez-sky"
+                                    : "bg-vez-line"
+                          }`}
+                        />
+                        {isEnabled && (
+                          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-vez-navy text-[10px] font-medium text-white">
+                            {rank + 1}
+                          </span>
+                        )}
+                        <h2
+                          className={`truncate text-sm font-medium ${isEnabled ? "text-vez-ink" : "text-vez-mute line-through"}`}
+                        >
+                          {provider.label}
+                        </h2>
+                      </div>
                       <button
                         onClick={() => toggleProvider(id)}
                         disabled={isEnabled && priority.length === 1}
@@ -376,69 +347,95 @@ export default function AdminAiPage() {
                               ? `Disable ${provider.label}`
                               : `Enable ${provider.label}`
                         }
-                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-30 ${
+                        className={`flex shrink-0 items-center justify-center rounded-full border p-1.5 transition-colors disabled:opacity-30 ${
                           isEnabled
                             ? "border-vez-line text-vez-mute hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                             : "border-vez-line text-vez-ink hover:bg-white"
                         }`}
                       >
-                        <Power className="size-3" />
-                        {isEnabled ? "Disable" : "Enable"}
+                        <Power className="size-3.5" />
                       </button>
                     </div>
-                  </div>
 
-                  <dl className="divide-y divide-vez-line">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3.5">
-                      <dt className="w-20 shrink-0 text-xs text-vez-mute">API key</dt>
-                      <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                        <SecretInput
-                          field={keyField}
-                          value={valueOf(provider.keyKey)}
-                          onChange={(v) => setValue(provider.keyKey, v)}
-                        />
-                        {keyField.configured && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-b border-vez-line px-5 py-2">
+                      {inUse && (
+                        <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-medium text-green-700">
+                          in use
+                        </span>
+                      )}
+                      {!isEnabled && (
+                        <span className="rounded-full bg-vez-line/50 px-2.5 py-0.5 text-[10px] font-medium text-vez-mute">
+                          disabled
+                        </span>
+                      )}
+                      {isEnabled && (
+                        <div className="ml-auto flex items-center gap-1">
                           <button
-                            onClick={() => clearKey(provider.keyKey)}
-                            title="Remove the stored key and fall back to the server's environment variable"
-                            className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                            onClick={() => movePriority(id, -1)}
+                            disabled={rank === 0}
+                            aria-label={`Move ${provider.label} up`}
+                            className="flex size-6 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
                           >
-                            <RotateCcw className="size-3.5" />
+                            <ArrowUp className="size-3" />
                           </button>
-                        )}
-                        {!keyField.configured && (
-                          <span className="text-xs text-vez-mute">
-                            Uses the server env var · get one at {provider.help}
-                          </span>
-                        )}
-                      </dd>
+                          <button
+                            onClick={() => movePriority(id, 1)}
+                            disabled={rank === priority.length - 1}
+                            aria-label={`Move ${provider.label} down`}
+                            className="flex size-6 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                          >
+                            <ArrowDown className="size-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3.5">
-                      <dt className="w-20 shrink-0 text-xs text-vez-mute">Model</dt>
-                      <dd className="min-w-0 flex-1">
+                    <div className="flex flex-1 flex-col gap-3.5 px-5 py-4">
+                      <div>
+                        <p className="mb-1.5 text-[11px] uppercase tracking-wide text-vez-mute">API key</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <SecretInput
+                            field={keyField}
+                            value={valueOf(provider.keyKey)}
+                            onChange={(v) => setValue(provider.keyKey, v)}
+                          />
+                          {keyField.configured && (
+                            <button
+                              onClick={() => clearKey(provider.keyKey)}
+                              title="Remove the stored key and fall back to the server's environment variable"
+                              className="flex size-7 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                            >
+                              <RotateCcw className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        {!keyField.configured && (
+                          <p className="mt-1 text-[11px] text-vez-mute">
+                            Uses the server env var · get one at {provider.help}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="mb-1.5 text-[11px] uppercase tracking-wide text-vez-mute">Model</p>
                         <input
                           value={valueOf(provider.modelKey)}
                           onChange={(e) => setValue(provider.modelKey, e.target.value)}
                           placeholder={modelField.placeholder}
                           spellCheck={false}
-                          className={`h-10 w-full max-w-sm rounded-full border bg-white px-4 font-mono text-sm text-vez-ink outline-none transition-colors focus:border-vez-sky ${
+                          className={`h-10 w-full rounded-full border bg-white px-4 font-mono text-xs text-vez-ink outline-none transition-colors focus:border-vez-sky ${
                             isDirty(provider.modelKey) ? "border-amber-300" : "border-vez-line"
                           }`}
                         />
-                      </dd>
-                    </div>
+                      </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3.5">
-                      <dt className="w-20 shrink-0 text-xs text-vez-mute">Health</dt>
-                      <dd className="min-w-0 flex-1 text-sm">
+                      <div className="mt-auto">
+                        <p className="mb-1.5 text-[11px] uppercase tracking-wide text-vez-mute">Health</p>
                         {!h ? (
-                          <span className="text-xs text-vez-mute">
-                            Not checked yet — run a health check above.
-                          </span>
+                          <span className="text-xs text-vez-mute">Not checked yet.</span>
                         ) : h.ok ? (
                           <span className="flex items-center gap-1.5 text-xs text-green-700">
-                            <CheckCircle2 className="size-3.5" /> Responding
+                            <CheckCircle2 className="size-3.5 shrink-0" /> Responding
                             <span className="tabular-nums text-vez-mute">· {h.latencyMs} ms</span>
                           </span>
                         ) : (
@@ -446,12 +443,12 @@ export default function AdminAiPage() {
                             <AlertCircle className="mt-0.5 size-3.5 shrink-0" /> {h.error}
                           </span>
                         )}
-                      </dd>
+                      </div>
                     </div>
-                  </dl>
-                </section>
-              )
-            })}
+                  </section>
+                )
+              })}
+            </div>
 
             {/* ── Save bar ────────────────────────────────────────────── */}
             <div className="sticky bottom-4 z-10">
