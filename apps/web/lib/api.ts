@@ -25,7 +25,11 @@ import {
   PublicSiteSettings,
 } from "./types"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
+// `||` (not `??`) deliberately — an unset GitHub Actions build-time Variable
+// bakes in "" at build time, which is falsy but not null/undefined, so `??`
+// would silently keep the empty string and every request would resolve as a
+// same-origin relative path instead of falling back.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
 
 const TOKEN_KEY = "pnm_token"
 const TOKEN_COOKIE = "pnm_token"

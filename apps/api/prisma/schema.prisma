@@ -168,7 +168,9 @@ model Document {
   filename    String
   mimeType    String         @map("mime_type")
   fileSize    Int            @map("file_size")
-  filePath    String         @map("file_path")
+  // S3 object key (e.g. "documents/<uuid>.pdf") — despite the mapped column
+  // name, this has not held a local filesystem path since the S3 migration.
+  storageKey  String         @map("file_path")
   fileHash    String?        @unique @map("file_hash")  // SHA-256 for deduplication
   status      DocumentStatus @default(PENDING)
   isOcr       Boolean        @default(false) @map("is_ocr")

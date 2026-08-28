@@ -6,7 +6,7 @@ import {
   Cpu, MessageSquare, Database, ChevronRight,
   LayoutPanelLeft, BookOpen, Copy, Trash2,
   ThumbsUp, ThumbsDown, RefreshCw, CheckCircle,
-  Clock, AlertCircle, Loader2, X, File,
+  Clock, AlertCircle, Loader2, X, File, Download,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -251,13 +251,24 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
       )}
 
       <div className="flex items-center justify-between gap-2 border-t border-vez-line/40 pt-3">
-        <button
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-vez-navy transition-colors hover:bg-vez-sky/15 disabled:cursor-not-allowed disabled:opacity-40"
-          onClick={onAsk}
-          disabled={!isIndexed}
-        >
-          <MessageSquare className="size-4" /> Ask AI
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-vez-navy transition-colors hover:bg-vez-sky/15 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={onAsk}
+            disabled={!isIndexed}
+          >
+            <MessageSquare className="size-4" /> Ask AI
+          </button>
+          <a
+            href={`/api/files/document/${doc.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-ink"
+            title="Download original file"
+          >
+            <Download className="size-4" /> <span className="hidden sm:inline">Download</span>
+          </a>
+        </div>
 
         {showControls && (
           <button

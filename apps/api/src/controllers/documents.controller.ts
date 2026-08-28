@@ -21,12 +21,10 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { MulterError } from 'multer';
-import { diskStorage } from 'multer';
+import { MulterError, memoryStorage } from 'multer';
 import { Response } from 'express';
 import { User } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
-import * as path from 'path';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -35,7 +33,6 @@ import { QuotaService } from '../services/quota.service';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
 import { ListDocumentsDto } from '../dto/list-documents.dto';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -73,14 +70,10 @@ class MulterExceptionFilter implements ExceptionFilter {
   }
 }
 
-const storage = diskStorage({
-  destination: path.resolve(__dirname, '..', '..', 'uploads'),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${uuidv4()}${ext}`;
-    cb(null, uniqueName);
-  },
-});
+// Buffered in memory, not written to local disk — DocumentsService.create()
+// uploads the buffer straight to S3. Files here are capped at MAX_FILE_SIZE
+// (a few MB), so holding one in memory per concurrent upload is cheap.
+const storage = memoryStorage();
 
 @Controller('documents')
 export class DocumentsController {
@@ -119,29 +112,22 @@ export class DocumentsController {
       throw new BadRequestException('File is required');
     }
 
-    // Multer truncates at the limit rather than rejecting, so verify the size
-    // that actually landed on disk and remove the partial file.
+    // Multer truncates at the limit rather than rejecting; nothing to clean
+    // up on disk now that uploads are memory-buffered, just reject.
     if (file.size > MAX_FILE_SIZE) {
-      fs.unlink(file.path, () => undefined);
       throw new PayloadTooLargeException(
         `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_FILE_SIZE_MB} MB.`,
       );
     }
 
     // Plan enforcement: document count and the per-tier upload size. Checked
-    // before any work so a refused upload doesn't leave a file on disk or
-    // consume allowance. Throws 402 with a `quota` body the UI turns into a
-    // targeted upgrade prompt.
-    try {
-      await this.quota.assertCanAddDocument(user.id, file.size);
-    } catch (err) {
-      fs.unlink(file.path, () => undefined);
-      throw err;
-    }
+    // before any work so a refused upload never reaches S3 or consumes
+    // allowance. Throws 402 with a `quota` body the UI turns into a targeted
+    // upgrade prompt.
+    await this.quota.assertCanAddDocument(user.id, file.size);
 
     // Compute SHA-256 hash for deduplication
-    const fileBuffer = fs.readFileSync(file.path);
-    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
 
     // Check for existing document with same hash
     const existing = await this.documentsService.findByHash(fileHash);
@@ -166,7 +152,7 @@ export class DocumentsController {
       filename: file.originalname,
       mimeType: file.mimetype,
       fileSize: file.size,
-      filePath: file.path,
+      buffer: file.buffer,
       uploadedBy: user.id,
       fileHash: fileHash,
     });
@@ -272,13 +258,7 @@ export class DocumentsController {
     @Res() res: Response,
   ) {
     const document = await this.documentsService.findOne(id);
-    const filePath = this.documentsService.getFilePath(document);
-
-    res.setHeader('Content-Type', document.mimeType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${document.filename}"`,
-    );
-    res.sendFile(filePath);
+    const url = await this.documentsService.getDownloadUrl(document);
+    res.redirect(302, url);
   }
 }

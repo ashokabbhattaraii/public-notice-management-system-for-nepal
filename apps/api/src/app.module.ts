@@ -18,6 +18,7 @@ import { HealthController } from './controllers/health.controller';
 import { MaintenanceMiddleware } from './common/maintenance.middleware';
 import { LoggerModule } from './common/logger';
 import { TokenRevocationModule } from './common/token-revocation.module';
+import { StorageModule } from './common/storage/storage.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { TokenRevocationModule } from './common/token-revocation.module';
     // SettingsController is registered here and is guarded by JwtAuthGuard.
     TokenRevocationModule,
     PrismaModule,
+    StorageModule,
     SettingsModule,
     EvolutionApiModule,
     AuthModule,

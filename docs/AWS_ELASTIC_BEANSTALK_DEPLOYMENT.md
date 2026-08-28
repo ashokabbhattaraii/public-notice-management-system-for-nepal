@@ -89,9 +89,33 @@ that's optional. This is meaningfully more secure than the classic
 to leak, nothing to rotate, nothing that still works if someone reads an old
 workflow log).
 
-Pick one AWS region for everything and stick with it — this guide uses
-**`ap-south-1`** (Mumbai, closest region to Nepal) as the example. Substitute
-your own region everywhere if you choose differently.
+Pick one AWS region for everything and stick with it — this guide originally
+suggested `ap-south-1` (Mumbai, closest region to Nepal), but **this
+account's actual resources were provisioned in `us-east-1`**, so that's what
+every example below uses. Substitute your own region everywhere if you
+choose differently.
+
+> **This account's current state (AWS account `679777944150`, region
+> `us-east-1`), so you can skip ahead:**
+> - **Step 2 (ECR)** — done. Repos exist: `suchanaai-web`, `suchanaai-api`,
+>   `suchanaai-ai-service`.
+> - **Step 3 (DB/vector store)** — not yet provisioned for this app (no RDS
+>   instance exists for `suchanaai`; only an unrelated project's DB does).
+> - **Step 4 (Beanstalk)** — done. Application `suchanaai` exists with all
+>   three environments live: `suchanaai-web-prod`, `suchanaai-api-prod`,
+>   `suchanaai-ai-service-prod`, all in VPC `vpc-08eb8dda9834aad6f`
+>   (`suchanaai-vpc`).
+> - **Step 6.1 (OIDC provider)** — done.
+>   `arn:aws:iam::679777944150:oidc-provider/token.actions.githubusercontent.com`
+>   already exists in this account (created for a different project, but an
+>   account only ever needs one).
+> - **Step 6.2 (deploy role)** — done. `github-actions-deploy-suchanaai`
+>   exists, trusted only for
+>   `repo:ashokabbhattarai-byte@228275133/suchanaai@1343324102:environment:production`
+>   (the `upstream` remote's `production` environment — the `origin`
+>   remote's fork does not have this role trusted). Note this is an
+>   `environment:`-shaped `sub`, not `ref:refs/heads/main` — see the
+>   explanation in Step 6.2 below for why.
 
 ---
 
@@ -113,7 +137,7 @@ If you already have an AWS account and can sign in, skip to Step 2.
    - IAM → Users → your user → **Security credentials** tab → **Create
      access key** → choose "Command Line Interface (CLI)".
    - Run `aws configure` locally and paste the key/secret + your region
-     (`ap-south-1`) when prompted.
+     (`us-east-1`) when prompted.
    - This key lives only on your machine for running one-off setup
      commands — it is never pasted into GitHub. Delete it from IAM once
      you're done with setup if you don't expect to need the CLI again.
@@ -130,15 +154,15 @@ private, no special settings needed) with these exact names:
 
 | Repository name | App |
 |---|---|
-| `suchana-web` | apps/web |
-| `suchana-api` | apps/api |
-| `suchana-ai-service` | apps/ai |
+| `suchanaai-web` | apps/web |
+| `suchanaai-api` | apps/api |
+| `suchanaai-ai-service` | apps/ai |
 
 **CLI equivalent:**
 
 ```bash
-for repo in suchana-web suchana-api suchana-ai-service; do
-  aws ecr create-repository --repository-name "$repo" --region ap-south-1
+for repo in suchanaai-web suchanaai-api suchanaai-ai-service; do
+  aws ecr create-repository --repository-name "$repo" --region us-east-1
 done
 ```
 
@@ -163,7 +187,7 @@ You have two reasonable paths; pick based on budget:
   `aws rds create-db-instance` command if you want the CLI form — the
   settings there apply here unchanged.
 - **Qdrant → [Qdrant Cloud](https://cloud.qdrant.io)**, free 1 GB cluster,
-  region `aws/ap-south-1`. Note the cluster URL + API key it gives you.
+  region `aws/us-east-1`. Note the cluster URL + API key it gives you.
 
 ### Option B — Self-hosted on one small EC2 instance (cheaper)
 
@@ -197,7 +221,7 @@ each running the **Docker** platform (single container).
 **Console**, repeated for each row below:
 
 1. Elastic Beanstalk → **Create application**.
-   - Application name (first time only): `suchana-ai`.
+   - Application name (first time only): `suchanaai`.
    - Environment name: from the table below.
    - Platform: **Docker** → platform branch **"Docker running on 64bit
      Amazon Linux 2023"** (do **not** pick a Node.js/Python platform — the
@@ -211,14 +235,14 @@ each running the **Docker** platform (single container).
 
 | Environment name | App | Suggested instance | Notes |
 |---|---|---|---|
-| `suchana-web-prod` | web | `t3.small` | Serves Next.js on port **3535** |
-| `suchana-api-prod` | api | `t3.small` | NestJS on port **3001**; needs network access to Postgres |
-| `suchana-ai-service-prod` | ai | `t3.medium` or larger | Python on port **8000**; loads an embedding model into RAM — undersizing this causes OOM kills |
+| `suchanaai-web-prod` | web | `t3.small` | Serves Next.js on port **3535** |
+| `suchanaai-api-prod` | api | `t3.small` | NestJS on port **3001**; needs network access to Postgres |
+| `suchanaai-ai-service-prod` | ai | `t3.medium` or larger | Python on port **8000**; loads an embedding model into RAM — undersizing this causes OOM kills |
 
 2. After each environment is created, open **Configuration → Instance
    traffic and scaling** and confirm the **security group** allows inbound
    on the app's port from wherever you're routing traffic (a load balancer,
-   or the internet directly for a quick start). For `suchana-api-prod`,
+   or the internet directly for a quick start). For `suchanaai-api-prod`,
    also open its security group to reach your database's security group on
    port 5432 (and Qdrant's port if self-hosted).
 
@@ -231,29 +255,63 @@ each running the **Docker** platform (single container).
 ## Step 5 — Set each environment's runtime configuration
 
 This is where the **real secrets** live — deliberately never in GitHub. Set
-these once per environment, in the Console:
+these once per environment, in the Console.
 
-**Elastic Beanstalk → (environment) → Configuration → Software → Edit →
-Environment properties.**
+### Finding the environment properties screen
+
+The console layout differs by account/rollout, so use whichever of these two
+matches what you actually see — don't assume the older one if your screen
+looks like the newer one.
+
+**Newer layout** (single scrolling Configuration page, no card grid — this is
+what you'll most likely see): each section on the page — Environment
+details, Infrastructure, Updates, monitoring, and logging, etc. — has its own
+**Edit** button in its top-right corner. **Environment properties** is a
+subsection *inside* **Environment details** (it sits between "Platform
+details" and "Platform configuration"). To edit it:
+
+1. AWS Console → search bar → **Elastic Beanstalk** (or go directly to
+   **Elastic Beanstalk → Environments** in the left sidebar).
+2. Click the environment name you want to configure — e.g.
+   `suchanaai-api-prod`. Wait for Health to read something other than
+   "Pending"/Grey before continuing — the config UI can be flaky mid-update.
+3. In the **left sidebar**, under the environment's own section (not the
+   top-level "Applications" section), click **Configuration**.
+4. You land directly on one long page. Scroll to the **Environment details**
+   section (usually the first one) and click its **Edit** button, top-right
+   — the one next to the "Environment details" heading itself, *not* the one
+   further down next to "Infrastructure" (that edits instance/network
+   settings, not variables).
+5. On the edit page, scroll down to the **Environment properties** table.
+   Click **Add environment property**, fill in **Name** / **Value** per row
+   from the lists below, repeat per variable.
+6. Scroll to the bottom and click **Apply**. The environment shows
+   "Updating" (Grey) for a minute or two while it restarts with the new
+   values — expected, not a failure.
+
+**Older layout** (a grid of cards titled Software, Instances, Capacity,
+Security, Network, Database, etc.): find the **Software** card specifically
+and click its **Edit** button (top-right corner of that card, not the card
+title) — Environment properties are near the bottom of that edit page.
 
 Full variable lists are in [§14](#14-full-environment-variable-reference);
 the essentials per environment:
 
-**`suchana-web-prod`** — none required at runtime (its config is baked in at
+**`suchanaai-web-prod`** — none required at runtime (its config is baked in at
 *build* time from GitHub Variables — see Step 7). You may still set `PORT`
 explicitly (`3535`) though the image already defaults to it.
 
-**`suchana-api-prod`** (minimum to boot successfully):
+**`suchanaai-api-prod`** (minimum to boot successfully):
 ```
 DATABASE_URL=<from Step 3>
 JWT_SECRET=<openssl rand -hex 32>
 GOOGLE_CLIENT_ID=<Google OAuth client id>
 WEB_ORIGIN=<your web app's public URL>
-AI_SERVICE_URL=<your AI environment's URL, e.g. http://suchana-ai-service-prod.xxxx.ap-south-1.elasticbeanstalk.com>
+AI_SERVICE_URL=<your AI environment's URL, e.g. http://suchanaai-ai-service-prod.eba-byvxix3t.us-east-1.elasticbeanstalk.com>
 ADMIN_EMAILS=<your email>
 ```
 
-**`suchana-ai-service-prod`** (minimum to boot successfully):
+**`suchanaai-ai-service-prod`** (minimum to boot successfully):
 ```
 QDRANT_URL=<from Step 3>
 QDRANT_API_KEY=<from Step 3, if using Qdrant Cloud>
@@ -297,8 +355,8 @@ IAM → **Roles** → **Create role** → **Web identity**.
 - Identity provider: the one you just created.
 - Audience: `sts.amazonaws.com`.
 - After creation, edit the role's **Trust relationships** to restrict it to
-  *this repository's `main` branch* — replace the auto-generated trust
-  policy with:
+  *this repository's `production` environment* — replace the auto-generated
+  trust policy with:
 
 ```json
 {
@@ -307,15 +365,13 @@ IAM → **Roles** → **Create role** → **Web identity**.
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::<YOUR_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "arn:aws:iam::679777944150:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:<YOUR_GITHUB_ORG_OR_USER>/<YOUR_REPO_NAME>:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:<owner>@<owner_id>/<repo>@<repo_id>:environment:production"
         }
       }
     }
@@ -323,9 +379,36 @@ IAM → **Roles** → **Create role** → **Web identity**.
 }
 ```
 
-Replace `<YOUR_ACCOUNT_ID>` and `<YOUR_GITHUB_ORG_OR_USER>/<YOUR_REPO_NAME>`
-(e.g. `ashokabbhattaraii/public-notice-management-system-for-nepal` — check
-`git remote -v` if unsure which remote GitHub Actions actually runs from).
+`679777944150` is this AWS account's ID — already filled in above.
+
+**Important: the `sub` claim is not `repo:<org>/<repo>:ref:refs/heads/main`
+here.** That's the format you'd get for a job with no `environment:` key.
+Every deploy job in `ci-cd.yml` sets `environment: production`, and whenever
+a job declares a GitHub Environment, GitHub swaps the `sub` claim to
+`repo:<owner>@<owner_id>/<repo>@<repo_id>:environment:<env name>` instead —
+branch/ref is no longer part of it at all, and current GitHub tokens embed
+the numeric owner/repo database IDs alongside the names. **Don't guess this
+value** — get the real one from the actual failed run instead of copying the
+pattern above verbatim:
+
+1. Let one deploy job fail at "Configure AWS credentials (OIDC)" (it will,
+   the first time, with `Not authorized to perform
+   sts:AssumeRoleWithWebIdentity` — expected).
+2. In AWS: CloudTrail → Event history → filter by Event name
+   `AssumeRoleWithWebIdentity` → open the matching `AccessDenied` event →
+   `userIdentity.userName` (or `principalId`) is the exact `sub` GitHub
+   sent. Or via CLI:
+   ```bash
+   aws cloudtrail lookup-events \
+     --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity \
+     --max-results 5 --query 'Events[].Username' --output text
+   ```
+3. Paste that exact string into the trust policy's `sub` condition.
+
+This local checkout has two remotes configured (`git remote -v`) — `origin`
+(`ashokabbhattaraii/public-notice-management-system-for-nepal`) and
+`upstream` (`ashokabbhattarai-byte/suchanaai`); only `upstream` is where this
+repo's Actions actually run, which is reflected in the `sub` value above.
 This `sub` condition is the entire security boundary: without it, *any*
 GitHub repo anywhere could assume this role.
 
@@ -333,13 +416,16 @@ Attach these **permissions policies** to the role (Console: managed policies
 are fine to start; tighten to a custom least-privilege policy later once
 things work):
 - `AmazonEC2ContainerRegistryFullAccess` — push images to ECR.
-- `AWSElasticBeanstalkFullAccess` — create app versions and update
+- `AdministratorAccess-AWSElasticBeanstalk` — create app versions and update
   environments (this also covers the S3 bucket Beanstalk itself uses to
-  store versions — you don't create that bucket yourself).
+  store versions — you don't create that bucket yourself). AWS retired the
+  older `AWSElasticBeanstalkFullAccess` policy name; this is its current
+  equivalent.
 
-Name the role something recognizable, e.g. `github-actions-deploy-suchana-ai`,
-and copy its **ARN** (`arn:aws:iam::<account>:role/github-actions-deploy-suchana-ai`)
-— you need it in the next step.
+Name the role something recognizable, e.g. `github-actions-deploy-suchanaai`,
+and copy its **ARN**
+(`arn:aws:iam::679777944150:role/github-actions-deploy-suchanaai`) — you need
+it in the next step.
 
 ---
 
@@ -363,14 +449,14 @@ you only need to set the ones you changed:
 
 | Name | Default if unset |
 |---|---|
-| `AWS_REGION` | `us-east-1` — **set this explicitly to `ap-south-1`** (or your chosen region); the fallback is a generic placeholder, not a recommendation |
-| `ECR_WEB_REPO` | `suchana-web` |
-| `ECR_API_REPO` | `suchana-api` |
-| `ECR_AI_REPO` | `suchana-ai-service` |
-| `EB_APPLICATION_NAME` | `suchana-ai` |
-| `EB_WEB_ENV` | `suchana-web-prod` |
-| `EB_API_ENV` | `suchana-api-prod` |
-| `EB_AI_ENV` | `suchana-ai-service-prod` |
+| `AWS_REGION` | `us-east-1` — **set this explicitly to `us-east-1`** (or your chosen region); the fallback is a generic placeholder, not a recommendation |
+| `ECR_WEB_REPO` | `suchanaai-web` |
+| `ECR_API_REPO` | `suchanaai-api` |
+| `ECR_AI_REPO` | `suchanaai-ai-service` |
+| `EB_APPLICATION_NAME` | `suchanaai` |
+| `EB_WEB_ENV` | `suchanaai-web-prod` |
+| `EB_API_ENV` | `suchanaai-api-prod` |
+| `EB_AI_ENV` | `suchanaai-ai-service-prod` |
 | `NEXT_PUBLIC_APP_URL` | *(empty)* — set to web's public URL |
 | `NEXT_PUBLIC_API_URL` | *(empty)* — set to the API's public URL |
 | `NEXT_PUBLIC_AI_URL` | *(empty)* — set to the AI service's public URL |
@@ -417,9 +503,9 @@ the exact one on the environment's dashboard page. Confirm each service
 independently before wiring them together:
 
 ```bash
-curl -I http://suchana-web-prod.xxxxx.ap-south-1.elasticbeanstalk.com
-curl -I http://suchana-api-prod.xxxxx.ap-south-1.elasticbeanstalk.com/api/docs
-curl -I http://suchana-ai-service-prod.xxxxx.ap-south-1.elasticbeanstalk.com/health
+curl -I http://suchanaai-web-prod.eba-byvxix3t.us-east-1.elasticbeanstalk.com
+curl -I http://suchanaai-api-prod.eba-byvxix3t.us-east-1.elasticbeanstalk.com/api/docs
+curl -I http://suchanaai-ai-service-prod.eba-byvxix3t.us-east-1.elasticbeanstalk.com/health
 ```
 
 Then:
@@ -485,8 +571,8 @@ table only clarifies **where** each one is set for this deployment path.
 | Variable | App | Set where |
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_AI_URL`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` | web | GitHub repo **Variables** (build-time, baked into the JS bundle) |
-| `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS`, `WEB_ORIGIN`, `PUBLIC_SITE_URL`, `AI_SERVICE_URL`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE_NAME`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `APP_URL`, and the rest of `apps/api/.env.example` | api | Beanstalk **environment properties** for `suchana-api-prod` |
-| `QDRANT_URL`, `QDRANT_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENCODE_ZEN_API_KEY`, `HF_TOKEN`, `CORS_ORIGINS`, and the rest of `apps/ai/.env.example` | ai | Beanstalk **environment properties** for `suchana-ai-service-prod` |
+| `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS`, `WEB_ORIGIN`, `PUBLIC_SITE_URL`, `AI_SERVICE_URL`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE_NAME`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `APP_URL`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and the rest of `apps/api/.env.example` | api | Beanstalk **environment properties** for `suchanaai-api-prod`. On Beanstalk specifically, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` can be left unset instead — grant the S3 policy directly to `aws-elasticbeanstalk-ec2-role` and the SDK picks up the instance role automatically (see `docs/AWS_DEPLOYMENT_TROUBLESHOOTING.md` §5 on why this is a separate identity from the GitHub Actions deploy role) |
+| `QDRANT_URL`, `QDRANT_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENCODE_ZEN_API_KEY`, `HF_TOKEN`, `CORS_ORIGINS`, and the rest of `apps/ai/.env.example` | ai | Beanstalk **environment properties** for `suchanaai-ai-service-prod` |
 
 None of the API/AI rows above ever appear in a GitHub Secret, workflow file,
 or Actions log — by design (see `deploy-api`/`deploy-ai`'s comments in

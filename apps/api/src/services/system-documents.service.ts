@@ -1,7 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentStatus } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
+import { S3StorageService } from '../common/storage/s3-storage.service';
 import { DocumentsService } from './documents.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -34,6 +36,7 @@ export class SystemDocumentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
+    private readonly storage: S3StorageService,
     private readonly config: ConfigService,
   ) {}
 
@@ -75,25 +78,19 @@ export class SystemDocumentsService implements OnModuleInit {
       return;
     }
 
-    // Copy file to uploads directory
-    const uploadsDir = path.resolve(projectRoot, 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    const destFilename = `system-${Date.now()}-${def.filename}`;
-    const destPath = path.join(uploadsDir, destFilename);
-    fs.copyFileSync(sourcePath, destPath);
-
-    const stat = fs.statSync(destPath);
+    const buffer = fs.readFileSync(sourcePath);
+    const docId = uuidv4();
+    const storageKey = this.storage.buildDocumentKey(docId, def.filename);
+    await this.storage.uploadBuffer(storageKey, buffer, 'application/pdf');
 
     const document = await this.prisma.document.create({
       data: {
+        id: docId,
         title: def.title,
         filename: def.filename,
         mimeType: 'application/pdf',
-        fileSize: stat.size,
-        filePath: destPath,
+        fileSize: buffer.length,
+        storageKey,
         isSystem: true,
         uploadedBy: null,
       },

@@ -13,7 +13,8 @@ export interface LandingData {
   sourceCount: number
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5005"
+// `||` not `??` — see the identical comment in lib/api.ts.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5005"
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`Request failed: ${res.status}`)

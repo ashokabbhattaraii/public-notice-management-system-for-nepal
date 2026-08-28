@@ -8,9 +8,8 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Document, DocumentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { S3StorageService } from '../common/storage/s3-storage.service';
 import { ListDocumentsDto } from '../dto/list-documents.dto';
-import * as fs from 'fs';
-import * as path from 'path';
 import { firstValueFrom } from 'rxjs';
 import type { Response } from 'express';
 import FormData = require('form-data');
@@ -25,6 +24,7 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
     private readonly config: ConfigService,
+    private readonly storage: S3StorageService,
   ) {
     this.aiServiceUrl =
       this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
@@ -40,11 +40,17 @@ export class DocumentsService {
     filename: string;
     mimeType: string;
     fileSize: number;
-    filePath: string;
+    buffer: Buffer;
     uploadedBy: string;
     fileHash: string;
   }): Promise<Document> {
-    const document = await this.prisma.document.create({ data });
+    const { buffer, ...rest } = data;
+    const storageKey = this.storage.buildDocumentKey(data.id, data.filename);
+    await this.storage.uploadBuffer(storageKey, buffer, data.mimeType);
+
+    const document = await this.prisma.document.create({
+      data: { ...rest, storageKey },
+    });
 
     // Process asynchronously - don't block the upload response
     this.processDocument(document).catch((err) => {
@@ -129,17 +135,8 @@ export class DocumentsService {
       // Continue with local deletion even if AI service fails
     }
 
-    // Delete file from disk
-    try {
-      const fullPath = path.resolve(document.filePath);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
-    } catch (err: any) {
-      this.logger.warn(
-        `Failed to delete file for document ${id}: ${err.message}`,
-      );
-    }
+    // Delete the file from S3 (best-effort — deleteObject swallows its own errors)
+    await this.storage.deleteObject(document.storageKey);
 
     // Delete from database
     await this.prisma.document.delete({ where: { id } });
@@ -323,12 +320,15 @@ export class DocumentsService {
     });
   }
 
-  getFilePath(document: Document): string {
-    const fullPath = path.resolve(document.filePath);
-    if (!fs.existsSync(fullPath)) {
-      throw new NotFoundException('File not found on disk');
+  /** Short-lived signed URL the browser can download/view the file from directly. */
+  async getDownloadUrl(document: Document): Promise<string> {
+    if (!(await this.storage.objectExists(document.storageKey))) {
+      throw new NotFoundException('File not found in storage');
     }
-    return fullPath;
+    return this.storage.getPresignedDownloadUrl(document.storageKey, {
+      filename: document.filename,
+      contentType: document.mimeType,
+    });
   }
 
   async processDocument(document: Document): Promise<void> {
@@ -339,13 +339,13 @@ export class DocumentsService {
     });
 
     try {
-      const fullPath = path.resolve(document.filePath);
-      const fileStream = fs.createReadStream(fullPath);
+      const fileStream = await this.storage.getObjectStream(document.storageKey);
 
       const form = new FormData();
       form.append('file', fileStream, {
         filename: document.filename,
         contentType: document.mimeType,
+        knownLength: document.fileSize,
       });
       form.append('document_id', document.id);
       form.append('title', document.title);

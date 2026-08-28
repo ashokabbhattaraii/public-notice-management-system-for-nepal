@@ -39,6 +39,22 @@ function attachmentLabel(url: string): string {
   }
 }
 
+/**
+ * Routes through this app's own `/api/files/attachment/:id` proxy, which
+ * redirects to the backend's `/attachments/:id/file` — that endpoint caches
+ * the file to S3 on first request and redirects to a presigned URL on every
+ * request after. Always going through the id-based proxy (rather than
+ * branching on whether `storageKey` happens to be populated yet) means the
+ * cache-on-first-view logic lives in exactly one place, server-side.
+ *
+ * The synthetic "legacy" id (built when a notice only has the old single
+ * `attachmentUrl` column and no real Attachment row) has no id to look up,
+ * so it falls back to linking the original external URL directly.
+ */
+function attachmentFileUrl(att: { id: string; url: string }): string {
+  return att.id === "legacy" ? att.url : `/api/files/attachment/${att.id}`
+}
+
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
 }
@@ -352,7 +368,7 @@ function AttachmentSection({
                 </p>
               </div>
               <a
-                href={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                href={attachmentFileUrl(att)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90"
@@ -365,7 +381,7 @@ function AttachmentSection({
             {attachmentKind(att.url) === "image" && (
               <div className="flex justify-center bg-gray-50 p-4">
                 <img
-                  src={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                  src={attachmentFileUrl(att)}
                   alt={att.label || "Attachment preview"}
                   className="max-h-[500px] rounded-lg object-contain"
                 />
@@ -376,7 +392,7 @@ function AttachmentSection({
             {attachmentKind(att.url) === "file" && (att.mimeType?.includes("pdf") || att.url?.toLowerCase().endsWith(".pdf")) && (
               <div className="border-b border-vez-line bg-gray-50 p-4">
                 <iframe
-                  src={att.storageKey ? `/api/files/${att.storageKey}` : att.url}
+                  src={attachmentFileUrl(att)}
                   title={att.label || "PDF Document"}
                   className="h-[600px] w-full rounded-lg border border-vez-line"
                 />

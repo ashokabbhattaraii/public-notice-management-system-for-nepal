@@ -539,6 +539,13 @@ def _ingest_document(
 
     progress.finish(doc_id, chunk_count)
 
+    # apps/api's S3 bucket is now the durable copy of this file — this local
+    # copy only ever existed so extract_text()/embeddings could read it, and
+    # was previously left on disk forever on every successful ingest (an
+    # unbounded local-disk leak, distinct from the failure paths above which
+    # already cleaned up). Delete it now that indexing succeeded.
+    save_path.unlink(missing_ok=True)
+
     return 201, {
         "doc_id": doc_id,
         "text_length": len(text),
@@ -634,6 +641,13 @@ async def _document_status(doc_id: str) -> tuple[int, dict]:
 async def _delete_document(doc_id: str) -> tuple[int, dict]:
     try:
         await asyncio.to_thread(store.delete_document, doc_id)
+        # Defensive, not the common case: the success path in
+        # _ingest_document already deletes its own local copy, but this
+        # catches anything left behind by an older ingest, a race with an
+        # in-flight embed, or a prior failure path that didn't clean up.
+        upload_dir = config.ensure_upload_dir()
+        for path in upload_dir.glob(f"{doc_id}.*"):
+            path.unlink(missing_ok=True)
         return 200, {"doc_id": doc_id, "deleted": True}
     except Exception as e:
         logger.exception("Delete failed for doc_id=%s", doc_id)
