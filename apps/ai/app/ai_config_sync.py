@@ -20,12 +20,69 @@ import asyncio
 import httpx
 
 from app import config
+from app import llm
 from app.logger import get_logger
 
 logger = get_logger(__name__)
 
 _REFRESH_INTERVAL_SECONDS = 180
+# Used only until the first successful pull (see sync_loop).
+_STARTUP_RETRY_SECONDS = 5
 _ENDPOINT = "/internal/ai-config"
+
+
+def _env_key_for(slug: str | None) -> str | None:
+    """Environment-variable credential for a built-in provider slug.
+
+    Keeps existing env-configured deployments working after the registry
+    lands: the admin only needs to enter a key here to *override* or to add a
+    provider the environment knows nothing about.
+    """
+    return {
+        "gemini": config.GEMINI_API_KEY,
+        "groq": config.GROQ_API_KEY,
+        "opencode": config.OPENCODE_ZEN_API_KEY,
+    }.get(slug or "") or None
+
+
+_TEMPERATURE_FIELDS = {
+    "answers": "TEMPERATURE_ANSWERS",
+    "summaries": "TEMPERATURE_SUMMARIES",
+    "conversation": "TEMPERATURE_CONVERSATION",
+}
+
+
+def _apply_temperatures(temperatures: object) -> None:
+    """Mutate config's temperature attributes in place, like the provider
+    registry above — every call site reads `config.TEMPERATURE_*` at call
+    time, so a change lands on the next LLM call with no restart.
+
+    Clamped and type-checked here rather than trusted: this value is passed
+    straight to provider APIs, and an out-of-range one is rejected by the
+    provider, which would surface as every AI call failing at once.
+    """
+    if not isinstance(temperatures, dict):
+        return
+    for field, attribute in _TEMPERATURE_FIELDS.items():
+        raw = temperatures.get(field)
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            logger.warning("AI config sync: ignoring non-numeric %s temperature %r", field, raw)
+            continue
+        clamped = min(max(value, 0.0), 1.0)
+        if clamped != value:
+            logger.warning(
+                "AI config sync: %s temperature %.2f out of range, clamped to %.2f",
+                field,
+                value,
+                clamped,
+            )
+        if getattr(config, attribute) != clamped:
+            logger.info("AI config sync: %s temperature -> %.2f", field, clamped)
+        setattr(config, attribute, clamped)
 
 
 async def refresh_once() -> bool:
@@ -59,45 +116,40 @@ async def refresh_once() -> bool:
         logger.warning("AI config sync: response was not valid JSON")
         return False
 
-    applied = []
+    _apply_temperatures(data.get("temperatures"))
 
-    if data.get("geminiApiKey"):
-        config.GEMINI_API_KEY = data["geminiApiKey"]
-        applied.append("geminiApiKey")
-    if data.get("geminiModel"):
-        config.GEMINI_MODEL = data["geminiModel"]
-        applied.append("geminiModel")
+    providers = data.get("providers")
+    if isinstance(providers, list):
+        # Normalise to the shape llm.py expects. Providers with no key are
+        # kept (so the admin panel can still show them as "not configured");
+        # active_providers() filters them out at dispatch time.
+        normalised = [
+            {
+                "slug": p.get("slug"),
+                "label": p.get("label") or p.get("slug"),
+                "kind": p.get("kind") or "OPENAI_COMPATIBLE",
+                "base_url": p.get("baseUrl"),
+                "model": p.get("model"),
+                # A registry row with no key means "use this service's own env
+                # var", not "this provider is unusable" — otherwise the first
+                # sync would silently disable a deployment that has always run
+                # on env-var credentials.
+                "api_key": p.get("apiKey") or _env_key_for(p.get("slug")),
+                "enabled": bool(p.get("enabled")),
+            }
+            for p in providers
+            if p.get("slug") and p.get("model")
+        ]
+        llm.set_runtime_providers(normalised)
+        usable = [p["slug"] for p in normalised if p["enabled"] and p["api_key"]]
+        logger.info(
+            "AI provider registry synced: %d provider(s), fallback order: %s",
+            len(normalised),
+            " -> ".join(usable) or "(none configured)",
+        )
+        return True
 
-    if data.get("groqApiKey"):
-        config.GROQ_API_KEY = data["groqApiKey"]
-        # Admin sets one key via the UI (no rotation config there), so this
-        # replaces the whole rotation list — an env-configured GROQ_API_KEYS
-        # for multi-key rotation is a power-user path that only applies when
-        # the admin hasn't overridden the key at all.
-        config.GROQ_API_KEYS = [data["groqApiKey"]]
-        applied.append("groqApiKey")
-    if data.get("groqModel"):
-        config.GROQ_MODEL = data["groqModel"]
-        applied.append("groqModel")
-
-    if data.get("openCodeZenApiKey"):
-        config.OPENCODE_ZEN_API_KEY = data["openCodeZenApiKey"]
-        applied.append("openCodeZenApiKey")
-    if data.get("openCodeZenModel"):
-        config.OPENCODE_ZEN_MODEL = data["openCodeZenModel"]
-        applied.append("openCodeZenModel")
-
-    priority = data.get("providerPriority")
-    if priority:
-        parsed = [p.strip() for p in str(priority).split(",") if p.strip()]
-        if parsed:
-            config.LLM_PROVIDER_PRIORITY = parsed
-            applied.append(f"providerPriority({','.join(parsed)})")
-
-    if applied:
-        logger.info("AI config synced from admin settings: %s", ", ".join(applied))
-    else:
-        logger.debug("AI config sync: no admin overrides configured")
+    logger.debug("AI config sync: response contained no provider list")
     return True
 
 
@@ -109,9 +161,23 @@ async def sync_loop() -> None:
         logger.info("AI config sync disabled (INTERNAL_SERVICE_SECRET not set)")
         return
 
+    # Services start in no guaranteed order, so the very first pull often
+    # races the API's own boot ("All connection attempts failed"). Retrying
+    # on the slow steady-state interval would leave this process on stale
+    # env-var config for minutes, so back off quickly until the first
+    # success, then settle into the normal cadence.
+    synced = False
+    while not synced:
+        try:
+            synced = await refresh_once()
+        except Exception:
+            logger.exception("AI config sync cycle crashed unexpectedly")
+        if not synced:
+            await asyncio.sleep(_STARTUP_RETRY_SECONDS)
+
     while True:
+        await asyncio.sleep(_REFRESH_INTERVAL_SECONDS)
         try:
             await refresh_once()
         except Exception:
             logger.exception("AI config sync cycle crashed unexpectedly")
-        await asyncio.sleep(_REFRESH_INTERVAL_SECONDS)

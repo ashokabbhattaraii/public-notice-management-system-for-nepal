@@ -1,11 +1,15 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from "react"
-import { Mail, Phone, MapPin, Send, CheckCircle2, AlertCircle } from "lucide-react"
+import { Mail, Phone, MapPin, Send, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
+import { submitContact, isApiError, isNetworkError } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
+import { RecaptchaV2, resetRecaptcha } from "@/components/ui/recaptcha-v2"
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -14,6 +18,10 @@ export function ContactSection() {
   const formRef = useRef<HTMLFormElement>(null)
   const cardsRef = useRef<HTMLDivElement>(null)
   const headingRef = useRef<HTMLDivElement>(null)
+  const mountedAt = useRef<string>("")
+  const recaptchaSiteKey = (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "").trim()
+
+  const { user } = useAuth()
 
   const [formState, setFormState] = useState({
     name: "",
@@ -21,7 +29,27 @@ export function ContactSection() {
     subject: "",
     message: "",
   })
+  const [honeypot, setHoneypot] = useState("")
+  const [recaptchaToken, setRecaptchaToken] = useState<string>("")
+  const [recaptchaError, setRecaptchaError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState<string | null>(null)
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    mountedAt.current = String(Date.now())
+  }, [])
+
+  useEffect(() => {
+    if (user) {
+      setFormState((prev) => ({
+        ...prev,
+        name: prev.name || user.username || user.name || "",
+        email: prev.email || user.email || "",
+      }))
+    }
+  }, [user])
 
   useEffect(() => {
     if (!sectionRef.current) return
@@ -38,24 +66,8 @@ export function ContactSection() {
     }
 
     const play = () => {
-      // Heading entrance
-      gsap.to(heading, {
-        opacity: 1,
-        y: 0,
-        duration: 0.4,
-        ease: "power3.out",
-      })
-
-      // Form entrance
-      gsap.to(form, {
-        opacity: 1,
-        x: 0,
-        duration: 0.4,
-        ease: "power3.out",
-        delay: 0.2,
-      })
-
-      // Contact cards stagger
+      gsap.to(heading, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" })
+      gsap.to(form, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out", delay: 0.2 })
       gsap.to(Array.from(cards ?? []), {
         opacity: 1,
         y: 0,
@@ -68,57 +80,113 @@ export function ContactSection() {
     }
 
     reset()
-
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            play()
-          } else {
-            reset()
-          }
+          if (entry.isIntersecting) play()
+          else reset()
         })
       },
-      { threshold: 0.15 }
+      { threshold: 0.15 },
     )
-
     observer.observe(sectionRef.current)
     return () => observer.disconnect()
   }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function validate(): boolean {
+    const next: Record<string, string> = {}
+    const n = formState.name.trim()
+    const e = formState.email.trim()
+    const s = formState.subject.trim()
+    const m = formState.message.trim()
+    if (n.length < 2) next.name = "Name must be at least 2 characters"
+    else if (n.length > 100) next.name = "Name too long"
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) next.email = "Enter a valid email"
+    else if (e.length > 255) next.email = "Email too long"
+    if (s.length < 5) next.subject = "Subject must be at least 5 characters"
+    else if (s.length > 200) next.subject = "Subject too long"
+    if (m.length < 10) next.message = "Message must be at least 10 characters"
+    else if (m.length > 5000) next.message = "Message too long"
+    setFieldErrors(next)
+    return Object.keys(next).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Mock submission
-    setStatus("success")
-    setTimeout(() => {
-      setStatus("idle")
-      setFormState({ name: "", email: "", subject: "", message: "" })
-    }, 3000)
+    if (honeypot.trim().length > 0) {
+      setStatus("success")
+      toast.success("Message sent — we'll reply within one business day")
+      setTimeout(() => setStatus("idle"), 3000)
+      return
+    }
+    if (!validate()) return
+    if (recaptchaSiteKey && !recaptchaToken) {
+      setRecaptchaError("Please complete the reCAPTCHA verification.")
+      toast.error("Please complete the reCAPTCHA")
+      return
+    }
+    setLoading(true)
+    setFormError(null)
+    setRecaptchaError(null)
+    setStatus("idle")
+    try {
+      await submitContact({
+        name: formState.name.trim(),
+        email: formState.email.trim(),
+        subject: formState.subject.trim(),
+        message: formState.message.trim(),
+        website: honeypot,
+        hpTimestamp: mountedAt.current,
+        recaptchaToken: recaptchaToken || undefined,
+      })
+      setStatus("success")
+      toast.success("Message sent — we'll reply within one business day")
+      setFormState({
+        name: user?.username ?? user?.name ?? formState.name,
+        email: user?.email ?? formState.email,
+        subject: "",
+        message: "",
+      })
+      setFieldErrors({})
+      setHoneypot("")
+      setRecaptchaToken("")
+      setRecaptchaError(null)
+      resetRecaptcha()
+      setTimeout(() => setStatus("idle"), 4000)
+    } catch (err) {
+      setStatus("error")
+      if (isNetworkError(err)) {
+        setFormError("Couldn't reach the server. Check your connection.")
+        toast.error("Network error — check your connection")
+      } else if (isApiError(err)) {
+        setFormError(err.message)
+        toast.error(err.message)
+      } else if (err instanceof Error) {
+        setFormError(err.message)
+        toast.error(err.message)
+      } else {
+        setFormError("Something went wrong. Please try again.")
+        toast.error("Something went wrong")
+      }
+      setTimeout(() => setStatus("idle"), 4000)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormState({ ...formState, [e.target.name]: e.target.value })
+    if (fieldErrors[e.target.name]) {
+      setFieldErrors((prev) => ({ ...prev, [e.target.name]: "" }))
+    }
+    if (formError) setFormError(null)
+    if (status !== "idle") setStatus("idle")
   }
 
   const contactInfo = [
-    {
-      icon: Mail,
-      label: "Email",
-      value: "support@suchana.ai",
-      href: "mailto:support@suchana.ai",
-    },
-    {
-      icon: Phone,
-      label: "Phone",
-      value: "+977 9800000000",
-      href: "tel:+9779800000000",
-    },
-    {
-      icon: MapPin,
-      label: "Location",
-      value: "Kathmandu, Nepal",
-      href: "#",
-    },
+    { icon: Mail, label: "Email", value: "support@suchana.ai", href: "mailto:support@suchana.ai" },
+    { icon: Phone, label: "Phone", value: "+977 9800000000", href: "tel:+9779800000000" },
+    { icon: MapPin, label: "Location", value: "Kathmandu, Nepal", href: "#" },
   ]
 
   return (
@@ -127,7 +195,6 @@ export function ContactSection() {
       id="contact"
       className="relative py-12 md:py-20 lg:py-24 px-6 md:px-8 lg:px-12 overflow-hidden bg-background"
     >
-      {/* Technical grid */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.02]">
         <svg width="100%" height="100%">
           <defs>
@@ -140,11 +207,9 @@ export function ContactSection() {
       </div>
 
       <div className="relative z-10 max-w-[1280px] mx-auto">
-        {/* Tactical header */}
         <div ref={headingRef} className="mb-12 border-l-2 border-indigo-500 pl-5 relative max-w-3xl">
           <div className="absolute -left-[2px] top-0 w-4 h-px bg-indigo-500" />
           <div className="absolute -left-[2px] bottom-0 w-4 h-px bg-indigo-500" />
-
           <div className="flex items-center gap-2 mb-4">
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full rounded-sm bg-indigo-400 opacity-75 animate-ping" />
@@ -154,11 +219,9 @@ export function ContactSection() {
               [CONTACT_INTERFACE // GET_IN_TOUCH]
             </span>
           </div>
-
           <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-5 leading-tight uppercase tracking-tight">
             Let&apos;s Build <span className="text-indigo-400">Together</span>
           </h2>
-
           <div className="flex gap-4 items-center mt-6">
             <div className="h-0.5 w-16 bg-indigo-500/30 overflow-hidden relative">
               <div className="absolute inset-0 bg-indigo-500 w-full h-full animate-[scanline_2s_linear_infinite]" />
@@ -170,23 +233,28 @@ export function ContactSection() {
         </div>
 
         <div className="grid lg:grid-cols-[1fr_0.9fr] gap-8">
-          {/* Contact Form */}
           <form
             ref={formRef}
             onSubmit={handleSubmit}
+            noValidate
             className="relative bg-card backdrop-blur-xl p-6 md:p-8 border border-border"
           >
-            {/* Corner brackets */}
             <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-indigo-500" />
             <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-indigo-500" />
             <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-indigo-500" />
             <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-indigo-500" />
 
+            {/* Honeypot */}
+            <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
+              <label htmlFor="website_hp_2">Website</label>
+              <input id="website_hp_2" name="website" type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+            </div>
+
             <div className="space-y-5">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Name
+                    Name <span className="text-red-500">*</span>
                   </label>
                   <Input
                     type="text"
@@ -195,12 +263,15 @@ export function ContactSection() {
                     onChange={handleChange}
                     placeholder="Your full name"
                     required
-                    className="h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40"
+                    maxLength={100}
+                    aria-invalid={!!fieldErrors.name}
+                    className={`h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40 ${fieldErrors.name ? "border-red-400" : ""}`}
                   />
+                  {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Email
+                    Email <span className="text-red-500">*</span>
                   </label>
                   <Input
                     type="email"
@@ -209,14 +280,17 @@ export function ContactSection() {
                     onChange={handleChange}
                     placeholder="your@email.com"
                     required
-                    className="h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40"
+                    maxLength={255}
+                    aria-invalid={!!fieldErrors.email}
+                    className={`h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40 ${fieldErrors.email ? "border-red-400" : ""}`}
                   />
+                  {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Subject
+                  Subject <span className="text-red-500">*</span>
                 </label>
                 <Input
                   type="text"
@@ -225,14 +299,20 @@ export function ContactSection() {
                   onChange={handleChange}
                   placeholder="How can we help?"
                   required
-                  className="h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40"
+                  maxLength={200}
+                  aria-invalid={!!fieldErrors.subject}
+                  className={`h-11 bg-background/60 border-border focus-visible:ring-indigo-500/40 ${fieldErrors.subject ? "border-red-400" : ""}`}
                 />
+                {fieldErrors.subject && <p className="mt-1 text-xs text-red-600">{fieldErrors.subject}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Message
-                </label>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="block text-xs font-mono font-semibold uppercase tracking-wider text-muted-foreground">
+                    Message <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-muted-foreground tabular-nums">{formState.message.length}/5000</span>
+                </div>
                 <textarea
                   name="message"
                   value={formState.message}
@@ -240,9 +320,19 @@ export function ContactSection() {
                   placeholder="Tell us more about your inquiry..."
                   required
                   rows={6}
-                  className="w-full px-4 py-3 bg-background/60 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500/40 transition-all resize-none"
+                  maxLength={5000}
+                  aria-invalid={!!fieldErrors.message}
+                  className={`w-full px-4 py-3 bg-background/60 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500/40 transition-all resize-none ${fieldErrors.message ? "border-red-400" : "border-border"}`}
                 />
+                {fieldErrors.message && <p className="mt-1 text-xs text-red-600">{fieldErrors.message}</p>}
               </div>
+
+              {formError && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 text-destructive text-sm font-medium">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
 
               {status === "success" && (
                 <div className="flex items-center gap-2 p-3 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-sm font-medium">
@@ -251,7 +341,33 @@ export function ContactSection() {
                 </div>
               )}
 
-              {status === "error" && (
+              {recaptchaSiteKey ? (
+                <div>
+                  <RecaptchaV2
+                    siteKey={recaptchaSiteKey}
+                    theme="light"
+                    onVerify={(token) => {
+                      setRecaptchaToken(token)
+                      setRecaptchaError(null)
+                    }}
+                    onExpire={() => {
+                      setRecaptchaToken("")
+                      setRecaptchaError("reCAPTCHA expired — please verify again.")
+                    }}
+                    onError={() => {
+                      setRecaptchaToken("")
+                      setRecaptchaError("reCAPTCHA failed to load — please refresh.")
+                    }}
+                  />
+                  {recaptchaError && <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="size-3.5" />{recaptchaError}</p>}
+                </div>
+              ) : (
+                <p className="text-xs text-amber-700 border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+                  reCAPTCHA not configured (set <code>NEXT_PUBLIC_RECAPTCHA_SITE_KEY</code> to enable it).
+                </p>
+              )}
+
+              {status === "error" && !formError && (
                 <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 text-destructive text-sm font-medium">
                   <AlertCircle className="size-4" />
                   <span>Something went wrong. Please try again.</span>
@@ -261,15 +377,16 @@ export function ContactSection() {
               <Button
                 type="submit"
                 size="lg"
-                className="w-full h-12 gap-2 text-sm font-semibold uppercase tracking-wide bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/30 shadow-lg shadow-indigo-500/20"
+                disabled={loading}
+                className="w-full h-12 gap-2 text-sm font-semibold uppercase tracking-wide bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/30 shadow-lg shadow-indigo-500/20 disabled:opacity-60"
               >
-                <Send className="size-4" />
-                Send Message
+                {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {loading ? "Sending…" : "Send Message"}
               </Button>
+              <p className="text-center text-xs text-muted-foreground">We&apos;ll get back within one business day · Max 5 messages/hour</p>
             </div>
           </form>
 
-          {/* Contact Info Cards */}
           <div ref={cardsRef} className="space-y-4">
             {contactInfo.map((item) => {
               const Icon = item.icon
@@ -279,42 +396,29 @@ export function ContactSection() {
                   href={item.href}
                   className="contact-card block relative bg-card backdrop-blur-xl p-6 border border-border group hover:bg-card transition-all duration-300"
                 >
-                  {/* Corner brackets */}
                   <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
                   <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
                   <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
                   <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-                  {/* Hover scan */}
                   <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
                   <div className="relative flex items-center gap-4">
                     <div className="size-12 bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
                       <Icon className="size-5 text-indigo-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                        {item.label}
-                      </p>
-                      <p className="text-base font-medium text-foreground group-hover:text-indigo-400 transition-colors">
-                        {item.value}
-                      </p>
+                      <p className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-1">{item.label}</p>
+                      <p className="text-base font-medium text-foreground group-hover:text-indigo-400 transition-colors">{item.value}</p>
                     </div>
                   </div>
                 </a>
               )
             })}
-
-            {/* Business Hours */}
             <div className="contact-card relative bg-card backdrop-blur-xl p-6 border border-border">
               <div className="absolute top-0 left-0 w-1.5 h-1.5 border-t border-l border-indigo-500" />
               <div className="absolute top-0 right-0 w-1.5 h-1.5 border-t border-r border-indigo-500" />
               <div className="absolute bottom-0 left-0 w-1.5 h-1.5 border-b border-l border-indigo-500" />
               <div className="absolute bottom-0 right-0 w-1.5 h-1.5 border-b border-r border-indigo-500" />
-
-              <p className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Business Hours
-              </p>
+              <p className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground mb-3">Business Hours</p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Sunday - Friday</span>

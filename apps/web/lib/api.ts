@@ -24,13 +24,16 @@ import {
   SettingApplyResult,
   PublicSiteSettings,
   AiHealthSnapshot,
+  AiProvider,
+  AiProviderInput,
+  SystemStatus,
 } from "./types"
 
 // `||` (not `??`) deliberately — an unset GitHub Actions build-time Variable
 // bakes in "" at build time, which is falsy but not null/undefined, so `??`
 // would silently keep the empty string and every request would resolve as a
 // same-origin relative path instead of falling back.
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5005"
 
 const TOKEN_KEY = "pnm_token"
 const TOKEN_COOKIE = "pnm_token"
@@ -676,6 +679,42 @@ export async function fetchAiHealth(): Promise<AiHealthSnapshot> {
   return apiFetch("/admin/ai/health")
 }
 
+// ─── AI provider registry (admin) ────────────────────────────────────────────
+
+/** Live health of every dependency, measured server-side at request time. */
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  return apiFetch("/admin/system/status")
+}
+
+export async function fetchAiProviders(): Promise<AiProvider[]> {
+  return apiFetch("/admin/ai/providers")
+}
+
+export async function createAiProvider(input: AiProviderInput): Promise<AiProvider> {
+  return apiFetch("/admin/ai/providers", { method: "POST", body: JSON.stringify(input) })
+}
+
+export async function updateAiProvider(
+  id: string,
+  input: Partial<AiProviderInput>,
+): Promise<AiProvider> {
+  return apiFetch(`/admin/ai/providers/${id}`, { method: "PUT", body: JSON.stringify(input) })
+}
+
+export async function deleteAiProvider(id: string): Promise<{ id: string; deleted: boolean }> {
+  return apiFetch(`/admin/ai/providers/${id}`, { method: "DELETE" })
+}
+
+/** Persist a new fallback chain — `ids` is every provider, in display order. */
+export async function reorderAiProviders(ids: string[]): Promise<AiProvider[]> {
+  return apiFetch("/admin/ai/providers/order", { method: "PUT", body: JSON.stringify({ ids }) })
+}
+
+/** Probe exactly one provider (the per-card Test button). */
+export async function testAiProvider(id: string): Promise<AiHealthSnapshot> {
+  return apiFetch(`/admin/ai/providers/${id}/health`, { method: "POST", body: JSON.stringify({}) })
+}
+
 /** Public subset (site.title/description) for the footer. */
 export async function fetchPublicSettings(): Promise<PublicSiteSettings> {
   return apiFetch("/public/settings")
@@ -922,6 +961,58 @@ export async function logoutAdminWhatsapp(): Promise<{ loggedOut: boolean }> {
   return apiFetch("/admin/whatsapp/logout", { method: "POST" })
 }
 
+/**
+ * Admin SMTP channel. The password is write-only by design: it is never in a
+ * GET response, only `passwordConfigured` + a masked preview, so this type
+ * has no field that could hold it.
+ */
+export interface EmailChannelConfig {
+  enabled: boolean
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  fromAddress: string
+  fromName: string
+  passwordConfigured: boolean
+  passwordPreview?: string
+  configured: boolean
+  lastTestedAt: string | null
+  lastTestOk: boolean | null
+}
+
+export interface EmailChannelUpdate {
+  enabled?: boolean
+  host?: string
+  port?: number
+  secure?: boolean
+  username?: string
+  /** Omit (or send "") to keep the stored password unchanged. */
+  password?: string
+  fromAddress?: string
+  fromName?: string
+}
+
+export async function fetchEmailChannel(): Promise<EmailChannelConfig> {
+  return apiFetch("/admin/alert-channels/email")
+}
+
+export async function updateEmailChannel(body: EmailChannelUpdate): Promise<EmailChannelConfig> {
+  return apiFetch("/admin/alert-channels/email", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function testEmailChannel(): Promise<{ ok: true; sentTo: string; testedAt: string }> {
+  // A real SMTP handshake plus a send can outlast the default request
+  // ceiling; the API's own connect/socket timeouts cap it at ~30s.
+  return apiFetch("/admin/alert-channels/email/test", {
+    method: "POST",
+    signal: AbortSignal.timeout(45_000),
+  })
+}
+
 export async function correctScrapedItem(
   id: string,
   body: { category?: string; tags?: string[]; aiCategoryConfidence?: number; reClassify?: boolean }
@@ -930,4 +1021,146 @@ export async function correctScrapedItem(
     method: "PATCH",
     body: JSON.stringify(body),
   })
+}
+
+// ─── Admin Users API ───────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string
+  email: string
+  name: string
+  avatarUrl: string | null
+  role: "user" | "admin"
+  status: "active" | "inactive"
+  createdAt: string
+  updatedAt: string
+  lastLoginAt: string | null
+  subscription?: { status: string; plan: { tier: string; name: string } } | null
+  documentsCount?: number
+  alertRulesCount?: number
+}
+
+export interface AdminUsersResponse {
+  data: AdminUser[]
+  meta: { page: number; limit: number; total: number; totalPages: number }
+}
+
+export interface AdminUserFilters {
+  search?: string
+  role?: "user" | "admin"
+  status?: "active" | "inactive"
+  page?: number
+  limit?: number
+  sortBy?: "createdAt" | "lastLoginAt" | "name" | "email"
+  sortOrder?: "asc" | "desc"
+}
+
+export async function fetchAdminUsers(
+  filters: AdminUserFilters = {},
+): Promise<AdminUsersResponse> {
+  const { page = 1, limit = 20, ...rest } = filters
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  for (const [key, value] of Object.entries(rest)) {
+    if (value) params.set(key, String(value))
+  }
+  return apiFetch<AdminUsersResponse>(`/admin/users?${params}`)
+}
+
+export async function fetchAdminUser(id: string): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/admin/users/${id}`)
+}
+
+export async function createAdminUser(input: {
+  email: string
+  name: string
+  role?: "user" | "admin"
+  status?: "active" | "inactive"
+}): Promise<AdminUser> {
+  return apiFetch<AdminUser>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateAdminUser(
+  id: string,
+  patch: Partial<Pick<AdminUser, "email" | "name" | "role" | "status">>,
+): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/admin/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteAdminUser(id: string): Promise<{ deleted: boolean; id: string }> {
+  return apiFetch<{ deleted: boolean; id: string }>(`/admin/users/${id}`, {
+    method: "DELETE",
+  })
+}
+
+// ─── Contact API (public) ───────────────────────────────────────────────
+
+export interface ContactInput {
+  name: string
+  email: string
+  subject: string
+  message: string
+  /** honeypot — must be empty */
+  website?: string
+  hpTimestamp?: string
+  /** Google reCAPTCHA v2 token (g-recaptcha-response) */
+  recaptchaToken?: string
+}
+
+export async function submitContact(input: ContactInput): Promise<{ ok: true; id: string; message: string }> {
+  return apiFetch<{ ok: true; id: string; message: string }>("/contact", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export type ContactMessageStatus = "NEW" | "READ" | "REPLIED" | "ARCHIVED"
+
+export interface ContactMessage {
+  id: string
+  name: string
+  email: string
+  subject: string
+  message: string
+  status: ContactMessageStatus
+  ip: string | null
+  userAgent: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchContactMessages(params: {
+  page?: number
+  limit?: number
+  status?: ContactMessageStatus
+  search?: string
+  sortOrder?: "asc" | "desc"
+} = {}): Promise<{ data: ContactMessage[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
+  const { page = 1, limit = 20, ...rest } = params
+  const q = new URLSearchParams({ page: String(page), limit: String(limit) })
+  for (const [k, v] of Object.entries(rest)) if (v) q.set(k, String(v))
+  return apiFetch(`/admin/contact-messages?${q}`)
+}
+
+export async function fetchContactCounts(): Promise<{ total: number; byStatus: Record<string, number> }> {
+  return apiFetch("/admin/contact-messages/counts")
+}
+
+export async function updateContactStatus(
+  id: string,
+  status: ContactMessageStatus,
+): Promise<ContactMessage> {
+  return apiFetch(`/admin/contact-messages/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  })
+}
+
+export async function deleteContactMessage(id: string): Promise<{ deleted: boolean; id: string }> {
+  return apiFetch(`/admin/contact-messages/${id}`, { method: "DELETE" })
 }

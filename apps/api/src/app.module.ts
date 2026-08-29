@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HttpModule } from '@nestjs/axios';
 import { AuthModule } from './modules/auth.module';
+import { UsersModule } from './modules/users.module';
 import { NoticesModule } from './modules/notices.module';
 import { DocumentsModule } from './modules/documents.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -14,12 +15,18 @@ import { BillingModule } from './modules/billing.module';
 import { EvolutionApiModule } from './integrations/evolution/evolution-api.module';
 import { AlertsModule } from './modules/alerts.module';
 import { NotificationsModule } from './modules/notifications.module';
+import { ContactModule } from './modules/contact.module';
 import { SettingsController, PublicSettingsController, InternalAiConfigController, AdminAiHealthController } from './controllers/settings.controller';
 import { HealthController } from './controllers/health.controller';
 import { MaintenanceMiddleware } from './common/maintenance.middleware';
 import { LoggerModule } from './common/logger';
 import { TokenRevocationModule } from './common/token-revocation.module';
 import { StorageModule } from './common/storage/storage.module';
+import { CryptoModule } from './common/crypto/crypto.module';
+import { AiProvidersService } from './services/ai-providers.service';
+import { AiProvidersController } from './controllers/ai-providers.controller';
+import { AdminUsersController } from './controllers/admin-users.controller';
+import { AdminSystemController } from './controllers/admin-system.controller';
 
 @Module({
   imports: [
@@ -32,8 +39,10 @@ import { StorageModule } from './common/storage/storage.module';
     TokenRevocationModule,
     PrismaModule,
     StorageModule,
+    CryptoModule,
     SettingsModule,
     EvolutionApiModule,
+    UsersModule,
     AuthModule,
     NoticesModule,
     DocumentsModule,
@@ -42,6 +51,7 @@ import { StorageModule } from './common/storage/storage.module';
     ScrapingModule,
     AlertsModule,
     NotificationsModule,
+    ContactModule,
     BillingModule,
   ],
   controllers: [
@@ -50,7 +60,11 @@ import { StorageModule } from './common/storage/storage.module';
     PublicSettingsController,
     InternalAiConfigController,
     AdminAiHealthController,
+    AiProvidersController,
+    AdminUsersController,
+    AdminSystemController,
   ],
+  providers: [AiProvidersService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

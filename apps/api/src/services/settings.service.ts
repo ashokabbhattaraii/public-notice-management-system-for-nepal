@@ -1,8 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { CronJob } from 'cron';
-import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { SecretCryptoService } from '../common/crypto/secret-crypto.service';
 
 /**
  * Setting-type contract. `cron` is validated with the same `cron` library the
@@ -87,9 +86,9 @@ export class SettingsService implements OnModuleInit {
     },
     {
       id: 'ai',
-      label: 'AI & Models',
+      label: 'AI behaviour',
       description:
-        'LLM provider API keys and model selection, applied to the AI service without a redeploy. Keys are encrypted at rest and never shown again once saved.',
+        'Sampling temperature per task. Applied by the AI service on its next config poll (within ~3 minutes) — no redeploy.',
     },
   ];
 
@@ -197,6 +196,48 @@ export class SettingsService implements OnModuleInit {
       default: "Nepal's centralized repository for public government notices.",
       placeholder: "Nepal's centralized repository for public government notices.",
     },
+    // Temperature is split by task rather than exposed as one global number:
+    // the same value that makes a chat reply feel natural makes a factual
+    // answer drift. Structured/extraction calls (classification, JSON schema
+    // detection, scraping) are deliberately NOT here — they are pinned at 0.0
+    // in the AI service, because sampling on those produces malformed output
+    // and mis-categorised notices, not "more creative" ones.
+    {
+      key: 'ai.temperature.answers',
+      group: 'ai',
+      label: 'Answer temperature',
+      description:
+        'Chatbot answers, notice Q&A and document RAG. Lower is more literal and repeatable — raise it only if answers read too terse. Above ~0.7 the model starts filling gaps with plausible-sounding detail that is not in the notice.',
+      type: 'number',
+      default: '0.4',
+      min: 0,
+      max: 1,
+      step: 0.1,
+    },
+    {
+      key: 'ai.temperature.summaries',
+      group: 'ai',
+      label: 'Summary temperature',
+      description:
+        'Notice summarization, key-fact extraction and tagging during scraping. Keep low: these summaries are shown as fact on notice cards and are matched against alert rules.',
+      type: 'number',
+      default: '0.2',
+      min: 0,
+      max: 1,
+      step: 0.1,
+    },
+    {
+      key: 'ai.temperature.conversation',
+      group: 'ai',
+      label: 'Conversational temperature',
+      description:
+        'Greetings and "nothing found" replies — no facts are asserted here, so a higher value just keeps the wording from repeating.',
+      type: 'number',
+      default: '0.9',
+      min: 0,
+      max: 1,
+      step: 0.1,
+    },
     {
       key: 'maintenance.enabled',
       group: 'site',
@@ -206,76 +247,6 @@ export class SettingsService implements OnModuleInit {
       type: 'boolean',
       default: 'false',
     },
-    {
-      key: 'ai.providerPriority',
-      group: 'ai',
-      label: 'Provider priority & fallback',
-      description:
-        'Order in which LLM providers are tried — the first one that answers wins, the rest are fallbacks. Drag to reorder; switch a provider off to stop it being used at all without deleting its key.',
-      type: 'order',
-      default: 'gemini,groq,opencode',
-      options: [
-        { value: 'gemini', label: 'Google Gemini' },
-        { value: 'groq', label: 'Groq' },
-        { value: 'opencode', label: 'OpenCode Zen' },
-      ],
-    },
-    {
-      key: 'ai.geminiApiKey',
-      group: 'ai',
-      label: 'Gemini API key',
-      description:
-        'Primary LLM provider for chat answers, notice summaries and classification. Get a key at aistudio.google.com. Leave unset to use this server\'s GEMINI_API_KEY environment variable instead.',
-      type: 'secret',
-      default: '',
-      placeholder: 'AIza…',
-    },
-    {
-      key: 'ai.geminiModel',
-      group: 'ai',
-      label: 'Gemini model',
-      description: 'Model name passed to the Gemini generateContent API.',
-      type: 'text',
-      default: 'gemini-3.6-flash',
-      placeholder: 'gemini-3.6-flash',
-    },
-    {
-      key: 'ai.groqApiKey',
-      group: 'ai',
-      label: 'Groq API key',
-      description:
-        'Fallback LLM provider, tried when Gemini fails or is unconfigured. Get a key at console.groq.com. Leave unset to use this server\'s GROQ_API_KEY environment variable instead.',
-      type: 'secret',
-      default: '',
-      placeholder: 'gsk_…',
-    },
-    {
-      key: 'ai.groqModel',
-      group: 'ai',
-      label: 'Groq model',
-      description: 'Model name passed to the Groq chat completions API.',
-      type: 'text',
-      default: 'openai/gpt-oss-120b',
-      placeholder: 'openai/gpt-oss-120b',
-    },
-    {
-      key: 'ai.openCodeZenApiKey',
-      group: 'ai',
-      label: 'OpenCode Zen API key',
-      description:
-        'Third-tier free fallback, tried only when both Gemini and Groq fail or are unconfigured.',
-      type: 'secret',
-      default: '',
-    },
-    {
-      key: 'ai.openCodeZenModel',
-      group: 'ai',
-      label: 'OpenCode Zen model',
-      description: 'Model name passed to the OpenCode Zen chat completions API.',
-      type: 'text',
-      default: 'deepseek-v4-flash-free',
-      placeholder: 'deepseek-v4-flash-free',
-    },
   ];
 
   private readonly definitionByKey = new Map(
@@ -284,53 +255,15 @@ export class SettingsService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    private readonly crypto: SecretCryptoService,
   ) {}
 
-  // ── Secret encryption (AES-256-GCM) ─────────────────────────────────────
-  //
-  // API keys are never stored in plaintext. The key column already holds
-  // arbitrary strings (`app_settings.value`), so the ciphertext just goes in
-  // that same column — no schema change needed. Format: "v1:<iv>:<tag>:<ct>",
-  // each part base64. GCM's auth tag means a tampered row fails to decrypt
-  // loudly rather than silently returning garbage.
-
-  private encryptionKey(): Buffer {
-    const raw = this.config.get<string>('SETTINGS_ENCRYPTION_KEY');
-    if (!raw) {
-      throw new Error(
-        'SETTINGS_ENCRYPTION_KEY is not configured on this server — cannot store or read secret settings.',
-      );
-    }
-    const key = Buffer.from(raw, 'base64');
-    if (key.length !== 32) {
-      throw new Error('SETTINGS_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
-    }
-    return key;
-  }
-
   private encryptSecret(plain: string): string {
-    const key = this.encryptionKey();
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return ['v1', iv.toString('base64'), tag.toString('base64'), ciphertext.toString('base64')].join(':');
+    return this.crypto.encrypt(plain);
   }
 
   private decryptSecret(stored: string): string {
-    const [version, ivB64, tagB64, dataB64] = stored.split(':');
-    if (version !== 'v1' || !ivB64 || !tagB64 || !dataB64) {
-      throw new Error('Unrecognized secret encoding.');
-    }
-    const key = this.encryptionKey();
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    const plain = Buffer.concat([
-      decipher.update(Buffer.from(dataB64, 'base64')),
-      decipher.final(),
-    ]);
-    return plain.toString('utf8');
+    return this.crypto.decrypt(stored);
   }
 
   /** Migrate the pre-settings-page `auto_scraping` row into the new key. */

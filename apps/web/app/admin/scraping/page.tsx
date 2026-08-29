@@ -1253,29 +1253,66 @@ function AdminScrapingPageContent() {
                                 </td>
                               </tr>
                               {isExpanded && hasFailureDetail && (
-                                <tr className="border-b border-vez-line/60 bg-red-50/40 last:border-0">
+                                <tr className="border-b border-vez-line/60 bg-vez-surface/50 last:border-0">
                                   <td colSpan={7} className="px-3 py-3">
-                                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-red-700">
-                                      {run.failedUrls!.length} page(s)/URL(s) failed
-                                    </p>
-                                    <ul className="max-h-48 space-y-2 overflow-y-auto text-xs">
-                                      {run.failedUrls!.map((f, i) => (
-                                        <li key={i} className="rounded-[10px] bg-white px-3 py-2">
-                                          <span className="mr-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-red-700">
-                                            {f.stage}
-                                          </span>
-                                          <a
-                                            href={f.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="break-all text-vez-navy underline"
-                                          >
-                                            {f.url}
-                                          </a>
-                                          <p className="mt-1 text-vez-mute">{f.error}</p>
-                                        </li>
-                                      ))}
-                                    </ul>
+                                    {(() => {
+                                      // Rows written before outcome existed have no
+                                      // field — treat those as failures.
+                                      const issues = run.failedUrls!
+                                      const failed = issues.filter((f) => (f.outcome ?? "failed") === "failed")
+                                      const skipped = issues.filter((f) => f.outcome === "skipped")
+                                      return (
+                                        <>
+                                          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-wide">
+                                            {failed.length > 0 && (
+                                              <span className="text-red-700">{failed.length} failed</span>
+                                            )}
+                                            {skipped.length > 0 && (
+                                              <span className="text-vez-mute">{skipped.length} skipped</span>
+                                            )}
+                                            <button
+                                              onClick={() => {
+                                                const text = issues
+                                                  .map((f) => `${(f.outcome ?? "failed").toUpperCase()}\t${f.stage}\t${f.url}\t${f.error}`)
+                                                  .join("\n")
+                                                void navigator.clipboard.writeText(text)
+                                              }}
+                                              className="ml-auto rounded-full border border-vez-line bg-white px-2.5 py-1 text-[10px] normal-case tracking-normal text-vez-ink transition-colors hover:bg-vez-surface"
+                                              title="Copy every URL with its stage and reason, for auditing offline"
+                                            >
+                                              Copy all
+                                            </button>
+                                          </div>
+                                          <ul className="max-h-64 space-y-2 overflow-y-auto text-xs">
+                                            {[...failed, ...skipped].map((f, i) => {
+                                              const isSkip = f.outcome === "skipped"
+                                              return (
+                                                <li key={i} className="rounded-[10px] bg-white px-3 py-2">
+                                                  <span
+                                                    className={`mr-1.5 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+                                                      isSkip
+                                                        ? "bg-vez-line/50 text-vez-mute"
+                                                        : "bg-red-100 text-red-700"
+                                                    }`}
+                                                  >
+                                                    {isSkip ? "skipped" : "failed"} · {f.stage}
+                                                  </span>
+                                                  <a
+                                                    href={f.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="break-all text-vez-navy underline"
+                                                  >
+                                                    {f.url}
+                                                  </a>
+                                                  <p className="mt-1 text-vez-mute">{f.error}</p>
+                                                </li>
+                                              )
+                                            })}
+                                          </ul>
+                                        </>
+                                      )
+                                    })()}
                                   </td>
                                 </tr>
                               )}

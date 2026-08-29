@@ -22,6 +22,7 @@ better than a per-site body selector would.
 """
 
 import asyncio
+import random
 import json
 import re
 from dataclasses import dataclass
@@ -489,16 +490,152 @@ def _record_failure(
     run-level error string or a line buried in this service's stdout log."""
     if failures is None:
         return
-    failures.append({"url": url, "stage": stage, "error": error or "Unknown error"})
+    failures.append(
+        {"url": url, "stage": stage, "error": error or "Unknown error", "outcome": "failed"}
+    )
+
+
+# A skip is not an error — the crawler deliberately declined the URL — but it
+# is the other half of "why isn't this notice on the site?". Recording it with
+# the exact URL and reason is what makes a run auditable: previously these
+# were counted only (`rejected += 1`) or logged at debug level, so an admin
+# could see that 40 URLs were dropped but never which ones or why.
+_SKIP_REASONS = {
+    "already_scraped": "Already scraped in an earlier run",
+    "not_article_url": "URL did not look like an article/notice page",
+    "no_title": "No usable title could be extracted",
+    "duplicate_in_run": "Duplicate URL within this run",
+}
+
+
+def _issue_summary(issues: list[dict]) -> str:
+    """Trailing summary fragment, e.g. ", 3 failed, 41 skipped"."""
+    failed, skipped = _count_outcomes(issues)
+    parts = []
+    if failed:
+        parts.append(f"{failed} failed")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    return (", " + ", ".join(parts)) if parts else ""
+
+
+def _count_outcomes(issues: list[dict]) -> tuple[int, int]:
+    """(failed, skipped) — the two are reported separately because a skip is a
+    deliberate decision, not a problem to chase."""
+    failed = sum(1 for i in issues if i.get("outcome", "failed") == "failed")
+    return failed, len(issues) - failed
+
+
+def _record_skip(
+    failures: list[dict] | None, url: str, stage: str, reason: str, detail: str | None = None
+) -> None:
+    if failures is None:
+        return
+    failures.append(
+        {
+            "url": url,
+            "stage": stage,
+            "error": detail or _SKIP_REASONS.get(reason, reason),
+            "outcome": "skipped",
+            "reason": reason,
+        }
+    )
+
+
+# Failures that are worth another attempt: the page was never actually
+# reached, so nothing about the site says "no". `ERR_NETWORK_CHANGED` is the
+# common one in practice — it means *this machine's* network moved under the
+# browser (wifi handoff, VPN toggle, interface change), not that the remote
+# site refused us. Without a retry a single flap silently drops that URL from
+# the whole run, which is what made scrapes look randomly incomplete.
+_TRANSIENT_CRAWL_ERRORS = (
+    "err_network_changed",
+    "err_internet_disconnected",
+    "err_connection_reset",
+    "err_connection_closed",
+    "err_connection_refused",
+    "err_connection_timed_out",
+    "err_name_not_resolved",
+    "err_timed_out",
+    "err_empty_response",
+    "err_socket_not_connected",
+    "err_address_unreachable",
+    "timeout",
+    "timed out",
+    "502",
+    "503",
+    "504",
+)
+
+_CRAWL_MAX_ATTEMPTS = 3
+_CRAWL_BACKOFF_BASE_SECONDS = 2.0
+
+
+def _is_transient_crawl_error(message: str | None) -> bool:
+    if not message:
+        return False
+    lowered = message.lower()
+    return any(marker in lowered for marker in _TRANSIENT_CRAWL_ERRORS)
+
+
+async def _arun_with_retry(
+    crawler: AsyncWebCrawler, url: str, config: CrawlerRunConfig, what: str
+):
+    """`crawler.arun` with bounded retries for transient network failures.
+
+    Permanent outcomes (404, a real block, malformed page) are returned on the
+    first attempt — retrying those just wastes time and hammers the source.
+    Backoff is exponential with jitter so a site that briefly wobbled isn't hit
+    by every worker in lockstep.
+
+    crawl4ai signals failure two ways — a falsy `result.success` and a raised
+    exception — so both are funnelled through the same decision here.
+    """
+    last_error: str | None = None
+    result = None
+
+    for attempt in range(1, _CRAWL_MAX_ATTEMPTS + 1):
+        try:
+            result = await crawler.arun(url=url, config=config)
+            if result.success:
+                if attempt > 1:
+                    logger.info("%s succeeded for %s on attempt %d", what, url, attempt)
+                return result
+            last_error = result.error_message
+        except Exception as e:  # noqa: BLE001 — classified immediately below
+            # An exception leaves no result object for the caller to inspect.
+            last_error = str(e)
+            result = None
+
+        if attempt == _CRAWL_MAX_ATTEMPTS or not _is_transient_crawl_error(last_error):
+            break
+
+        delay = _CRAWL_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)) + random.uniform(0, 0.75)
+        logger.info(
+            "%s hit a transient error for %s (attempt %d/%d), retrying in %.1fs: %.120s",
+            what, url, attempt, _CRAWL_MAX_ATTEMPTS, delay, last_error,
+        )
+        await asyncio.sleep(delay)
+
+    if last_error:
+        logger.warning(
+            "%s gave up on %s after %d attempt(s): %.160s", what, url, attempt, last_error
+        )
+    # A failed-but-present result is returned so callers can surface the site's
+    # own error_message; None means the call raised and there is nothing to read.
+    return result
 
 
 async def _fetch_raw_html(
     crawler: AsyncWebCrawler, url: str, failures: list[dict] | None = None
 ) -> str | None:
-    result = await crawler.arun(
-        url=url,
-        config=CrawlerRunConfig(cache_mode=CacheMode.BYPASS),
+    result = await _arun_with_retry(
+        crawler, url, CrawlerRunConfig(cache_mode=CacheMode.BYPASS), "Raw fetch"
     )
+    if result is None:
+        logger.warning("Raw fetch failed for %s after retries", url)
+        _record_failure(failures, url, "raw_fetch", "Network error after retries")
+        return None
     if not result.success:
         logger.warning("Raw fetch failed for %s: %s", url, result.error_message)
         _record_failure(failures, url, "raw_fetch", result.error_message)
@@ -509,13 +646,18 @@ async def _fetch_raw_html(
 async def _extract_with_schema(
     crawler: AsyncWebCrawler, url: str, schema: dict, failures: list[dict] | None = None
 ) -> list[dict]:
-    result = await crawler.arun(
-        url=url,
-        config=CrawlerRunConfig(
+    result = await _arun_with_retry(
+        crawler,
+        url,
+        CrawlerRunConfig(
             extraction_strategy=JsonCssExtractionStrategy(schema),
             cache_mode=CacheMode.BYPASS,
         ),
+        "Listing crawl",
     )
+    if result is None:
+        _record_failure(failures, url, "listing", "Network error after retries")
+        return []
     if not result.success:
         logger.warning("Listing crawl failed for %s: %s", url, result.error_message)
         _record_failure(failures, url, "listing", result.error_message)
@@ -706,10 +848,12 @@ async def _crawl_detail_generic(
     crawler: AsyncWebCrawler, url: str, base_url: str, failures: list[dict] | None = None
 ) -> dict | None:
     """Fetch an article/detail page generically (no per-site schema)."""
-    result = await crawler.arun(
-        url=url,
-        config=CrawlerRunConfig(cache_mode=CacheMode.BYPASS),
+    result = await _arun_with_retry(
+        crawler, url, CrawlerRunConfig(cache_mode=CacheMode.BYPASS), "Detail crawl"
     )
+    if result is None:
+        _record_failure(failures, url, "detail", "Network error after retries")
+        return None
     if not result.success:
         logger.warning("Detail crawl failed for %s: %s", url, result.error_message)
         _record_failure(failures, url, "detail", result.error_message)
@@ -1250,7 +1394,13 @@ _MAX_SITEMAP_CANDIDATES = 15
 _MAX_SITEMAP_INDEX_FETCHES = 20
 
 _SITEMAP_USER_AGENT = "PublicNoticeManagementBot/1.0 (+sitemap checker)"
-_SITEMAP_TIMEOUT = 20.0
+# Split rather than one scalar: a single `timeout=20.0` applies 20s to the
+# *connect* phase too, so probing a host that simply doesn't answer burned
+# 20s on /robots.txt and another 20s on /sitemap.xml — a 40s request for a
+# site that was never reachable. A host that hasn't completed a TCP handshake
+# in 5s is down; reads stay generous because sitemaps can be large and are
+# often generated on demand.
+_SITEMAP_TIMEOUT = httpx.Timeout(20.0, connect=5.0, pool=5.0)
 
 # Numeric-id or content-ish path segments mark a URL as an article detail
 # page rather than a landing/section page (used by the article-ratio check).
@@ -1313,8 +1463,19 @@ def _iter_sitemap_locs(root) -> list[str]:
     return locs
 
 
+class _HostUnreachable(Exception):
+    """The host never completed a connection — as opposed to answering with an
+    error. Lets detect_sitemap skip further probes against a dead host instead
+    of paying the timeout again for each one."""
+
+
 async def _fetch_text(url: str) -> str | None:
-    """One polite GET. Plain httpx — no Playwright, no crawl4ai."""
+    """One polite GET. Plain httpx — no Playwright, no crawl4ai.
+
+    Raises _HostUnreachable when the host itself never answered; returns None
+    for every other failure (HTTP error, malformed response), which callers
+    treat as "no sitemap here" rather than "site is down".
+    """
     try:
         async with httpx.AsyncClient(
             timeout=_SITEMAP_TIMEOUT, follow_redirects=True
@@ -1327,7 +1488,17 @@ async def _fetch_text(url: str) -> str | None:
             logger.info("Sitemap fetch %s -> HTTP %d", url, response.status_code)
             return None
         return response.text
+    except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+        # Routine for a site that is down, firewalled, or blocking our UA —
+        # a one-line warning, not the ~60-line httpx traceback this used to
+        # dump into the logs on every unreachable government portal.
+        logger.warning("Sitemap fetch could not reach %s (%s)", url, type(e).__name__)
+        raise _HostUnreachable(url) from e
+    except httpx.HTTPError as e:
+        logger.warning("Sitemap fetch failed for %s (%s)", url, type(e).__name__)
+        return None
     except Exception:
+        # Genuinely unexpected — keep the traceback for this one.
         logger.warning("Sitemap fetch failed for %s", url, exc_info=True)
         return None
 
@@ -1336,7 +1507,13 @@ async def _fetch_sitemap(url: str) -> tuple[str, list[str]] | None:
     """Fetch + parse one sitemap file. Returns (kind, locs) where kind is
     'urlset' (leaf article URLs) or 'sitemapindex' (child sitemap URLs), or
     None on any failure (HTTP error, non-XML, empty)."""
-    text = await _fetch_text(url)
+    try:
+        text = await _fetch_text(url)
+    except _HostUnreachable:
+        # Contained here so this function keeps its "None on any failure"
+        # contract — its four call sites all branch on None. Only
+        # detect_sitemap's first probe cares about the distinction.
+        return None
     if not text:
         return None
     try:
@@ -1370,7 +1547,14 @@ async def detect_sitemap(base_url: str) -> str | None:
     base = base_url.rstrip("/")
 
     candidates: list[str] = []
-    robots = await _fetch_text(f"{base}/robots.txt")
+    try:
+        robots = await _fetch_text(f"{base}/robots.txt")
+    except _HostUnreachable:
+        # The host didn't answer at all, so probing /sitemap.xml would only
+        # buy a second identical timeout. Bail out on the first signal.
+        logger.info("Host unreachable, skipping sitemap detection for %s", base)
+        return None
+
     if robots:
         for line in robots.splitlines():
             stripped = line.strip()
@@ -1381,8 +1565,6 @@ async def detect_sitemap(base_url: str) -> str | None:
 
     if not candidates:
         root_sitemap = f"{base}/sitemap.xml"
-        if "Sitemap: " in (robots or ""):
-            pass  # covered above
         fetched = await _fetch_sitemap(root_sitemap)
         if fetched is not None:
             candidates.append(root_sitemap)
@@ -1689,6 +1871,7 @@ async def scrape_source(
                     # "(untitled) / Other / —" the admin table was full of.
                     if not _looks_like_title(title):
                         logger.debug("Skipping untitled row: %s", source_url)
+                        _record_skip(failures, source_url, "listing", "no_title")
                         rejected_on_page += 1
                         new_rows_on_page -= 1
                         if source_url not in known_urls:
@@ -1748,7 +1931,7 @@ async def scrape_source(
 
     report(
         f"Scrape complete — {len(items)} item(s) total"
-        + (f", {len(failures)} page(s)/URL(s) failed" if failures else "")
+        + _issue_summary(failures)
     )
     logger.info(
         "Scrape produced %d item(s) for base_url=%s categories=%s (%d failure(s))",
@@ -1833,11 +2016,13 @@ async def scrape_sitemap_urls(
                 continue
             if source_url in known_urls:
                 report(f"Skipping already-scraped: {source_url[:80]}")
+                _record_skip(failures, source_url, "sitemap", "already_scraped")
                 continue
             # Same admission control as the listing crawl: a sitemap lists
             # every page a site has, including contact and category pages.
             if not _is_probable_article_url(source_url, base_url, set()):
                 rejected += 1
+                _record_skip(failures, source_url, "sitemap", "not_article_url")
                 continue
             seen_urls.add(source_url)
 
@@ -1875,6 +2060,7 @@ async def scrape_sitemap_urls(
             if not _looks_like_title(title):
                 logger.debug("Skipping untitled sitemap URL: %s", source_url)
                 rejected += 1
+                _record_skip(failures, source_url, "sitemap", "no_title")
                 continue
 
             slug_category, source_slug = _infer_category_from_slug(source_url)
@@ -1911,7 +2097,7 @@ async def scrape_sitemap_urls(
     report(
         f"Sitemap scrape complete — {len(items)} item(s) total"
         + (f", {rejected} URL(s) rejected (not a notice)" if rejected else "")
-        + (f", {len(failures)} URL(s) failed to fetch" if failures else "")
+        + _issue_summary(failures)
     )
     logger.info(
         "Sitemap scrape produced %d item(s) from %d URL(s) for base_url=%s (%d failure(s))",

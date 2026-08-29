@@ -86,6 +86,28 @@ LLM_PROVIDER_PRIORITY: list[str] = [
 # practice: irrelevant hits ~0.76-0.78, relevant ~0.82+.
 RAG_SCORE_THRESHOLD: float = float(_env("RAG_SCORE_THRESHOLD", "0.78"))
 
+# Same idea for the notice chatbot, kept separate because its questions are
+# often cross-lingual (English question, Nepali notice), which scores a little
+# lower than same-language matches even when the notice is exactly right.
+NOTICE_SCORE_THRESHOLD: float = float(_env("NOTICE_SCORE_THRESHOLD", "0.78"))
+# Hits more than this far below the best hit are dropped even if they clear the
+# floor: once one notice clearly answers the question, the long tail behind it
+# is what makes an answer drift off-topic.
+NOTICE_SCORE_MARGIN: float = float(_env("NOTICE_SCORE_MARGIN", "0.06"))
+
+# ── Sampling temperature, per task ────────────────────────────────────────
+# These are fallback defaults only: the admin panel's values arrive via
+# ai_config_sync and overwrite them in place at runtime. Split by task because
+# one global number cannot serve both a factual answer and a greeting.
+#
+# Extraction-style calls (classify_intent, notice analysis JSON, the scraper's
+# schema detection) stay pinned at 0.0 in code and are intentionally not
+# admin-tunable — sampling there yields malformed JSON and mis-categorised
+# notices, which is a correctness bug, not a style preference.
+TEMPERATURE_ANSWERS: float = float(_env("TEMPERATURE_ANSWERS", "0.4"))
+TEMPERATURE_SUMMARIES: float = float(_env("TEMPERATURE_SUMMARIES", "0.2"))
+TEMPERATURE_CONVERSATION: float = float(_env("TEMPERATURE_CONVERSATION", "0.9"))
+
 TESSERACT_LANG: str = _env("TESSERACT_LANG", "nep+eng")
 
 # Process-wide cap on concurrent OCR jobs (Tesseract + page rendering), shared

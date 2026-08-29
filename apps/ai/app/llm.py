@@ -161,7 +161,7 @@ async def generate_answer(
         },
     ]
 
-    answer = await _llm_chat(messages, max_tokens=1024, temperature=0.7)
+    answer = await _llm_chat(messages, max_tokens=1024, temperature=config.TEMPERATURE_ANSWERS)
     if answer is None:
         return _extractive_fallback(question, context_chunks)
     return answer
@@ -187,7 +187,7 @@ async def generate_chat(
             },
             {"role": "user", "content": message},
         ]
-        answer = await _llm_chat(messages, max_tokens=150, temperature=0.9)
+        answer = await _llm_chat(messages, max_tokens=150, temperature=config.TEMPERATURE_CONVERSATION)
         if answer:
             return answer
 
@@ -204,7 +204,7 @@ async def generate_no_results(question: str, language: str = "en") -> str:
             },
             {"role": "user", "content": question},
         ]
-        answer = await _llm_chat(messages, max_tokens=150, temperature=0.9)
+        answer = await _llm_chat(messages, max_tokens=150, temperature=config.TEMPERATURE_CONVERSATION)
         if answer:
             return answer
 
@@ -239,108 +239,102 @@ async def classify_intent(message: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-# One entry per supported provider. Keyed by the stable id used in
-# config.LLM_PROVIDER_PRIORITY and in the admin settings panel, so the
-# ordering an admin drags into place maps straight onto dispatch order here.
-PROVIDERS: tuple[str, ...] = ("gemini", "groq", "opencode")
+# ── Dynamic provider registry ──────────────────────────────────────────────
+#
+# Providers are no longer hardcoded: apps/api owns an `ai_providers` table an
+# admin can add to, and ai_config_sync pushes the resolved list in here. Each
+# entry: {slug, label, kind, base_url, model, api_key, enabled}.
+#
+# `kind` selects the wire format — OPENAI_COMPATIBLE covers Groq, OpenRouter,
+# Together, DeepSeek, vLLM, Ollama and most others; GEMINI has its own shape.
+# The env-var built-ins below are the fallback until the first sync lands, so
+# a deployment with no API reachable still answers.
 
-PROVIDER_LABELS: dict[str, str] = {
-    "gemini": "Google Gemini",
-    "groq": "Groq",
-    "opencode": "OpenCode Zen",
-}
-
-
-def provider_api_key(provider: str) -> str:
-    return {
-        "gemini": config.GEMINI_API_KEY,
-        "groq": config.GROQ_API_KEY,
-        "opencode": config.OPENCODE_ZEN_API_KEY,
-    }.get(provider, "")
+RUNTIME_PROVIDERS: list[dict] = []
 
 
-def provider_model(provider: str) -> str:
-    return {
-        "gemini": config.GEMINI_MODEL,
-        "groq": config.GROQ_MODEL,
-        "opencode": config.OPENCODE_ZEN_MODEL,
-    }.get(provider, "")
+def _env_fallback_providers() -> list[dict]:
+    """Built-ins from environment variables, used until the registry syncs."""
+    out = []
+    if config.GEMINI_API_KEY:
+        out.append({
+            "slug": "gemini", "label": "Google Gemini", "kind": "GEMINI",
+            "base_url": None, "model": config.GEMINI_MODEL,
+            "api_key": config.GEMINI_API_KEY, "enabled": True,
+        })
+    if config.GROQ_API_KEY:
+        out.append({
+            "slug": "groq", "label": "Groq", "kind": "OPENAI_COMPATIBLE",
+            "base_url": GROQ_API_URL, "model": config.GROQ_MODEL,
+            "api_key": config.GROQ_API_KEY, "enabled": True,
+        })
+    if config.OPENCODE_ZEN_API_KEY:
+        out.append({
+            "slug": "opencode", "label": "OpenCode Zen", "kind": "OPENAI_COMPATIBLE",
+            "base_url": config.OPENCODE_ZEN_BASE_URL, "model": config.OPENCODE_ZEN_MODEL,
+            "api_key": config.OPENCODE_ZEN_API_KEY, "enabled": True,
+        })
+    return out
 
 
-def _provider_call(provider: str):
-    return {
-        "gemini": _gemini_chat,
-        "groq": _groq_chat,
-        "opencode": _opencode_chat,
-    }.get(provider)
+def set_runtime_providers(providers: list[dict]) -> None:
+    """Called by ai_config_sync after each successful pull from apps/api."""
+    global RUNTIME_PROVIDERS
+    RUNTIME_PROVIDERS = providers
+
+
+def all_providers() -> list[dict]:
+    """Registry if synced, else the env-var built-ins."""
+    return RUNTIME_PROVIDERS or _env_fallback_providers()
+
+
+def active_providers() -> list[dict]:
+    """Enabled providers that actually have a key, in fallback order.
+
+    A provider with no key is skipped rather than treated as an error: that is
+    just an unconfigured tier. A disabled one is never called at all.
+    """
+    return [p for p in all_providers() if p.get("enabled") and p.get("api_key")]
 
 
 def any_provider_configured() -> bool:
-    """True when at least one enabled provider has an API key.
+    """True when at least one provider could answer.
 
-    Callers use this to decide between an LLM path and a non-LLM fallback
-    (extractive answers, canned greetings). Checking the whole active order —
-    rather than naming two providers inline, as this module used to — means a
-    deployment configured with only the third-tier provider still gets real
-    LLM answers instead of silently degrading to extractive output.
+    Callers use this to choose between an LLM path and a non-LLM fallback
+    (extractive answers, canned greetings).
     """
-    return any(provider_api_key(p) for p in active_provider_order())
+    return bool(active_providers())
 
 
-def active_provider_order() -> list[str]:
-    """Configured priority, filtered to providers that actually exist.
-
-    An unknown id (typo in env, or a provider removed in a later version but
-    still listed in a stale DB setting) is dropped rather than crashing
-    dispatch. If that leaves nothing usable, fall back to the built-in order
-    so a bad setting can never silently disable every LLM.
-    """
-    ordered = [p for p in config.LLM_PROVIDER_PRIORITY if p in PROVIDERS]
-    return ordered or list(PROVIDERS)
+async def _call_provider(provider: dict, messages: list[dict], max_tokens: int, temperature: float) -> str | None:
+    if provider.get("kind") == "GEMINI":
+        return await _gemini_chat(messages, max_tokens, temperature, provider)
+    return await _openai_compatible_chat(messages, max_tokens, temperature, provider)
 
 
 async def _llm_chat(
     messages: list[dict], max_tokens: int, temperature: float
 ) -> str | None:
-    """Try each configured provider in admin-defined priority order — the
-    first non-empty answer wins. gpt-oss/deepseek-style reasoning models can
-    return HTTP 200 with empty `content` if max_tokens is exhausted
-    mid-reasoning, which must count as a failure here, not a blank
-    "successful" answer.
+    """Try each configured provider in admin-defined order — first non-empty
+    answer wins. Reasoning models can return HTTP 200 with empty `content`
+    when max_tokens runs out mid-reasoning, which counts as a failure here,
+    not a blank success."""
+    providers = active_providers()
+    if not providers:
+        logger.info("No LLM provider is configured")
+        return None
 
-    Providers with no API key are skipped silently (not an error — that's
-    just an unconfigured tier), and a provider left out of the priority list
-    is never called at all.
-    """
-    order = active_provider_order()
-    attempted: list[str] = []
-
-    for provider in order:
-        if not provider_api_key(provider):
-            continue
-        call = _provider_call(provider)
-        if call is None:
-            continue
-
-        attempted.append(provider)
-        result = await call(messages, max_tokens, temperature)
+    for i, provider in enumerate(providers):
+        result = await _call_provider(provider, messages, max_tokens, temperature)
         if result:
             return result
-
-        remaining = [
-            p for p in order[order.index(provider) + 1 :]
-            if provider_api_key(p)
-        ]
+        remaining = providers[i + 1:]
         logger.warning(
             "%s failed or returned empty; %s",
-            PROVIDER_LABELS.get(provider, provider),
-            f"falling back to {PROVIDER_LABELS.get(remaining[0], remaining[0])}"
-            if remaining
+            provider.get("label", provider.get("slug")),
+            f"falling back to {remaining[0].get('label')}" if remaining
             else "no fallback providers remain",
         )
-
-    if not attempted:
-        logger.info("No LLM provider is configured (priority=%s)", ",".join(order))
     return None
 
 
@@ -350,7 +344,7 @@ async def _llm_chat(
 
 
 async def _gemini_chat(
-    messages: list[dict], max_tokens: int, temperature: float
+    messages: list[dict], max_tokens: int, temperature: float, provider: dict
 ) -> str | None:
     """Call Google Gemini API. Returns None on any failure."""
     system_parts = []
@@ -376,7 +370,7 @@ async def _gemini_chat(
             "parts": [{"text": "\n\n".join(system_parts)}]
         }
 
-    url = GEMINI_API_URL.format(model=config.GEMINI_MODEL) + f"?key={config.GEMINI_API_KEY}"
+    url = GEMINI_API_URL.format(model=provider["model"]) + f"?key={provider['api_key']}"
 
     for attempt in range(2):
         try:
@@ -407,106 +401,30 @@ async def _gemini_chat(
             logger.error("Gemini response missing content: %.200s", response.text)
             return None
 
-        logger.debug("Gemini answer generated with model=%s", config.GEMINI_MODEL)
+        logger.debug("Gemini answer generated with model=%s", provider["model"])
         return _clean_answer(content)
 
     return None
 
 
 # ---------------------------------------------------------------------------
-# Groq provider
+# OpenAI-compatible provider (Groq, OpenRouter, Together, DeepSeek, vLLM, …)
 # ---------------------------------------------------------------------------
 
 
-_LLM_GROQ_KEY_INDEX = 0
-
-
-def _next_llm_groq_key() -> str:
-    """Round-robin through available Groq API keys for llm module."""
-    global _LLM_GROQ_KEY_INDEX
-    keys = config.GROQ_API_KEYS
-    if not keys:
-        return ""
-    key = keys[_LLM_GROQ_KEY_INDEX % len(keys)]
-    _LLM_GROQ_KEY_INDEX += 1
-    return key
-
-
-async def _groq_chat(
-    messages: list[dict], max_tokens: int, temperature: float
+async def _openai_compatible_chat(
+    messages: list[dict], max_tokens: int, temperature: float, provider: dict
 ) -> str | None:
-    """Call Groq chat completions with key rotation; returns None on any failure."""
+    """One adapter for every vendor speaking the OpenAI chat-completions
+    schema — which is nearly all of them, and is what makes an admin-added
+    provider work with no code change. Returns None on any failure."""
+    url = provider.get("base_url")
+    if not url:
+        logger.error("Provider %s has no endpoint URL", provider.get("slug"))
+        return None
+
     payload = {
-        "model": config.GROQ_MODEL,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-
-    num_keys = len(config.GROQ_API_KEYS)
-    max_attempts = max(2, num_keys + 1)
-
-    for attempt in range(max_attempts):
-        api_key = _next_llm_groq_key()
-        if not api_key:
-            return None
-        try:
-            async with httpx.AsyncClient(timeout=45.0) as client:
-                response = await client.post(
-                    GROQ_API_URL,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-        except httpx.HTTPError as e:
-            logger.error("Groq request failed (attempt %d): %s", attempt + 1, e)
-            if attempt < max_attempts - 1:
-                await asyncio.sleep(1.5)
-                continue
-            return None
-
-        if response.status_code == 429 and attempt < max_attempts - 1:
-            logger.info("Groq 429, rotating key (attempt %d/%d)", attempt + 1, max_attempts)
-            if (attempt + 1) % num_keys == 0:
-                await asyncio.sleep(2.0)
-            continue
-
-        if response.status_code in (500, 502, 503) and attempt < max_attempts - 1:
-            logger.warning("Groq returned %d; retrying", response.status_code)
-            await asyncio.sleep(2.0)
-            continue
-
-        if response.status_code != 200:
-            logger.error(
-                "Groq returned %d: %.200s", response.status_code, response.text
-            )
-            return None
-
-        try:
-            content = response.json()["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError, TypeError):
-            logger.error("Groq response missing choices: %.200s", response.text)
-            return None
-
-        logger.debug("Groq answer generated with model=%s", config.GROQ_MODEL)
-        return _clean_answer(content)
-
-    return None
-
-
-# ---------------------------------------------------------------------------
-# OpenCode Zen provider (free-tier fallback, tried after Gemini + Groq)
-# ---------------------------------------------------------------------------
-
-
-async def _opencode_chat(
-    messages: list[dict], max_tokens: int, temperature: float
-) -> str | None:
-    """Call OpenCode Zen (OpenAI-compatible). Returns None on any failure."""
-    payload = {
-        "model": config.OPENCODE_ZEN_MODEL,
+        "model": provider["model"],
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -516,38 +434,35 @@ async def _opencode_chat(
         try:
             async with httpx.AsyncClient(timeout=45.0) as client:
                 response = await client.post(
-                    config.OPENCODE_ZEN_BASE_URL,
+                    url,
                     headers={
-                        "Authorization": f"Bearer {config.OPENCODE_ZEN_API_KEY}",
+                        "Authorization": f"Bearer {provider['api_key']}",
                         "Content-Type": "application/json",
                     },
                     json=payload,
                 )
         except httpx.HTTPError as e:
-            logger.error("OpenCode Zen request failed (attempt %d): %s", attempt + 1, e)
+            logger.error("%s request failed (attempt %d): %s", provider.get("slug"), attempt + 1, e)
             if attempt == 0:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(1.5)
                 continue
             return None
 
         if response.status_code in (429, 500, 502, 503) and attempt == 0:
-            logger.warning("OpenCode Zen returned %d; retrying once", response.status_code)
-            await asyncio.sleep(1.5)
+            logger.warning("%s returned %d; retrying once", provider.get("slug"), response.status_code)
+            await asyncio.sleep(2.0)
             continue
 
         if response.status_code != 200:
-            logger.error(
-                "OpenCode Zen returned %d: %.200s", response.status_code, response.text
-            )
+            logger.error("%s returned %d: %.200s", provider.get("slug"), response.status_code, response.text)
             return None
 
         try:
             content = response.json()["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError):
-            logger.error("OpenCode Zen response missing choices: %.200s", response.text)
+            logger.error("%s response missing choices: %.200s", provider.get("slug"), response.text)
             return None
 
-        logger.debug("OpenCode Zen answer generated with model=%s", config.OPENCODE_ZEN_MODEL)
         return _clean_answer(content)
 
     return None
@@ -567,20 +482,18 @@ def _clean_answer(text: str) -> str:
 # Provider health probes (admin panel)
 # ---------------------------------------------------------------------------
 
-# Deliberately separate from the _*_chat functions above: those retry, rotate
-# keys and swallow the HTTP status to return a clean str|None for callers. A
-# health check wants the opposite — one attempt, no retry, and the actual
-# failure reason surfaced so an admin can tell "bad key" (401) apart from
-# "rate limited" (429) or "wrong model name" (404).
+# Deliberately separate from the chat adapters: those retry and swallow the
+# HTTP status to return a clean str|None. A health check wants the opposite —
+# one attempt, no retry, and the real reason surfaced so an admin can tell a
+# bad key (401) from a rate limit (429) or a wrong model name (404).
 _HEALTH_TIMEOUT_SECONDS = 12.0
-_HEALTH_MESSAGES = [{"role": "user", "content": "ping"}]
 
 
 def _describe_http_failure(status: int, body: str) -> str:
     if status in (401, 403):
         return "Authentication failed — the API key is invalid or revoked."
     if status == 404:
-        return "Model not found — check the model name for this provider."
+        return "Not found — check the model name and endpoint URL."
     if status == 429:
         return "Rate limited — the key works but the quota is currently exhausted."
     if status >= 500:
@@ -588,210 +501,97 @@ def _describe_http_failure(status: int, body: str) -> str:
     return f"HTTP {status}: {body[:160]}"
 
 
-async def _probe_gemini() -> tuple[bool, str | None]:
-    url = GEMINI_API_URL.format(model=config.GEMINI_MODEL) + f"?key={config.GEMINI_API_KEY}"
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
-        "generationConfig": {"maxOutputTokens": 8, "temperature": 0.0},
-    }
-    async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
-        response = await client.post(url, json=payload)
+async def _probe_provider(provider: dict) -> tuple[bool, str | None]:
+    """One real, tiny request. Works for any registry entry, including
+    admin-added ones, because it dispatches on `kind` exactly like chat does."""
+    if provider.get("kind") == "GEMINI":
+        url = GEMINI_API_URL.format(model=provider["model"]) + f"?key={provider['api_key']}"
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
+            "generationConfig": {"maxOutputTokens": 8, "temperature": 0.0},
+        }
+        async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
+            response = await client.post(url, json=payload)
+    else:
+        url = provider.get("base_url")
+        if not url:
+            return False, "No endpoint URL configured."
+        payload = {
+            "model": provider["model"],
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 8,
+            "temperature": 0.0,
+        }
+        async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {provider['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+
     if response.status_code != 200:
         return False, _describe_http_failure(response.status_code, response.text)
     return True, None
 
 
-async def _probe_openai_compatible(url: str, api_key: str, model: str) -> tuple[bool, str | None]:
-    """Shared probe for Groq and OpenCode Zen — both speak the OpenAI schema."""
-    payload = {
-        "model": model,
-        "messages": _HEALTH_MESSAGES,
-        "max_tokens": 8,
-        "temperature": 0.0,
+async def _health_for(provider: dict) -> dict:
+    base = {
+        "provider": provider.get("slug"),
+        "label": provider.get("label") or provider.get("slug"),
+        "model": provider.get("model"),
+        "kind": provider.get("kind"),
+        "enabled": bool(provider.get("enabled")),
+        "configured": bool(provider.get("api_key")),
     }
-    async with httpx.AsyncClient(timeout=_HEALTH_TIMEOUT_SECONDS) as client:
-        response = await client.post(
-            url,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=payload,
-        )
-    if response.status_code != 200:
-        return False, _describe_http_failure(response.status_code, response.text)
-    return True, None
+    if not base["enabled"]:
+        return {**base, "ok": False, "latencyMs": None,
+                "error": "Disabled — this provider is never called."}
+    if not base["configured"]:
+        return {**base, "ok": False, "latencyMs": None, "error": "No API key configured."}
 
-
-async def _probe_provider(provider: str) -> tuple[bool, str | None]:
-    if provider == "gemini":
-        return await _probe_gemini()
-    if provider == "groq":
-        return await _probe_openai_compatible(GROQ_API_URL, config.GROQ_API_KEY, config.GROQ_MODEL)
-    if provider == "opencode":
-        return await _probe_openai_compatible(
-            config.OPENCODE_ZEN_BASE_URL, config.OPENCODE_ZEN_API_KEY, config.OPENCODE_ZEN_MODEL
-        )
-    return False, "Unknown provider."
-
-
-async def health_snapshot() -> dict:
-    """Live status of every provider, in the order dispatch would try them.
-
-    Probes run concurrently — three sequential round-trips to external APIs
-    would make the admin panel feel broken on a slow provider. Unconfigured
-    providers are reported without a network call at all, so a partially
-    configured install still returns fast.
-    """
-    order = active_provider_order()
-    disabled = [p for p in PROVIDERS if p not in order]
-
-    async def one(provider: str) -> dict:
-        base = {
-            "provider": provider,
-            "label": PROVIDER_LABELS.get(provider, provider),
-            "model": provider_model(provider),
-            "enabled": True,
-            "configured": bool(provider_api_key(provider)),
-        }
-        if not base["configured"]:
-            return {**base, "ok": False, "latencyMs": None, "error": "No API key configured."}
-
-        started = time.perf_counter()
-        try:
-            ok, error = await _probe_provider(provider)
-        except httpx.HTTPError as e:
-            return {
-                **base,
-                "ok": False,
-                "latencyMs": round((time.perf_counter() - started) * 1000),
-                "error": f"Could not reach the provider: {e}",
-            }
-        except Exception as e:  # never let one provider's failure break the panel
-            logger.exception("Health probe crashed for %s", provider)
-            return {
-                **base,
-                "ok": False,
-                "latencyMs": round((time.perf_counter() - started) * 1000),
-                "error": f"Probe failed: {e}",
-            }
-        return {
-            **base,
-            "ok": ok,
-            "latencyMs": round((time.perf_counter() - started) * 1000),
-            "error": error,
-        }
-
-    results = list(await asyncio.gather(*(one(p) for p in order)))
-
-    # Providers the admin has switched off still appear, so the panel shows
-    # the full picture rather than silently hiding a key that exists but is
-    # deliberately never used.
-    for provider in disabled:
-        results.append(
-            {
-                "provider": provider,
-                "label": PROVIDER_LABELS.get(provider, provider),
-                "model": provider_model(provider),
-                "enabled": False,
-                "configured": bool(provider_api_key(provider)),
-                "ok": False,
-                "latencyMs": None,
-                "error": "Disabled — not in the active provider priority.",
-            }
-        )
-
-    active = next((r for r in results if r["enabled"] and r["ok"]), None)
-    return {
-        "priority": order,
-        "providers": results,
-        # Which provider a real request would actually land on right now.
-        "activeProvider": active["provider"] if active else None,
-        "healthy": active is not None,
-    }
-
-
-def _split_sentences(text: str) -> list[str]:
-    """Splits `text` into standalone, rankable units for the extractive
-    fallback. Processes line-by-line rather than collapsing the whole block
-    first: a "- label: value" fact line has no terminal period, so joining it
-    onto neighbouring lines before splitting on punctuation used to glue
-    several unrelated facts into one unreadable run-on sentence (only
-    breaking wherever the *next* period happened to land). Each bullet line
-    is already one atomic fact and is kept as-is; section headers (e.g.
-    "NOTICE FACTS:") aren't answerable content and are dropped; everything
-    else is prose and gets real sentence splitting.
-    """
-    units: list[str] = []
-    for raw_line in text.split("\n"):
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        stripped_bullet = re.sub(r"^[-•●▪]\s*", "", line)
-        if stripped_bullet != line:
-            if len(stripped_bullet) >= _MIN_SENTENCE_CHARS:
-                units.append(stripped_bullet)
-            continue
-
-        # A bare section header ("NOTICE FACTS:", "AI SUMMARY (Nepali):",
-        # "ATTACHED FILES (1) — ... notice page:") carries no fact of its
-        # own — the lines under it do.
-        if line.endswith(":"):
-            continue
-
-        for sentence in re.split(r"(?<=[.!?।])\s+", line):
-            sentence = sentence.strip()
-            if len(sentence) >= _MIN_SENTENCE_CHARS and not sentence[:1].islower():
-                units.append(sentence)
-
-    return units
-
-
-def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
-    if not context_chunks:
-        return "The provided documents do not contain this information."
-
-    sentences: list[str] = []
-    for chunk in context_chunks:
-        sentences.extend(_split_sentences(chunk["content"]))
-
-    if not sentences:
-        return context_chunks[0]["content"].strip()
-
+    started = time.perf_counter()
     try:
-        q_vec = np.array(embeddings.get_embedding(question))
-        sent_vecs = np.array(embeddings.get_embeddings(sentences))
-        scores = sent_vecs @ q_vec
-        ranked = np.argsort(scores)[::-1]
+        ok, error = await _probe_provider(provider)
+    except httpx.HTTPError as e:
+        return {**base, "ok": False,
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "error": f"Could not reach the provider: {e}"}
+    except Exception as e:  # one bad provider must not break the panel
+        logger.exception("Health probe crashed for %s", provider.get("slug"))
+        return {**base, "ok": False,
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "error": f"Probe failed: {e}"}
+    return {**base, "ok": ok,
+            "latencyMs": round((time.perf_counter() - started) * 1000),
+            "error": error}
 
-        # Embeddings are normalized, so `scores` are cosine similarities. When
-        # even the best-matching sentence falls short of the same bar used for
-        # retrieval, nothing in this document actually answers the question —
-        # forcing out the top-K anyway (e.g. file size, unrelated notice
-        # titles) reads as an answer when it isn't one.
-        if scores[ranked[0]] < config.RAG_SCORE_THRESHOLD:
-            return "The provided documents do not contain this information."
 
-        picked: list[int] = []
-        seen: set[str] = set()
-        for i in ranked:
-            if scores[i] < config.RAG_SCORE_THRESHOLD:
-                break
-            key = sentences[i][:60].lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            picked.append(int(i))
-            if len(picked) >= FALLBACK_SENTENCES:
-                break
+async def health_snapshot(slug: str | None = None) -> dict:
+    """Live status of every provider in fallback order, or just one when
+    `slug` is given (the per-card "Test" button). Probes run concurrently —
+    three sequential round-trips to external APIs would make the panel feel
+    broken on a single slow provider."""
+    providers = all_providers()
+    if slug:
+        providers = [p for p in providers if p.get("slug") == slug]
+        if not providers:
+            return {"providers": [], "activeProvider": None, "healthy": False}
 
-        best = [sentences[i] for i in sorted(picked)]
-        if len(best) == 1:
-            return best[0]
-        return "The most relevant points from the documents:\n\n" + "\n".join(
-            f"- {s}" for s in best
-        )
-    except Exception:
-        logger.exception("Extractive ranking failed; returning first sentence")
-        return sentences[0]
+    results = list(await asyncio.gather(*(_health_for(p) for p in providers)))
+
+    # Which provider a real request would land on right now. Only meaningful
+    # for a full snapshot; a single-slug probe says nothing about the chain.
+    active = None
+    if not slug:
+        active = next((r for r in results if r["enabled"] and r["ok"]), None)
+    return {
+        "providers": results,
+        "activeProvider": active["provider"] if active else None,
+        "healthy": any(r["ok"] for r in results),
+    }
 
 
 # --- Single-notice AI analysis (summary/key facts/tags) + Q&A ---
@@ -837,7 +637,7 @@ async def analyze_notice(title: str, content: str) -> dict | None:
         {"role": "user", "content": f"Title: {title}\n\nContent:\n{trimmed_content}"},
     ]
 
-    raw = await _llm_chat(messages, max_tokens=600, temperature=0.2)
+    raw = await _llm_chat(messages, max_tokens=600, temperature=config.TEMPERATURE_SUMMARIES)
     if raw is None:
         return None
 
@@ -889,7 +689,7 @@ async def answer_notice_question(title: str, content: str, question: str) -> str
         },
     ]
 
-    answer = await _llm_chat(messages, max_tokens=500, temperature=0.4)
+    answer = await _llm_chat(messages, max_tokens=500, temperature=config.TEMPERATURE_ANSWERS)
     if answer is None:
         return _extractive_fallback(question, [{"content": content, "title": title}])
     return answer

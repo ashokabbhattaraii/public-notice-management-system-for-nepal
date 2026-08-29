@@ -356,6 +356,76 @@ model AppSetting {
   @@map("app_settings")
 }
 
+enum ContactMessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+model ContactMessage {
+  id        String               @id @default(uuid()) @db.Uuid
+  name      String
+  email     String
+  subject   String
+  message   String               @db.Text
+  status    ContactMessageStatus @default(NEW)
+  ip        String?              @map("ip")
+  userAgent String?              @map("user_agent") @db.Text
+  // honeypot field trap - if filled, it's spam and we store it flagged
+  // (we still record but mark as archived)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("contact_messages")
+}
+
+// Which request/response shape a provider speaks. Most vendors (Groq,
+// OpenRouter, Together, DeepSeek, Fireworks, vLLM, Ollama) expose the OpenAI
+// chat-completions schema, so one adapter covers nearly everything; Gemini's
+// generateContent API is different enough to need its own.
+enum AiProviderKind {
+  OPENAI_COMPATIBLE
+  GEMINI
+}
+
+/**
+ * An LLM provider the AI service may call, in admin-controlled priority order.
+ *
+ * Replaces the previously hardcoded provider list: built-in providers are
+ * seeded rows (isBuiltIn = true) and behave identically to admin-added ones,
+ * so "add a provider" is a first-class operation rather than a special case.
+ * `sortOrder` IS the fallback chain — the first enabled provider that answers
+ * wins. The AI service pulls this list (with decrypted keys) over the
+ * internal service-to-service endpoint.
+ */
+model AiProvider {
+  id        String         @id @default(uuid()) @db.Uuid
+  // Stable identifier used in logs and by the AI service; immutable for
+  // built-ins so ordering/health keep lining up across restarts.
+  slug      String         @unique
+  label     String
+  kind      AiProviderKind
+  // Full chat-completions endpoint for OPENAI_COMPATIBLE providers. Null for
+  // GEMINI, whose URL is derived from the model name.
+  baseUrl   String?        @map("base_url")
+  model     String
+  // AES-256-GCM ciphertext (SecretCryptoService) — never a plaintext key.
+  // Null means "fall back to the AI service's own environment variable".
+  apiKeyEnc String?        @map("api_key_enc")
+  enabled   Boolean        @default(true)
+  sortOrder Int            @map("sort_order")
+  isBuiltIn Boolean        @default(false) @map("is_built_in")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@index([sortOrder])
+  @@map("ai_providers")
+}
+
 // ---------------------------------------------------------------------------
 // Membership & billing
 //

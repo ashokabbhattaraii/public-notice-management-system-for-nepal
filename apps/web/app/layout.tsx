@@ -19,7 +19,15 @@ export const viewport: Viewport = {
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-poppins" })
 
+/**
+ * Absolute URLs are required for OG/Twitter images — a relative path renders
+ * as a broken preview on every social and chat client. Falls back to the
+ * production domain so a missing env var can't silently break link previews.
+ */
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://suchanaai.tech"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Suchana AI - Nepal's AI-Powered Public Notice Platform",
   description:
     "Suchana AI aggregates public notices across Nepal's government portals into one searchable platform. AI-powered OCR, NLP classification, and RAG document intelligence - built for every Nepali citizen.",
@@ -38,8 +46,34 @@ export const metadata: Metadata = {
     description:
       "One centralized repository for every government notice across Nepal - searched, classified, and summarized by AI.",
     type: "website",
-    images: [{ url: "/og/og-image.png", width: 1200, height: 630 }],
+    siteName: "Suchana AI",
+    url: siteUrl,
+    images: [
+      { url: "/og/og-image.png", width: 1200, height: 630, alt: "Suchana AI - Nepal's public notice platform" },
+    ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Suchana AI - Nepal's AI-Powered Public Notice Platform",
+    description:
+      "One centralized repository for every government notice across Nepal - searched, classified, and summarized by AI.",
+    images: ["/og/og-image.png"],
+  },
+  // app/favicon.ico, app/icon.png and app/apple-icon.png are picked up by the
+  // App Router automatically; these entries pin the sizes browsers should
+  // prefer (32px for the tab, 512px for install prompts) and add the
+  // manifest, all generated from public/images/logo.png by
+  // scripts/generate-brand-assets.py.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/site.webmanifest",
+  applicationName: "Suchana AI",
+  appleWebApp: { capable: true, title: "Suchana AI", statusBarStyle: "default" },
 }
 
 export default function RootLayout({

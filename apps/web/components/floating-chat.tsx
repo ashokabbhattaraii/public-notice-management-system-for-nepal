@@ -220,8 +220,12 @@ export function FloatingChat() {
         }
       }
 
-      // General notice search
-      const result: NoticeSearchResponse = await searchNotices(query)
+      // General notice search, scoped to the filter the user is looking at:
+      // asking "latest tender notices" from /notices?category=TENDER should
+      // not answer with vacancies. Read at send time from the URL rather than
+      // via useSearchParams, which would force a Suspense boundary around
+      // every page this floating widget is mounted on.
+      const result: NoticeSearchResponse = await searchNotices(query, activeCategoryFromUrl())
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -487,6 +491,23 @@ export function FloatingChat() {
       )}
     </>
   )
+}
+
+/** Categories the notices page can filter by — mirrors ScrapedItemCategory. */
+const URL_CATEGORIES = new Set([
+  "NOTICE", "NEWS", "PRESS_RELEASE", "CIRCULAR", "TENDER", "VACANCY", "JOB", "INTERNSHIP", "OTHER",
+])
+
+/**
+ * The category filter currently applied to the notices list, if any, so a
+ * question inherits the scope the user can see. Validated against the known
+ * enum rather than forwarded blind — the value goes into a server-side
+ * category filter.
+ */
+function activeCategoryFromUrl(): string | undefined {
+  if (typeof window === "undefined") return undefined
+  const category = new URLSearchParams(window.location.search).get("category")?.toUpperCase()
+  return category && URL_CATEGORIES.has(category) ? category : undefined
 }
 
 /**

@@ -29,8 +29,12 @@ const EXTRACTION_QUALITY_FLOOR = 0.55;
  */
 interface ScrapeFailure {
   url: string;
-  stage: 'schema_detection' | 'listing' | 'detail' | 'raw_fetch' | string;
+  stage: 'schema_detection' | 'listing' | 'detail' | 'raw_fetch' | 'sitemap' | string;
   error: string;
+  // "skipped" entries are deliberate decisions (already scraped, not an
+  // article URL, untitled), not problems. Undefined on pre-existing rows.
+  outcome?: 'failed' | 'skipped';
+  reason?: string;
 }
 
 interface RawAttachment {
@@ -986,11 +990,16 @@ export class ScrapingService {
     // it silently reports SUCCESS with itemsFound: 0, which is exactly what
     // made MOFA/NRB-style outages invisible: the source card just showed
     // "0 items scraped" forever with no failed/error signal anywhere.
-    const allAttemptsFailed = items.length === 0 && failedUrls.length > 0;
+    // Only real failures count toward this. `failedUrls` also carries
+    // deliberate skips (already-scraped, non-article URLs, untitled rows) so
+    // an admin can audit them — but a run that found nothing because
+    // everything was already scraped is a healthy no-op, not an outage.
+    const hardFailures = failedUrls.filter((f) => (f.outcome ?? 'failed') === 'failed');
+    const allAttemptsFailed = items.length === 0 && hardFailures.length > 0;
     const status = allAttemptsFailed ? ScrapeRunStatus.FAILED : ScrapeRunStatus.SUCCESS;
     const aggregateError = allAttemptsFailed
-      ? `All ${failedUrls.length} page(s)/URL(s) failed to load — ${failedUrls[0].stage}: ${failedUrls[0].error}` +
-        (failedUrls.length > 1 ? ` (+${failedUrls.length - 1} more)` : '')
+      ? `All ${hardFailures.length} page(s)/URL(s) failed to load — ${hardFailures[0].stage}: ${hardFailures[0].error}` +
+        (hardFailures.length > 1 ? ` (+${hardFailures.length - 1} more)` : '')
       : null;
 
     await this.prisma.scrapeRun.update({

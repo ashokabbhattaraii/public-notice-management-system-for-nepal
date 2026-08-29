@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 import { SettingsService } from '../services/settings.service';
+import { AiProvidersService } from '../services/ai-providers.service';
 import { ScrapingSchedulerService } from '../services/scraping-scheduler.service';
 
 @Controller('admin/settings')
@@ -145,35 +146,32 @@ class InternalServiceGuard implements CanActivate {
 @Controller('internal/ai-config')
 @UseGuards(InternalServiceGuard)
 export class InternalAiConfigController {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly providers: AiProvidersService,
+    private readonly settings: SettingsService,
+  ) {}
 
   @Get()
   async get() {
-    const [
-      groqApiKey,
-      geminiApiKey,
-      openCodeZenApiKey,
-      groqModel,
-      geminiModel,
-      openCodeZenModel,
-      providerPriority,
-    ] = await Promise.all([
-      this.settings.getSecret('ai.groqApiKey'),
-      this.settings.getSecret('ai.geminiApiKey'),
-      this.settings.getSecret('ai.openCodeZenApiKey'),
-      this.settings.getIfOverridden('ai.groqModel'),
-      this.settings.getIfOverridden('ai.geminiModel'),
-      this.settings.getIfOverridden('ai.openCodeZenModel'),
-      this.settings.getIfOverridden('ai.providerPriority'),
+    // Decrypted keys cross this boundary — the guard above is the only thing
+    // standing in front of them, which is why it fails closed.
+    const [providerList, answers, summaries, conversation] = await Promise.all([
+      this.providers.listForRuntime(),
+      this.settings.getEffective('ai.temperature.answers'),
+      this.settings.getEffective('ai.temperature.summaries'),
+      this.settings.getEffective('ai.temperature.conversation'),
     ]);
     return {
-      groqApiKey,
-      geminiApiKey,
-      openCodeZenApiKey,
-      groqModel,
-      geminiModel,
-      openCodeZenModel,
-      providerPriority,
+      providers: providerList,
+      // Sampling temperature per task. Sent as effective values (persisted
+      // override else schema default) rather than only-if-overridden: unlike
+      // an API key, a temperature has no "keep your env var" fallback worth
+      // preserving — the admin panel is the single source of truth for it.
+      temperatures: {
+        answers: Number(answers),
+        summaries: Number(summaries),
+        conversation: Number(conversation),
+      },
     };
   }
 }

@@ -272,11 +272,19 @@ async def _route(method: str, path: str, scope: dict, receive, send) -> tuple[in
     if method == "GET" and path == "/health":
         return await _health()
 
-    if method == "GET" and path == "/llm/health":
-        # Live per-provider probe for the admin "AI & Models" panel. Makes a
-        # real (tiny) call to each provider, so it is deliberately NOT part
-        # of /health, which load balancers poll frequently.
-        return 200, await llm.health_snapshot()
+    if path == "/llm/health" and method in ("GET", "POST"):
+        # Live provider probe for the admin "AI & Models" panel. Makes a real
+        # (tiny) call, so it is deliberately NOT part of /health, which load
+        # balancers poll frequently. POST {"slug": "..."} probes exactly one
+        # provider — the per-card "Test" button.
+        slug = None
+        if method == "POST":
+            body = await _read_body(receive)
+            try:
+                slug = (json.loads(body) if body else {}).get("slug")
+            except json.JSONDecodeError:
+                return 400, {"error": "Invalid JSON body"}
+        return 200, await llm.health_snapshot(slug)
 
     if method == "POST" and path == "/documents":
         return await _upload_document(scope, receive)
@@ -1301,6 +1309,7 @@ async def _notices_search(receive) -> tuple[int, dict]:
             category=category,
             language=language,
             top_k=top_k,
+            recency_intent=bool(data.get("recency_intent")),
         )
         return 200, result
     except Exception as e:

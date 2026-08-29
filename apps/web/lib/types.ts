@@ -331,8 +331,17 @@ export type ScrapeRunStatus = "RUNNING" | "SUCCESS" | "FAILED"
 /** One page/URL crawl4ai failed to fetch or parse during a run. */
 export interface ScrapeFailure {
   url: string
-  stage: "schema_detection" | "listing" | "detail" | "raw_fetch" | string
+  stage: "schema_detection" | "listing" | "detail" | "raw_fetch" | "sitemap" | string
   error: string
+  /**
+   * "failed" — the page could not be fetched/parsed and is worth retrying.
+   * "skipped" — the crawler deliberately declined it (already scraped, not an
+   * article URL, no title). Absent on rows written before this was added, so
+   * treat undefined as "failed".
+   */
+  outcome?: "failed" | "skipped"
+  /** Machine-readable skip cause, e.g. "already_scraped". */
+  reason?: string
 }
 
 export interface ScrapeRun {
@@ -432,11 +441,41 @@ export type SettingType =
   | "secret"
   | "order"
 
-/** One LLM provider's live status, from GET /admin/ai/health. */
+export type AiProviderKind = "OPENAI_COMPATIBLE" | "GEMINI"
+
+/** A configurable LLM provider row from GET /admin/ai/providers. */
+export interface AiProvider {
+  id: string
+  slug: string
+  label: string
+  kind: AiProviderKind
+  /** Full chat-completions URL; null for Gemini (derived from the model). */
+  baseUrl: string | null
+  model: string
+  enabled: boolean
+  sortOrder: number
+  /** Built-ins can be edited and disabled, but never deleted. */
+  isBuiltIn: boolean
+  /** A key is stored here (vs. falling back to the server env var). */
+  configured: boolean
+  preview?: string
+}
+
+export interface AiProviderInput {
+  label: string
+  kind: AiProviderKind
+  baseUrl?: string | null
+  model: string
+  apiKey?: string
+  enabled?: boolean
+}
+
+/** One LLM provider's live status, from the health endpoints. */
 export interface AiProviderHealth {
   provider: string
   label: string
   model: string
+  kind?: AiProviderKind
   /** False when the admin has removed it from the priority order. */
   enabled: boolean
   configured: boolean
@@ -446,7 +485,6 @@ export interface AiProviderHealth {
 }
 
 export interface AiHealthSnapshot {
-  priority: string[]
   providers: AiProviderHealth[]
   /** Which provider a real request would land on right now, if any. */
   activeProvider: string | null
@@ -508,4 +546,53 @@ export interface Activity {
   description: string
   timestamp: string
   relatedId?: string
+}
+
+
+// ─── System status (/admin/system) ──────────────────────────────────────────
+
+export type ComponentHealth = "ok" | "degraded" | "down" | "not_configured"
+
+export interface SystemComponent {
+  id: string
+  label: string
+  status: ComponentHealth
+  detail: string
+  /** Null when the check needed no network round-trip. */
+  latencyMs: number | null
+}
+
+export interface SystemStatus {
+  overall: ComponentHealth
+  checkedAt: string
+  components: SystemComponent[]
+  counts: {
+    notices: number
+    documents: number
+    users: number
+    sources: number
+    alertRules: number
+  }
+  scraping: {
+    schedulerEnabled: boolean
+    enabledSources: number
+    runsLast24h: number
+    failedRunsLast24h: number
+    lastRun: {
+      id: string
+      sourceLabel: string
+      status: ScrapeRunStatus
+      itemsFound: number
+      itemsNew: number
+      startedAt: string
+      finishedAt: string | null
+      error: string | null
+    } | null
+  }
+  runtime: {
+    environment: string
+    nodeVersion: string
+    uptimeSeconds: number
+    memoryMb: number
+  }
 }

@@ -601,28 +601,21 @@ export class NoticesService {
     const cached = this.qaCache.get(cacheKey);
     if (cached) return cached;
 
-    // Step 1: PostgreSQL keyword search via ILIKE (simple but effective for keyword queries)
-    const pgResults = await this.prisma.scrapedItem.findMany({
-      where: {
-        ...(category ? { category: category as ScrapedItemCategory } : {}),
-        OR: [
-          { title: { contains: question, mode: 'insensitive' } },
-          { aiSummary: { contains: question, mode: 'insensitive' } },
-          { contentText: { contains: question, mode: 'insensitive' } },
-        ],
-      },
-      select: {
-        id: true,
-        title: true,
-        aiSummary: true,
-        category: true,
-        sourceLabel: true,
-        sourceUrl: true,
-        publishedAt: true,
-      },
-      orderBy: { publishedAt: 'desc' },
-      take: 10,
-    });
+    const intent = parseSearchIntent(question);
+    // A question like "latest tender notices" names its own category; honour
+    // it when the caller didn't pin one, so the answer can't drift into
+    // vacancies and jobs.
+    const pageCategory = category as ScrapedItemCategory | undefined;
+    const effectiveCategory = pageCategory ?? intent.category;
+
+    let pgResults = await this.keywordSearch(intent, effectiveCategory);
+    // What the user typed outranks what page they typed it on. Asking "what's
+    // the latest tax policy" while the list happens to be filtered to tenders
+    // must not answer "nothing found" when a matching circular or news item
+    // exists — so a page filter that yields nothing is dropped and retried.
+    if (pgResults.length === 0 && pageCategory && !intent.category) {
+      pgResults = await this.keywordSearch(intent, undefined);
+    }
 
     // Step 2: Pass to AI service for hybrid search + LLM answer generation
     try {
@@ -640,9 +633,16 @@ export class NoticesService {
               sourceUrl: r.sourceUrl,
               publishedAt: r.publishedAt?.toISOString() || null,
             })),
-            category: category || null,
+            // Only a category the *question* named constrains the semantic
+            // leg. A page filter is context, not instruction: hard-filtering
+            // Qdrant by it would hide the notice that actually answers a
+            // question asked from an unrelated listing page.
+            category: intent.category ?? null,
             language: language || 'en',
             top_k: 5,
+            // The AI service orders its own Qdrant fallback by similarity,
+            // which is the wrong axis for "latest"/"recent" questions.
+            recency_intent: intent.wantsLatest,
           },
 { timeout: 45000 },
         ),
@@ -651,12 +651,18 @@ export class NoticesService {
       return response.data;
     } catch (err: any) {
       this.logger.warn(`Notice search failed: ${err.message}`);
-      // If AI service is down, return a basic response from PG results
+      // If AI service is down, return a basic response from PG results.
+      // Says so explicitly: an unlabelled list reads as a considered answer
+      // to the question, when it is really just the search hits.
       if (pgResults.length > 0) {
         return {
-          answer: `I found ${pgResults.length} relevant notice(s). Here are the top results:\n\n` +
+          answer:
+            `I can't reach the AI assistant right now, so here are the ` +
+            `${Math.min(3, pgResults.length)} closest matching notices instead:\n\n` +
             pgResults.slice(0, 3).map((r, i) =>
-              `${i + 1}. **${r.title}**${r.aiSummary ? ` — ${r.aiSummary.slice(0, 150)}...` : ''}`
+              `${i + 1}. **${r.title}**` +
+              (r.publishedAt ? ` _(${r.publishedAt.toISOString().slice(0, 10)})_` : '') +
+              (r.aiSummary ? ` — ${r.aiSummary.slice(0, 150)}...` : '')
             ).join('\n\n'),
           sources: pgResults.slice(0, 5).map((r) => ({
             id: r.id,
@@ -673,6 +679,86 @@ export class NoticesService {
         model_used: null,
       };
     }
+  }
+
+  /**
+   * Keyword leg of the chatbot's hybrid search.
+   *
+   * The previous version matched the *entire question* as one ILIKE substring
+   * ("latest tender notices" against `title`), which no real notice ever
+   * contains — so this leg silently returned nothing for every natural
+   * language question and the answer came from whatever the semantic
+   * fallback happened to surface, dates and category included. Matching per
+   * term and ranking the candidates in-process is what makes the answer
+   * correspond to the question.
+   */
+  private async keywordSearch(intent: SearchIntent, category?: ScrapedItemCategory) {
+    const select = {
+      id: true,
+      title: true,
+      aiSummary: true,
+      category: true,
+      sourceLabel: true,
+      sourceUrl: true,
+      publishedAt: true,
+    } as const;
+    const where: Prisma.ScrapedItemWhereInput = category ? { category } : {};
+
+    // "Latest tender notices" is *entirely* intent + category once those are
+    // parsed out — there is no content word left to match. The honest reading
+    // is "the newest ones", not "nothing found".
+    if (intent.terms.length === 0) {
+      if (!intent.wantsLatest && !category) return [];
+      return this.prisma.scrapedItem.findMany({
+        where,
+        select,
+        orderBy: { publishedAt: 'desc' },
+        take: 10,
+      });
+    }
+
+    const candidates = await this.prisma.scrapedItem.findMany({
+      where: {
+        ...where,
+        OR: intent.terms.flatMap((term) => [
+          { title: { contains: term, mode: 'insensitive' as const } },
+          { aiSummary: { contains: term, mode: 'insensitive' as const } },
+          { contentText: { contains: term, mode: 'insensitive' as const } },
+        ]),
+      },
+      select,
+      orderBy: { publishedAt: 'desc' },
+      // Widened well past the 10 we return: ranking only improves on what it
+      // is given, and `publishedAt desc` alone would hand back the newest
+      // single-term match ahead of an older notice that matched every term.
+      take: 60,
+    });
+
+    const scored = candidates.map((row) => {
+      let score = 0;
+      for (const term of intent.terms) {
+        // Title hits are the strongest signal of aboutness, body text the
+        // weakest — a term appearing once in a long PDF says little.
+        if (row.title?.toLowerCase().includes(term)) score += 3;
+        if (row.aiSummary?.toLowerCase().includes(term)) score += 2;
+      }
+      return { row, score };
+    });
+
+    // A term appearing only in a long body PDF scores 0 here. Those are kept
+    // solely as a last resort: once anything matched a title or summary, the
+    // body-only hits are noise, and passing them to the model as context is
+    // how an answer ends up citing a notice that merely contains the word.
+    const ranked = scored.some((s) => s.score > 0) ? scored.filter((s) => s.score > 0) : scored;
+
+    const time = (r: (typeof ranked)[number]) => r.row.publishedAt?.getTime() ?? 0;
+    ranked.sort((a, b) =>
+      // "Latest X" asks for a date ordering over the matching set; every
+      // other question wants the best match first.
+      intent.wantsLatest ? time(b) - time(a) || b.score - a.score : b.score - a.score || time(b) - time(a),
+    );
+
+    return ranked.slice(0, 10).map((s) => s.row);
   }
 
   async categoryCounts() {
@@ -695,4 +781,88 @@ export class NoticesService {
       });
     });
   }
+}
+
+export interface SearchIntent {
+  /** Content words to match, lowercased. Intent/category/stop words removed. */
+  terms: string[];
+  /** The question asked for the newest items rather than the best match. */
+  wantsLatest: boolean;
+  /** Category named by the question itself, if any. */
+  category?: ScrapedItemCategory;
+}
+
+/** Words that carry no retrieval signal in a notice corpus (every row is a "notice"). */
+const SEARCH_STOP_WORDS = new Set([
+  'a', 'about', 'all', 'am', 'an', 'and', 'announcement', 'announcements', 'any', 'are', 'as',
+  'at', 'be', 'been', 'by', 'can', 'do', 'does', 'find', 'for', 'from', 'get', 'give', 'has',
+  'have', 'i', 'in', 'is', 'it', 'list', 'me', 'my', 'notice', 'notices', 'of', 'on', 'or',
+  'please', 'search', 'show', 'some', 'suchana', 'tell', 'that', 'the', 'there', 'these',
+  'this', 'to', 'update', 'updates', 'was', 'were', 'what', 'when', 'where', 'which', 'who',
+  'with', 'you', 'your',
+]);
+
+/** Recency words — these ask for a date ordering, not a similarity ordering. */
+const RECENCY_WORDS = new Set([
+  'latest', 'newest', 'recent', 'recently', 'new', 'current', 'today', 'now', 'upcoming',
+  'this week', 'nayaa', 'naya',
+]);
+
+/**
+ * Question words that name a category. Kept deliberately small and
+ * unambiguous: a wrong guess here narrows the corpus to the wrong slice,
+ * which is worse than not guessing at all.
+ */
+const CATEGORY_WORDS: Record<string, ScrapedItemCategory> = {
+  tender: ScrapedItemCategory.TENDER,
+  tenders: ScrapedItemCategory.TENDER,
+  bid: ScrapedItemCategory.TENDER,
+  bids: ScrapedItemCategory.TENDER,
+  procurement: ScrapedItemCategory.TENDER,
+  bolpatra: ScrapedItemCategory.TENDER,
+  vacancy: ScrapedItemCategory.VACANCY,
+  vacancies: ScrapedItemCategory.VACANCY,
+  job: ScrapedItemCategory.JOB,
+  jobs: ScrapedItemCategory.JOB,
+  internship: ScrapedItemCategory.INTERNSHIP,
+  internships: ScrapedItemCategory.INTERNSHIP,
+  circular: ScrapedItemCategory.CIRCULAR,
+  circulars: ScrapedItemCategory.CIRCULAR,
+  news: ScrapedItemCategory.NEWS,
+};
+
+/**
+ * Split a chatbot question into the parts retrieval can actually use.
+ *
+ * "Latest tender notices" → terms: [], wantsLatest: true, category: TENDER.
+ * Nothing is left to keyword-match, and that is the correct outcome: the
+ * caller answers it as "the newest tenders" instead of matching the literal
+ * phrase against notice titles and finding nothing.
+ */
+export function parseSearchIntent(question: string): SearchIntent {
+  // \p{M} is load-bearing, not decorative: Devanagari vowel signs (ि, े, ो…)
+  // are combining marks, not letters, so a \p{L}\p{N}-only filter shreds
+  // "शिक्षक" into "श"/"क"/"षक" and the length filter below then drops the
+  // fragments — every Nepali question would arrive with zero search terms.
+  const words = question
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}\s]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const wantsLatest = words.some((w) => RECENCY_WORDS.has(w));
+  const category = words.map((w) => CATEGORY_WORDS[w]).find(Boolean);
+
+  const terms = words.filter(
+    (w) =>
+      w.length > 2 &&
+      !SEARCH_STOP_WORDS.has(w) &&
+      !RECENCY_WORDS.has(w) &&
+      // Already expressed as a category filter — matching the literal word
+      // "tender" against titles would then rank English-titled notices above
+      // the Nepali ones that make up most of the corpus.
+      !(category && CATEGORY_WORDS[w] === category),
+  );
+
+  return { terms: Array.from(new Set(terms)), wantsLatest, category };
 }

@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import {
   Sparkles,
   LayoutDashboard, FileText, FolderOpen, Users, Globe,
-  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Link2, Bell, Shield, CreditCard } from "lucide-react"
+  Settings, SlidersHorizontal, ArrowLeft, Menu, X, Bell, Shield, CreditCard, Mail } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { mockScrapingSources } from "@/lib/mock-data"
@@ -25,7 +25,6 @@ const navGroups = [
     links: [
       { href: "/admin/notices", label: "Notices", icon: FileText },
       { href: "/admin/categories", label: "Categories", icon: FolderOpen },
-      { href: "/admin/sources", label: "Sources", icon: Link2 },
     ],
   },
   {
@@ -40,6 +39,7 @@ const navGroups = [
     label: "Administration",
     links: [
       { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/contact", label: "Contact inbox", icon: Mail },
       { href: "/admin/plans", label: "Plans & usage", icon: CreditCard },
       { href: "/admin/settings", label: "Settings", icon: SlidersHorizontal },
       { href: "/admin/system", label: "System", icon: Settings },

@@ -20,8 +20,24 @@ Rules:
 - When several notices are relevant, or the answer lists items sharing the same fields (deadlines, categories, sources, fees), present them as a Markdown table with a header row. At least two rows and two columns, otherwise prose or bullets.
 - Keep answers concise (under 200 words for factual lookups, up to 300 for broader questions).
 - Answer in the same language the question is asked in. If the content is in Nepali but the question is in English, translate and explain in English.
+- Answer whenever the context is relevant, even partially. If the notices cover
+  part of the question, give what they establish and then name what they do not
+  cover. Refusing outright when related notices are present is a wrong answer.
+- A notice is relevant if it is about the same subject, even when its wording
+  differs from the question — the corpus is mostly Nepali, so an English
+  question will rarely share words with the notice that answers it.
+- Only say nothing was found when the context is genuinely about other subjects.
 - If the context doesn't contain the answer, say so plainly — do not guess.
 - When citing a specific notice, mention its title in quotes so the user knows which one.
+- Every notice carries a "Published" date. Use THAT date when the user asks
+  when something was posted, and never present a date found inside a summary
+  (often a Bikram Sambat date from the notice body) as the publication date.
+- The context is ordered — [1] is the best match for the question. For
+  "latest"/"recent" questions it is ordered newest first, so answer from the
+  top of the list and give each notice's published date.
+- Only the notices in the context exist. Never imply the list is exhaustive
+  beyond it, and never claim a notice is the newest unless its Published date
+  is the most recent one you were given.
 - Answer directly — no filler like "Based on the notices..." or "According to the context..."."""
 
 _NO_RESULTS_PROMPT = """You are Suchana AI, an assistant for a Nepalese public notice portal. The user asked a question but no relevant notices were found in the database.
@@ -42,6 +58,7 @@ async def search_and_answer(
     category: str | None = None,
     language: str = "en",
     top_k: int = 5,
+    recency_intent: bool = False,
 ) -> dict:
     """Hybrid notice search: use PG keyword results if provided, otherwise
     fall back to Qdrant semantic search. Then generate an LLM answer.
@@ -49,6 +66,9 @@ async def search_and_answer(
     pg_results: pre-fetched keyword search results from PostgreSQL (passed by
                 the NestJS API). Each dict has: id, title, aiSummary, category,
                 sourceLabel, sourceUrl, publishedAt.
+    recency_intent: the API parsed the question as asking for the newest
+                items ("latest tender notices"). Similarity order is the wrong
+                axis for those, so the context is re-sorted by date.
     """
     logger.info(
         "Notice search (pg_results=%d, category=%s, top_k=%d): %.80s",
@@ -69,36 +89,20 @@ async def search_and_answer(
             "model_used": _model_name(),
         }
 
-    sources = []
-
-    if pg_results and len(pg_results) > 0:
-        sources = pg_results[:top_k]
-        logger.info("Using %d PostgreSQL keyword results", len(sources))
-    else:
-        qdrant_results = notice_store.search(
-            query_text=question,
-            top_k=top_k,
-            category=category,
-        )
-        sources = [
-            {
-                "id": r["notice_id"],
-                "title": r["title"],
-                "aiSummary": r["ai_summary"],
-                "category": r["category"],
-                "sourceLabel": r["source_label"],
-                "sourceUrl": r["source_url"],
-                "publishedAt": r.get("published_at"),
-                "score": r["score"],
-            }
-            for r in qdrant_results
-            if r["score"] >= 0.75
-        ]
-        logger.info(
-            "Qdrant semantic search returned %d/%d results above threshold",
-            len(sources),
-            len(qdrant_results),
-        )
+    # Both legs always run, then fuse. The previous either/or ("if we got any
+    # keyword hit, don't bother searching semantically") meant one weak
+    # literal match — the word "policy" buried in an unrelated PDF — silently
+    # suppressed the semantic leg, which is the only leg that can match an
+    # English question against a Nepali notice at all.
+    keyword_hits = list(pg_results or [])
+    semantic_hits = _semantic_search(question, category, top_k)
+    sources = _fuse(keyword_hits, semantic_hits, top_k)
+    logger.info(
+        "Retrieval: %d keyword + %d semantic → %d fused",
+        len(keyword_hits),
+        len(semantic_hits),
+        len(sources),
+    )
 
     if not sources:
         no_result_answer = await _generate_no_results(question, language)
@@ -108,10 +112,18 @@ async def search_and_answer(
             "model_used": _model_name(),
         }
 
+    if recency_intent:
+        sources = _by_published_desc(sources)
+
+    # Published dates are part of the context: without them the model has no
+    # way to answer "latest"/"when" questions and will quote whatever date it
+    # finds inside a summary — typically the Bikram Sambat date printed in the
+    # notice body, which is not the publication date.
     context = "\n\n".join(
         f"[{i+1}] Title: \"{s.get('title', 'Untitled')}\"\n"
         f"Category: {s.get('category', 'NOTICE')}\n"
         f"Source: {s.get('sourceLabel', '')}\n"
+        f"Published: {_published_label(s)}\n"
         f"Summary: {s.get('aiSummary', '') or 'No summary available'}"
         for i, s in enumerate(sources)
     )
@@ -126,7 +138,7 @@ async def search_and_answer(
         {"role": "user", "content": f"Context (notices found):\n{context}\n\nQuestion: {question}"},
     ]
 
-    answer = await llm._llm_chat(messages, max_tokens=800, temperature=0.5)
+    answer = await llm._llm_chat(messages, max_tokens=800, temperature=config.TEMPERATURE_ANSWERS)
     if answer is None:
         answer = _extractive_fallback(sources)
 
@@ -146,29 +158,120 @@ async def search_and_answer(
     }
 
 
+def _semantic_search(question: str, category: str | None, top_k: int) -> list[dict]:
+    """Dense-vector leg. Over-fetches, then applies an absolute floor and a
+    margin relative to the best hit.
+
+    The floor matters: the codebase's own note on E5 scores puts *irrelevant*
+    hits at ~0.76-0.78, so the 0.75 this used to hardcode admitted results it
+    already knew to be noise — and the model then dutifully summarised them as
+    though they answered the question."""
+    raw = notice_store.search(
+        query_text=question,
+        # Over-fetch so the margin gate has a real distribution to cut
+        # against rather than just the top_k it was going to return anyway.
+        top_k=max(top_k * 3, 15),
+        category=category,
+    )
+    if not raw:
+        return []
+
+    best = max(r["score"] for r in raw)
+    floor = max(config.NOTICE_SCORE_THRESHOLD, best - config.NOTICE_SCORE_MARGIN)
+    kept = [
+        {
+            "id": r["notice_id"],
+            "title": r["title"],
+            "aiSummary": r["ai_summary"],
+            "category": r["category"],
+            "sourceLabel": r["source_label"],
+            "sourceUrl": r["source_url"],
+            "publishedAt": r.get("published_at"),
+            "score": r["score"],
+        }
+        for r in raw
+        if r["score"] >= floor
+    ]
+    logger.info(
+        "Semantic leg: %d/%d kept (best=%.3f, floor=%.3f)", len(kept), len(raw), best, floor
+    )
+    return kept
+
+
+def _fuse(keyword_hits: list[dict], semantic_hits: list[dict], top_k: int) -> list[dict]:
+    """Reciprocal-rank fusion of the two legs.
+
+    RRF rather than raw scores because the legs aren't comparable: one is a
+    cosine similarity, the other a Postgres keyword ranking. A notice found by
+    *both* legs outranks one found by either alone, which is exactly the
+    signal we want — agreement between an exact term match and a semantic
+    match is the strongest evidence a notice is on-topic.
+    """
+    K = 60  # standard RRF damping; large enough that rank 1 vs 2 isn't decisive
+    fused: dict[str, dict] = {}
+    ranks: dict[str, float] = {}
+
+    for leg in (keyword_hits, semantic_hits):
+        for rank, hit in enumerate(leg):
+            key = hit.get("id") or hit.get("notice_id") or hit.get("title", "")
+            if not key:
+                continue
+            ranks[key] = ranks.get(key, 0.0) + 1.0 / (K + rank + 1)
+            # First writer wins on metadata, but a semantic hit carries a
+            # score the keyword leg doesn't — keep it when it shows up.
+            if key in fused:
+                if "score" in hit and "score" not in fused[key]:
+                    fused[key]["score"] = hit["score"]
+            else:
+                fused[key] = dict(hit)
+
+    ordered = sorted(fused.items(), key=lambda kv: ranks[kv[0]], reverse=True)
+    return [hit for _, hit in ordered[:top_k]]
+
+
 async def _generate_no_results(question: str, language: str) -> str:
     if config.GEMINI_API_KEY or config.GROQ_API_KEY:
         messages = [
             {"role": "system", "content": _NO_RESULTS_PROMPT},
             {"role": "user", "content": question},
         ]
-        answer = await llm._llm_chat(messages, max_tokens=150, temperature=0.8)
+        answer = await llm._llm_chat(messages, max_tokens=150, temperature=config.TEMPERATURE_CONVERSATION)
         if answer:
             return answer
 
     return "I couldn't find any relevant notices for that question. Try different keywords or browse the notices page directly."
 
 
+def _published_label(source: dict) -> str:
+    """YYYY-MM-DD from whatever the caller sent (the API sends ISO 8601)."""
+    raw = source.get("publishedAt") or source.get("published_at")
+    if not raw:
+        return "unknown"
+    return str(raw)[:10]
+
+
+def _by_published_desc(sources: list[dict]) -> list[dict]:
+    """Newest first; undated notices sink to the bottom rather than the top,
+    where an empty date would otherwise sort as the largest value."""
+    return sorted(sources, key=lambda s: (_published_label(s) != "unknown", _published_label(s)), reverse=True)
+
+
 def _extractive_fallback(sources: list[dict]) -> str:
+    """Used when every LLM provider failed. It is a search-result list, not an
+    answer, and says so — the previous wording ("Here are the most relevant
+    notices") read as a considered response to whatever was asked, so a
+    provider outage looked like a confidently wrong answer."""
     lines = []
     for s in sources[:3]:
         title = s.get("title", "Untitled")
         summary = s.get("aiSummary", "")
-        if summary:
-            lines.append(f"**{title}**: {summary}")
-        else:
-            lines.append(f"**{title}**")
-    return "Here are the most relevant notices:\n\n" + "\n\n".join(lines)
+        published = _published_label(s)
+        date_part = f" _(published {published})_" if published != "unknown" else ""
+        lines.append(f"**{title}**{date_part}" + (f": {summary}" if summary else ""))
+    return (
+        "The AI assistant is unavailable right now, so I can't summarise — "
+        "these are the notices matching your search:\n\n" + "\n\n".join(lines)
+    )
 
 
 def _model_name() -> str | None:
