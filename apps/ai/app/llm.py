@@ -594,6 +594,91 @@ async def health_snapshot(slug: str | None = None) -> dict:
     }
 
 
+def _split_sentences(text: str) -> list[str]:
+    """Splits `text` into standalone, rankable units for the extractive
+    fallback. Processes line-by-line rather than collapsing the whole block
+    first: a "- label: value" fact line has no terminal period, so joining it
+    onto neighbouring lines before splitting on punctuation used to glue
+    several unrelated facts into one unreadable run-on sentence (only
+    breaking wherever the *next* period happened to land). Each bullet line
+    is already one atomic fact and is kept as-is; section headers (e.g.
+    "NOTICE FACTS:") aren't answerable content and are dropped; everything
+    else is prose and gets real sentence splitting.
+    """
+    units: list[str] = []
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        stripped_bullet = re.sub(r"^[-•●▪]\s*", "", line)
+        if stripped_bullet != line:
+            if len(stripped_bullet) >= _MIN_SENTENCE_CHARS:
+                units.append(stripped_bullet)
+            continue
+
+        # A bare section header ("NOTICE FACTS:", "AI SUMMARY (Nepali):",
+        # "ATTACHED FILES (1) — ... notice page:") carries no fact of its
+        # own — the lines under it do.
+        if line.endswith(":"):
+            continue
+
+        for sentence in re.split(r"(?<=[.!?।])\s+", line):
+            sentence = sentence.strip()
+            if len(sentence) >= _MIN_SENTENCE_CHARS and not sentence[:1].islower():
+                units.append(sentence)
+
+    return units
+
+
+def _extractive_fallback(question: str, context_chunks: list[dict]) -> str:
+    if not context_chunks:
+        return "The provided documents do not contain this information."
+
+    sentences: list[str] = []
+    for chunk in context_chunks:
+        sentences.extend(_split_sentences(chunk["content"]))
+
+    if not sentences:
+        return context_chunks[0]["content"].strip()
+
+    try:
+        q_vec = np.array(embeddings.get_embedding(question))
+        sent_vecs = np.array(embeddings.get_embeddings(sentences))
+        scores = sent_vecs @ q_vec
+        ranked = np.argsort(scores)[::-1]
+
+        # Embeddings are normalized, so `scores` are cosine similarities. When
+        # even the best-matching sentence falls short of the same bar used for
+        # retrieval, nothing in this document actually answers the question —
+        # forcing out the top-K anyway (e.g. file size, unrelated notice
+        # titles) reads as an answer when it isn't one.
+        if scores[ranked[0]] < config.RAG_SCORE_THRESHOLD:
+            return "The provided documents do not contain this information."
+
+        picked: list[int] = []
+        seen: set[str] = set()
+        for i in ranked:
+            if scores[i] < config.RAG_SCORE_THRESHOLD:
+                break
+            key = sentences[i][:60].lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            picked.append(int(i))
+            if len(picked) >= FALLBACK_SENTENCES:
+                break
+
+        best = [sentences[i] for i in sorted(picked)]
+        if len(best) == 1:
+            return best[0]
+        return "The most relevant points from the documents:\n\n" + "\n".join(
+            f"- {s}" for s in best
+        )
+    except Exception:
+        logger.exception("Extractive ranking failed; returning first sentence")
+        return sentences[0]
+
 # --- Single-notice AI analysis (summary/key facts/tags) + Q&A ---
 
 _ANALYZE_PROMPT = """You analyze a single Nepalese government/public notice or news item and produce a JSON summary for display on a notice detail page.
