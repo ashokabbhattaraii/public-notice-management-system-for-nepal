@@ -78,4 +78,11 @@ apps/api/uploads/*
 *.onnx
 
 # Runtime uploads
-apps/api/uploads
+apps/api/uploads.cache/puppeteer
+
+
+*.png
+*.docx
+*.mmd
+*.mjs
+/scripts

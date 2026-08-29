@@ -25,6 +25,9 @@
     "setup": "pnpm install && pnpm db:start && pnpm db:setup && pnpm db:migrate"
   },
   "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.16.0",
+    "@playwright/test": "^1.62.1",
+    "puppeteer": "^23.11.1",
     "turbo": "^2.5.0"
   },
   "packageManager": "pnpm@10.18.0",

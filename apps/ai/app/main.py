@@ -34,6 +34,26 @@ logger = get_logger(__name__)
 # connection (and the worker) forever on a stuck downstream call.
 REQUEST_TIMEOUT_SECONDS = 100
 
+# ...but the scrape endpoints are not request/response calls in that sense:
+# one `/scrape/source` crawls up to `max_pages` listing pages, then fetches
+# and LLM-summarizes every new item behind them. That is minutes of work by
+# design, and NestJS budgets 600s for it (scraping.service.ts). Holding those
+# routes to the generic 100s ceiling meant every source with real content was
+# killed mid-run and reported as "Request failed with status code 504" — only
+# sources that happened to find nothing ever "succeeded". These budgets stay
+# just under the caller's so the timeout still surfaces here, with this
+# service's own error message, rather than as an opaque socket hang-up.
+ROUTE_TIMEOUT_SECONDS = {
+    "/scrape/source": 570,
+    "/scrape/sitemap/detect": 120,
+    "/scrape/check": 120,
+    "/scrape/listing/check": 120,
+}
+
+
+def _timeout_for(path: str) -> int:
+    return ROUTE_TIMEOUT_SECONDS.get(path, REQUEST_TIMEOUT_SECONDS)
+
 
 async def app(scope, receive, send):
     if scope["type"] == "lifespan":
@@ -60,15 +80,17 @@ async def app(scope, receive, send):
     # them mid-stream, so only bound the request/response endpoints below.
     is_sse = path.endswith("/progress/stream")
 
+    timeout_seconds = _timeout_for(path)
+
     start = time.perf_counter()
     try:
         route_call = _route(method, path, scope, receive, send)
         response = await route_call if is_sse else await asyncio.wait_for(
-            route_call, timeout=REQUEST_TIMEOUT_SECONDS
+            route_call, timeout=timeout_seconds
         )
     except asyncio.TimeoutError:
-        logger.error("Request timed out on %s %s after %ss", method, path, REQUEST_TIMEOUT_SECONDS)
-        response = (504, {"error": "Request timed out"})
+        logger.error("Request timed out on %s %s after %ss", method, path, timeout_seconds)
+        response = (504, {"error": f"Request timed out after {timeout_seconds}s"})
     except Exception as e:
         logger.exception("Unhandled error on %s %s", method, path)
         response = (500, {"error": "Internal server error", "detail": str(e)})

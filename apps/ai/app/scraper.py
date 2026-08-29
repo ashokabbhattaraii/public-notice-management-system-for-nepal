@@ -173,7 +173,12 @@ def _parse_published(raw: str | None) -> str | None:
     if bs_parsed:
         return bs_parsed
     match = _DATE_LIKE_RE.search(cleaned)
-    if match:
+    # Retry on the date-like fragment only when it is genuinely narrower than
+    # what just failed to parse. When the whole string is date-shaped but
+    # matches no known format, the match is the input itself, and recursing on
+    # it never terminates — that blew the stack and aborted the entire scrape
+    # for the source (seen on dor.gov.np and immigration.gov.np).
+    if match and len(match.group(0)) < len(cleaned):
         return _parse_published(match.group(0))
     return None
 
@@ -200,6 +205,36 @@ def _absolute_url(base_url: str, href: str | None) -> str | None:
 def _element_signature(tag) -> str:
     classes = sorted(c for c in tag.get("class", []) if c)
     return f"{tag.name}." + ".".join(classes) if classes else tag.name
+
+
+# How many ancestors to inspect when deciding whether a candidate row is really
+# navigation chrome. Menus mark themselves on the container (`ul.sf-menu`,
+# `div.sidebar`) while the repeating element itself is a bare `<li>`, so a
+# signature-only check sees nothing to penalize; three levels is enough to
+# reach the list container and its column wrapper without drifting into the
+# page-wide `div.container`, which would penalize genuine content too.
+_CHROME_ANCESTOR_DEPTH = 3
+
+
+def _chrome_context(tag) -> str:
+    """Class/id text of `tag` plus its nearest ancestors, lowercased.
+
+    Used instead of the element's own signature when testing for
+    `_CHROME_HINTS`: a sidebar menu's `<li>` rows carry no classes of their
+    own, so scoring them by signature alone let a 25-item nav menu outrank a
+    10-row notices table.
+    """
+    parts: list[str] = []
+    node = tag
+    for _ in range(_CHROME_ANCESTOR_DEPTH + 1):
+        if node is None or not hasattr(node, "get"):
+            break
+        parts.extend(node.get("class", []) or [])
+        node_id = node.get("id")
+        if node_id:
+            parts.append(node_id)
+        node = node.parent
+    return " ".join(parts).lower()
 
 
 def _css_selector_for_signature(tag, signature: str) -> str:
@@ -370,7 +405,12 @@ def _detect_schema_heuristic(html: str, base_url: str) -> dict | None:
         score = float(count)
         if any(h in lower_sig for h in _ROW_HINTS) or lower_sig == "tr":
             score *= 2.0
-        if any(h in lower_sig for h in _CHROME_HINTS):
+        # Chrome is judged from the surrounding markup, not just this element's
+        # own classes — see `_chrome_context`.
+        chrome_context = _chrome_context(elements[0])
+        if any(h in lower_sig for h in _CHROME_HINTS) or any(
+            h in chrome_context for h in _CHROME_HINTS
+        ):
             score *= 0.2
         if score > best_score:
             best_sig, best_score = sig, score
@@ -482,6 +522,23 @@ async def _detect_schema_llm(html: str, category: str) -> dict | None:
 # --- crawling ---
 
 
+# crawl4ai renders some failures (notably navigation errors) as a multi-hundred
+# -line dump with the surrounding source of its own internals. Stored verbatim
+# that lands in the ScrapeRun.issues JSON column and then in the admin UI, where
+# it buries the one line that identifies the problem. The first few lines carry
+# the actual message; the rest is its stack decoration.
+_MAX_ERROR_CHARS = 500
+
+
+def _clean_error(error: str | None) -> str:
+    if not error:
+        return "Unknown error"
+    text = " ".join(str(error).split())
+    if len(text) <= _MAX_ERROR_CHARS:
+        return text
+    return text[:_MAX_ERROR_CHARS].rstrip() + " … (truncated)"
+
+
 def _record_failure(
     failures: list[dict] | None, url: str, stage: str, error: str | None
 ) -> None:
@@ -491,7 +548,7 @@ def _record_failure(
     if failures is None:
         return
     failures.append(
-        {"url": url, "stage": stage, "error": error or "Unknown error", "outcome": "failed"}
+        {"url": url, "stage": stage, "error": _clean_error(error), "outcome": "failed"}
     )
 
 
@@ -639,6 +696,19 @@ async def _fetch_raw_html(
     if not result.success:
         logger.warning("Raw fetch failed for %s: %s", url, result.error_message)
         _record_failure(failures, url, "raw_fetch", result.error_message)
+        return None
+    # A headless browser renders a 404 into perfectly valid HTML, so without
+    # this check a mistyped listing URL reached schema detection and was
+    # reported as "could not detect a working listing pattern" — sending
+    # admins to debug the detector instead of the URL. Which one it is, is
+    # exactly the distinction worth surfacing.
+    status = getattr(result, "status_code", None)
+    if isinstance(status, int) and status >= 400:
+        logger.warning("Listing URL %s returned HTTP %d", url, status)
+        _record_failure(
+            failures, url, "listing_url",
+            f"Listing URL returned HTTP {status} — the configured URL is wrong or the page moved",
+        )
         return None
     return result.html
 
@@ -1252,6 +1322,28 @@ def _next_groq_key() -> str:
     return key
 
 
+# Upper bound on a single 429 sleep. Groq occasionally reports a multi-minute
+# `Retry-After` on a hard daily cap; waiting that out would stall the whole
+# scrape, so past this point the item is better left unsummarized.
+_SUMMARIZE_MAX_BACKOFF = 30.0
+
+
+def _retry_after_seconds(response) -> float | None:
+    """Seconds to wait per the response's `Retry-After` header, if usable.
+
+    Groq sends a decimal seconds value; the HTTP spec also allows an integer,
+    so both are accepted and anything else (including the HTTP-date form,
+    which Groq does not send) falls through to caller-side backoff.
+    """
+    raw = response.headers.get("retry-after") or response.headers.get("x-ratelimit-reset-tokens")
+    if not raw:
+        return None
+    try:
+        return min(_SUMMARIZE_MAX_BACKOFF, max(0.0, float(str(raw).rstrip("s"))))
+    except ValueError:
+        return None
+
+
 async def _summarize_item(title: str, content: str, category_hint: str | None) -> dict | None:
     """Call Groq/Gemini to summarize a single item. Returns parsed dict or None on failure.
     Rotates across multiple API keys and retries on 429."""
@@ -1275,7 +1367,13 @@ async def _summarize_item(title: str, content: str, category_hint: str | None) -
     }
 
     num_keys = len(config.GROQ_API_KEYS)
-    max_retries = max(3, num_keys)
+    # A scrape summarizes every new item on a source back-to-back, so 429s are
+    # the normal steady state on Groq's free tier, not an exceptional case.
+    # The previous schedule gave up after ~5s of total backoff, which silently
+    # dropped the summary for most items in any run with more than a handful
+    # of notices (observed: 15 of 18 on one SEBON run). Groq reports exactly
+    # how long to wait in `Retry-After`, so honour that rather than guessing.
+    max_retries = max(6, num_keys * 3)
 
     for attempt in range(max_retries + 1):
         api_key = _next_groq_key()
@@ -1292,23 +1390,36 @@ async def _summarize_item(title: str, content: str, category_hint: str | None) -
                     json=payload,
                 )
             if response.status_code == 429:
-                if attempt < max_retries:
-                    # On 429, rotate to next key immediately; only sleep if we've
-                    # cycled through all keys once
-                    if (attempt + 1) % num_keys == 0:
-                        wait = 2 ** (attempt // num_keys) + 1
-                        logger.info("Summarization: all keys rate-limited, sleeping %ds", wait)
-                        await asyncio.sleep(wait)
-                    else:
-                        logger.info("Summarization: key rate-limited, rotating to next key")
+                if attempt >= max_retries:
+                    logger.warning("Summarization: all retries exhausted for: %s", title[:60])
+                    return None
+                # Rotate to the next key first — a per-key limit often clears
+                # instantly on a different key. Only actually sleep once every
+                # key has been tried in this cycle.
+                if (attempt + 1) % num_keys:
+                    logger.info("Summarization: key rate-limited, rotating to next key")
                     continue
-                logger.warning("Summarization: all retries exhausted for: %s", title[:60])
-                return None
+                wait = _retry_after_seconds(response)
+                if wait is None:
+                    wait = min(_SUMMARIZE_MAX_BACKOFF, 2.0 ** (attempt // max(1, num_keys)))
+                wait += random.uniform(0, 0.5)  # de-sync concurrent workers
+                logger.info(
+                    "Summarization: all keys rate-limited, sleeping %.1fs (attempt %d/%d)",
+                    wait, attempt + 1, max_retries,
+                )
+                await asyncio.sleep(wait)
+                continue
             if response.status_code != 200:
                 logger.warning("Summarization: Groq returned %d", response.status_code)
                 return None
             raw = response.json()["choices"][0]["message"]["content"]
             raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+            if not raw:
+                # Reasoning models can spend the whole token budget on hidden
+                # reasoning and return an empty body; that is not valid JSON
+                # and is worth naming rather than logging as a parse error.
+                logger.warning("Summarization: empty completion for: %s", title[:60])
+                return None
             return json.loads(raw)
         except Exception:
             logger.exception("Summarization failed for: %s", title[:60])
@@ -1344,6 +1455,114 @@ def _paginated_url(listing_url: str, page_index: int, config: PaginationConfig) 
         return listing_url
     separator = "&" if urlparse(listing_url).query else "?"
     return f"{listing_url}{separator}{config.param}={page_number}"
+
+
+# Pagination schemes tried, in order, when the configured one turns out to be
+# a no-op for a site. `?page=` is the project-wide default and is right for
+# most of these sources, but WordPress installs use `?paged=` (or /page/N) and
+# a few use `?p=`. A site that simply ignores an unknown query parameter
+# happily serves page 1 forever, so an unvalidated guess doesn't fail loudly —
+# it silently re-ingests the same rows `max_pages` times.
+_PAGINATION_FALLBACKS = [
+    PaginationConfig(pagination_type="QUERY_PARAM", param="page"),
+    PaginationConfig(pagination_type="QUERY_PARAM", param="paged"),
+    PaginationConfig(pagination_type="QUERY_PARAM", param="p"),
+    PaginationConfig(pagination_type="PATH_TEMPLATE", param="page"),
+]
+
+
+def _row_fingerprints(rows: list[dict]) -> set[str]:
+    """Identity of a page of listing rows, for "is this the same page?" tests.
+
+    Keyed on detail_href where present (stable and unique per item) and on the
+    title otherwise, so a page that merely re-renders in a different order
+    still compares equal.
+    """
+    out = set()
+    for row in rows:
+        key = (row.get("detail_href") or "").strip() or (row.get("title") or "").strip()
+        if key:
+            out.add(key)
+    return out
+
+
+def _pages_overlap(first: set[str], second: set[str]) -> float:
+    """Fraction of `second` already seen in `first` (1.0 == identical page)."""
+    if not second:
+        return 1.0
+    return len(first & second) / len(second)
+
+
+# A page-2 probe counts as "pagination works" when it brings this many genuinely
+# new rows, both absolutely and as a share of the page. A share alone is too
+# strict: when schema detection settles on a coarse baseSelector the row set
+# includes sidebar/nav elements repeated on every page, so a working scheme can
+# still show ~60% overlap (observed on nrb.org.np). What is never ambiguous is
+# whether page 2 contributed items page 1 did not.
+_PAGINATION_MIN_NEW_ROWS = 3
+_PAGINATION_MIN_NEW_RATIO = 0.25
+
+
+def _page_adds_new(first: set[str], second: set[str]) -> bool:
+    if not second:
+        return False
+    new = second - first
+    return len(new) >= _PAGINATION_MIN_NEW_ROWS and (
+        len(new) / len(second) >= _PAGINATION_MIN_NEW_RATIO
+    )
+
+
+def _path_template_url(listing_url: str, page_number: int) -> str:
+    return listing_url.rstrip("/") + f"/page/{page_number}"
+
+
+async def _detect_pagination(
+    crawler: AsyncWebCrawler,
+    listing_url: str,
+    schema: dict,
+    page1: set[str],
+    configured: PaginationConfig,
+) -> tuple[PaginationConfig | None, list[dict]]:
+    """Find a pagination scheme whose page 2 actually differs from page 1.
+
+    Returns `(config, page_2_rows)`, or `(None, [])` if the listing is
+    genuinely a single page — a real answer, not a failure: many of these
+    sources show every notice on one page. The winning probe's rows are
+    handed back so the caller can use them directly instead of re-fetching
+    page 2, which otherwise costs an extra headless-browser load per
+    category on every single run.
+    """
+    tried: set[tuple[str, str]] = set()
+    candidates = [configured] + [
+        c for c in _PAGINATION_FALLBACKS
+        if (c.pagination_type, c.param) != (configured.pagination_type, configured.param)
+    ]
+
+    for cand in candidates:
+        key = (cand.pagination_type, cand.param)
+        if cand.pagination_type == "NONE" or key in tried:
+            continue
+        tried.add(key)
+
+        if cand.pagination_type == "PATH_TEMPLATE":
+            url = _path_template_url(listing_url, cand.start_page + 1)
+        else:
+            url = _paginated_url(listing_url, 1, cand)
+        if not url:
+            continue
+
+        rows = await _extract_with_schema(crawler, url, schema, None)
+        if len(rows) < 2:
+            continue
+        if _page_adds_new(page1, _row_fingerprints(rows)):
+            logger.info(
+                "Pagination for %s resolved to %s/%s",
+                listing_url, cand.pagination_type, cand.param,
+            )
+            return cand, rows
+
+    logger.info("No working pagination scheme for %s — treating as single page", listing_url)
+    return None, []
 
 
 _SUMMARIZE_CONCURRENCY = config.SUMMARIZE_CONCURRENCY
@@ -1773,14 +1992,64 @@ async def scrape_source(
             )
 
             effective_max_pages = 1 if pagination.pagination_type == "NONE" else max_pages
+            # Resolved lazily from page 1's rows (see `_detect_pagination`);
+            # `page_pagination` stays None until then.
+            page_pagination: PaginationConfig | None = None
+            previous_fingerprints: set[str] = set()
+            # Page 2's rows, already fetched by pagination detection.
+            prefetched_rows: list[dict] | None = None
+
             for page_index in range(effective_max_pages):
-                url = _paginated_url(listing_url, page_index, pagination)
+                if page_index == 0:
+                    url = listing_url
+                elif page_pagination is None:
+                    break  # single-page listing — nothing after page 1
+                elif page_pagination.pagination_type == "PATH_TEMPLATE":
+                    url = _path_template_url(listing_url, page_pagination.start_page + page_index)
+                else:
+                    url = _paginated_url(listing_url, page_index, page_pagination)
                 if not url:
                     break
-                report(f"Crawling {category.title()} listing, page {page_index + 1}…")
-                rows = await _extract_with_schema(crawler, url, schema, failures)
+
+                if prefetched_rows is not None:
+                    rows, prefetched_rows = prefetched_rows, None
+                    report(f"Crawling {category.title()} listing, page {page_index + 1}…")
+                else:
+                    report(f"Crawling {category.title()} listing, page {page_index + 1}…")
+                    rows = await _extract_with_schema(crawler, url, schema, failures)
                 if not rows:
                     break
+
+                fingerprints = _row_fingerprints(rows)
+                if page_index == 0:
+                    previous_fingerprints = fingerprints
+                    if effective_max_pages > 1:
+                        page_pagination, prefetched_rows = await _detect_pagination(
+                            crawler, listing_url, schema, fingerprints, pagination
+                        )
+                        prefetched_rows = prefetched_rows or None
+                        if page_pagination is None:
+                            report(f"{category.title()} listing is a single page")
+                        elif (page_pagination.pagination_type, page_pagination.param) != (
+                            pagination.pagination_type, pagination.param
+                        ):
+                            report(
+                                f"Pagination for {category.title()} is "
+                                f"{page_pagination.pagination_type}/{page_pagination.param}, "
+                                f"not the configured {pagination.pagination_type}/{pagination.param}"
+                            )
+                else:
+                    # A page that just repeats what we already have means the
+                    # site ignored the page parameter (or we ran off the end).
+                    # Continuing would re-walk page 1 up to `max_pages` times,
+                    # burning detail crawls and LLM calls on known items.
+                    if not _page_adds_new(previous_fingerprints, fingerprints):
+                        report(
+                            f"{category.title()} page {page_index + 1} repeats the previous page; "
+                            "stopping pagination"
+                        )
+                        break
+                    previous_fingerprints |= fingerprints
 
                 new_rows_on_page = 0
                 unknown_rows_on_page = 0
