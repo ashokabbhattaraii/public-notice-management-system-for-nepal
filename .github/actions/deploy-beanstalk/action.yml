@@ -39,6 +39,36 @@ runs:
         EOF
         zip deploy.zip Dockerrun.aws.json
 
+    # Beanstalk rejects a deploy outright — 400 InvalidParameterValue,
+    # "Environment ... is in an invalid state for this operation. Must be
+    # Ready." — whenever the environment is mid-change: a previous deploy, an
+    # instance replacement, or a console/CLI configuration update (e.g.
+    # changing environment properties or the root volume size). The deploy
+    # step below only waits for recovery *after* it has started, so without
+    # this the job dies in seconds on a race it could simply have waited out.
+    #
+    # Credentials come from the OIDC step inside build-push-ecr, which runs
+    # earlier in the same job and exports them to the job environment.
+    - name: Wait for environment to be Ready
+      shell: bash
+      run: |
+        status=unknown
+        for attempt in $(seq 1 80); do
+          status=$(aws elasticbeanstalk describe-environments \
+            --application-name "${{ inputs.application-name }}" \
+            --environment-names "${{ inputs.environment-name }}" \
+            --region "${{ inputs.aws-region }}" \
+            --query "Environments[0].Status" --output text 2>/dev/null || echo "Unknown")
+          if [ "$status" = "Ready" ]; then
+            echo "Environment is Ready (after $attempt check(s))."
+            exit 0
+          fi
+          echo "Environment status is '$status' — waiting 15s ($attempt/80)…"
+          sleep 15
+        done
+        echo "::error::${{ inputs.environment-name }} never reached Ready within 20 minutes (last status: $status)."
+        exit 1
+
     - name: Deploy
       uses: einaregilsson/beanstalk-deploy@v22
       with:
