@@ -124,6 +124,12 @@ export interface RagSource {
   content: string
   score: number
   title?: string
+  // Where in the document the citation [n] actually points — [first, last]
+  // page of the (possibly merged) span. Null when the format carries no
+  // pagination, e.g. plain text or HTML.
+  page_range?: number[] | null
+  // Heading trail, e.g. "Eligibility > Age limit".
+  section_path?: string | null
 }
 
 export interface RagQueryResponse {
@@ -379,6 +385,9 @@ export interface ScrapeSource {
   sitemapUrl: string | null
   // When sitemap detection was last attempted (attempted once, cached forever).
   sitemapCheckedAt: string | null
+  // True for sources auto-created by the admin "paste a link" quick-scrape
+  // flow — no listing URLs configured, excluded from the scheduler.
+  isAdHoc: boolean
   enabled: boolean
   createdAt: string
   updatedAt: string

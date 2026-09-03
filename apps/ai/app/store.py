@@ -192,6 +192,16 @@ def index_document(
             "char_end": chunk["char_end"],
             **metadata,
         }
+        # Per-chunk locators, written last so a document-level metadata key
+        # of the same name cannot shadow them. The chunker computes these
+        # for exactly this purpose but they used to stop here: only the
+        # document-level `metadata` was indexed, so every citation could
+        # name the file and nothing more — no page, no section — and
+        # rag._merge_adjacent_chunks' page ranges were always [None, None].
+        for key in ("page_num", "section_path", "header_level"):
+            value = chunk.get(key)
+            if value not in (None, ""):
+                payload[key] = value
         vector: dict = {DENSE_VECTOR: dense}
         if sparse_embeddings:
             indices, values = sparse_embeddings[i]

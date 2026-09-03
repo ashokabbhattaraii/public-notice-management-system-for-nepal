@@ -29,6 +29,8 @@ import {
   Rocket,
   ChevronLeft,
   RefreshCw,
+  History,
+  ExternalLink,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Header } from "@/components/layout/header"
@@ -46,6 +48,7 @@ import {
   fetchSchedulerStatus,
   setAutoScraping,
   runAllScrapeSources,
+  quickScrapeUrl,
 } from "@/lib/api"
 import { getStoredJSON, setStoredJSON } from "@/lib/local-store"
 import { toast } from "sonner"
@@ -91,6 +94,28 @@ const emptyForm: SourceFormState = {
 const PROGRESS_POLL_MS = 1200
 
 const TAB_PREFS_KEY = "pnm_admin_scraping_tab"
+const QUICK_HISTORY_KEY = "pnm_admin_quick_scrape_history"
+const QUICK_HISTORY_LIMIT = 15
+
+interface QuickScrapeItem {
+  id: string
+  url: string
+  status: "queued" | "scraping" | "exists" | "done" | "error"
+  detail?: string
+  // Set once the notice is known to exist in the catalogue (fresh save or a
+  // prior duplicate) — lets the row link straight to it.
+  itemId?: string
+  title?: string
+}
+
+interface QuickScrapeHistoryEntry {
+  url: string
+  status: "exists" | "done" | "error"
+  detail: string
+  at: string
+  itemId?: string
+  title?: string
+}
 
 /** Preset poll intervals shown as one-click chips in the source dialog. */
 const POLL_PRESETS = [
@@ -243,6 +268,27 @@ function AdminScrapingPageContent() {
   const [runningAll, setRunningAll] = useState(false)
   const [togglingAuto, setTogglingAuto] = useState(false)
   const [runAllNotice, setRunAllNotice] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null)
+  // Admin "paste a link" quick-scrape — ingest one or more notice/news/
+  // press-release URLs directly, no source pre-configuration required.
+  const [quickUrlsText, setQuickUrlsText] = useState("")
+  const [quickBatchRunning, setQuickBatchRunning] = useState(false)
+  const [quickNotice, setQuickNotice] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null)
+  const [quickItems, setQuickItems] = useState<QuickScrapeItem[]>([])
+  const [quickHistory, setQuickHistory] = useState<QuickScrapeHistoryEntry[]>(
+    () => getStoredJSON(QUICK_HISTORY_KEY, { items: [] as QuickScrapeHistoryEntry[] }).items,
+  )
+  const [quickHistoryOpen, setQuickHistoryOpen] = useState(false)
+  const [quickDialogOpen, setQuickDialogOpen] = useState(false)
+
+  useEffect(() => {
+    setStoredJSON(QUICK_HISTORY_KEY, { items: quickHistory })
+  }, [quickHistory])
+
+  /** Cap + prepend a quick-scrape outcome to the persisted recent-history list. */
+  function pushQuickHistory(entry: Omit<QuickScrapeHistoryEntry, "at">) {
+    setQuickHistory((prev) => [{ ...entry, at: new Date().toISOString() }, ...prev].slice(0, QUICK_HISTORY_LIMIT))
+  }
+
   // Logs tab — server-side paginated run history.
   const [logRuns, setLogRuns] = useState<ScrapeRun[]>([])
   const [logMeta, setLogMeta] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 })
@@ -476,7 +522,11 @@ function AdminScrapingPageContent() {
    * queued another request, and when the backlog finally drained each of them
    * saw "done" and fired its own full reload.
    */
-  function pollProgress(sourceId: string, runId: string) {
+  function pollProgress(
+    sourceId: string,
+    runId: string,
+    onDone?: (stage: "done" | "failed") => void,
+  ) {
     stopPolling(sourceId)
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
@@ -494,6 +544,7 @@ function AdminScrapingPageContent() {
             return next
           })
           await loadAll()
+          onDone?.(progress.stage)
           return
         }
       } catch {
@@ -588,6 +639,103 @@ function AdminScrapingPageContent() {
     }
   }
 
+  /**
+   * Admin "paste a link" quick-scrape: ingest one or more arbitrary
+   * notice/news/press-release URLs (one per line) directly. No source needs
+   * to be configured first — the API reuses a matching source for each
+   * domain or auto-creates a minimal one, then crawls just that URL as a
+   * detail page. Requests are sent one at a time (not their crawls, which
+   * run in the background) so two links on the same domain don't collide
+   * with the API's per-source "already running" lock.
+   */
+  async function handleQuickScrape(e: React.FormEvent) {
+    e.preventDefault()
+    if (quickBatchRunning) return
+
+    const seen = new Set<string>()
+    const validUrls: string[] = []
+    for (const line of quickUrlsText.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      if (seen.has(line)) continue
+      seen.add(line)
+      try {
+        const parsed = new URL(line)
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") validUrls.push(line)
+      } catch {
+        // not a valid absolute URL — skip it
+      }
+    }
+    if (validUrls.length === 0) {
+      setQuickNotice({ tone: "error", text: "Paste at least one valid http(s) link, one per line." })
+      return
+    }
+
+    const items: QuickScrapeItem[] = validUrls.map((url, i) => ({
+      id: `${Date.now()}-${i}`,
+      url,
+      status: "queued",
+    }))
+    setQuickItems(items)
+    setQuickNotice(null)
+    setQuickBatchRunning(true)
+
+    const setItemStatus = (id: string, patch: Partial<QuickScrapeItem>) =>
+      setQuickItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+
+    for (const item of items) {
+      setItemStatus(item.id, { status: "scraping" })
+      try {
+        const result = await quickScrapeUrl(item.url)
+        if (result.alreadyExists) {
+          const detail = `Already in the catalogue: "${result.item.title}"`
+          const patch = { status: "exists" as const, detail, itemId: result.item.id, title: result.item.title }
+          setItemStatus(item.id, patch)
+          pushQuickHistory({ url: item.url, ...patch })
+        } else {
+          setItemStatus(item.id, {
+            detail: result.sourceCreated ? "New source created for this domain — crawling…" : "Crawling…",
+          })
+          setRunningIds((prev) => new Set(prev).add(result.sourceId))
+          setProgressBySource((prev) => ({
+            ...prev,
+            [result.sourceId]: { run_id: result.runId, stage: "running", messages: [], error: null },
+          }))
+          pollProgress(result.sourceId, result.runId, async (stage) => {
+            if (stage !== "done") {
+              const detail = "Scrape failed — see Logs for details"
+              setItemStatus(item.id, { status: "error", detail })
+              pushQuickHistory({ url: item.url, status: "error", detail })
+              return
+            }
+            // The run just persisted this URL — re-check resolves the saved
+            // notice's id/title so the row can link straight to it.
+            let itemId: string | undefined
+            let title: string | undefined
+            try {
+              const check = await quickScrapeUrl(item.url)
+              if (check.alreadyExists) {
+                itemId = check.item.id
+                title = check.item.title
+              }
+            } catch {
+              // best-effort — chip still shows "done" without a deep link
+            }
+            const detail = "Scraped and saved"
+            setItemStatus(item.id, { status: "done", detail, itemId, title })
+            pushQuickHistory({ url: item.url, status: "done", detail, itemId, title })
+          })
+        }
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "Failed to scrape that link"
+        setItemStatus(item.id, { status: "error", detail })
+        pushQuickHistory({ url: item.url, status: "error", detail })
+      }
+    }
+
+    setQuickUrlsText("")
+    setQuickBatchRunning(false)
+    await loadAll()
+  }
+
   /** Global auto-scraping on/off — persisted, manual "Run now" unaffected. */
   async function handleToggleAutoScraping() {
     if (togglingAuto) return
@@ -632,12 +780,23 @@ function AdminScrapingPageContent() {
               Add any government or public website — notice/news listings are detected and scraped automatically
             </p>
           </div>
-          <button
-            onClick={openCreateDialog}
-            className="flex items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
-          >
-            <Plus className="size-4" /> Add source
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => {
+                setQuickNotice(null)
+                setQuickDialogOpen(true)
+              }}
+              className="flex items-center gap-2 rounded-full border border-vez-line px-5 py-2.5 text-sm text-vez-ink transition-colors hover:bg-vez-surface"
+            >
+              <Link2 className="size-4" /> Scrape a link
+            </button>
+            <button
+              onClick={openCreateDialog}
+              className="flex items-center gap-2 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90"
+            >
+              <Plus className="size-4" /> Add source
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -838,7 +997,17 @@ function AdminScrapingPageContent() {
                     <div key={source.id} className="rounded-[20px] bg-white p-6">
                       <div className="mb-4 flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <h3 className="text-base text-vez-ink">{source.name}</h3>
+                          <h3 className="flex items-center gap-1.5 text-base text-vez-ink">
+                            {source.name}
+                            {source.isAdHoc && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-vez-sky/30 px-2 py-0.5 text-[10px] font-medium text-vez-navy"
+                                title="Auto-created from a pasted link — no listing pages configured"
+                              >
+                                <Link2 className="size-2.5" /> Manual
+                              </span>
+                            )}
+                          </h3>
                           <p className="mt-0.5 max-w-[260px] truncate text-xs text-vez-mute">{source.baseUrl}</p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -867,6 +1036,22 @@ function AdminScrapingPageContent() {
                           </span>
                         </div>
                       </div>
+                      {source.isAdHoc ? (
+                        <div className="mb-4 grid grid-cols-2 gap-3 rounded-[14px] bg-vez-surface px-4 py-3 text-xs">
+                          <div>
+                            <span className="text-vez-mute">Category</span>
+                            <p className="mt-0.5 text-vez-ink">{categories || "—"}</p>
+                          </div>
+                          <div>
+                            <span className="text-vez-mute">Items scraped</span>
+                            <p className="mt-0.5 text-vez-ink">{source.itemCount.toLocaleString()}</p>
+                          </div>
+                          <div className="col-span-2 text-vez-mute">
+                            Created from a pasted link — no listing pages, not polled automatically.
+                            Use &quot;Scrape a link&quot; above to add more from this domain.
+                          </div>
+                        </div>
+                      ) : (
                       <div className="mb-4 grid grid-cols-2 gap-3 rounded-[14px] bg-vez-surface px-4 py-3 text-xs">
                         <div>
                           <span className="text-vez-mute">Category</span>
@@ -920,6 +1105,7 @@ function AdminScrapingPageContent() {
                           </div>
                         )}
                       </div>
+                      )}
                       {source.lastRunAt && !isRunning && (
                         <p className="mb-4 text-xs text-vez-mute">
                           Last run: {new Date(source.lastRunAt).toLocaleString()}
@@ -972,27 +1158,31 @@ function AdminScrapingPageContent() {
                       )}
 
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleRun(source.id)}
-                          disabled={isRunning || !source.enabled}
-                          className="flex items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                        >
-                          {isRunning ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
-                          {isRunning ? "Scraping…" : "Run now"}
-                        </button>
-                        <button
-                          onClick={() => handleToggleEnabled(source)}
-                          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
-                        >
-                          {source.enabled ? <Ban className="size-3" /> : <PlayCircle className="size-3" />}
-                          {source.enabled ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          onClick={() => openEditDialog(source)}
-                          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
-                        >
-                          <Edit className="size-3" /> Edit
-                        </button>
+                        {!source.isAdHoc && (
+                          <>
+                            <button
+                              onClick={() => handleRun(source.id)}
+                              disabled={isRunning || !source.enabled}
+                              className="flex items-center gap-1.5 rounded-full bg-vez-navy px-4 py-2 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                            >
+                              {isRunning ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                              {isRunning ? "Scraping…" : "Run now"}
+                            </button>
+                            <button
+                              onClick={() => handleToggleEnabled(source)}
+                              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                            >
+                              {source.enabled ? <Ban className="size-3" /> : <PlayCircle className="size-3" />}
+                              {source.enabled ? "Disable" : "Enable"}
+                            </button>
+                            <button
+                              onClick={() => openEditDialog(source)}
+                              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-navy"
+                            >
+                              <Edit className="size-3" /> Edit
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => handleDelete(source.id)}
                           className="flex size-8 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-red-50 hover:text-red-600"
@@ -1690,6 +1880,171 @@ function AdminScrapingPageContent() {
                   </div>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Quick-scrape dialog: paste one or more notice/news/press-release
+            links directly, no source pre-configuration required. */}
+        {quickDialogOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[20px] bg-white shadow-2xl">
+              <div className="flex items-start justify-between gap-4 border-b border-vez-line px-6 py-4">
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-medium text-vez-ink">
+                    <Link2 className="size-4 text-vez-navy" /> Scrape a link
+                  </h2>
+                  <p className="mt-0.5 text-xs text-vez-mute">
+                    Paste direct links to notices, press releases, or news articles — one per line. Each
+                    is scraped and saved immediately, no source setup required.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setQuickDialogOpen(false)}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-vez-mute transition-colors hover:bg-vez-surface"
+                  aria-label="Close"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <form onSubmit={handleQuickScrape} className="flex flex-col gap-2">
+                  <textarea
+                    rows={3}
+                    autoFocus
+                    value={quickUrlsText}
+                    onChange={(e) => setQuickUrlsText(e.target.value)}
+                    placeholder={"https://example.gov.np/notices/some-notice\nhttps://example.gov.np/press/another-one"}
+                    className="w-full resize-y rounded-[10px] border border-vez-line bg-white px-3 py-2 text-sm text-vez-ink outline-none transition-colors placeholder:text-vez-mute focus:border-vez-navy"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] text-vez-mute">
+                      {quickUrlsText.trim()
+                        ? `${quickUrlsText.split("\n").map((l) => l.trim()).filter(Boolean).length} link(s) — one per line`
+                        : "One link per line"}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={quickBatchRunning || !quickUrlsText.trim()}
+                      className="flex shrink-0 items-center gap-1.5 rounded-full bg-vez-navy px-5 py-2.5 text-sm text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {quickBatchRunning ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                      {quickBatchRunning ? "Scraping…" : "Scrape now"}
+                    </button>
+                  </div>
+                </form>
+
+                {quickNotice && (
+                  <p className={`mt-2 text-xs ${quickNotice.tone === "error" ? "text-red-600" : "text-vez-mute"}`}>
+                    {quickNotice.text}
+                  </p>
+                )}
+
+                {/* Live per-link status for the batch currently in flight */}
+                {quickItems.length > 0 && (
+                  <ul className="mt-4 space-y-1.5 border-t border-vez-line pt-4">
+                    {quickItems.map((item) => {
+                      const tone =
+                        item.status === "done"
+                          ? "bg-vez-sky/30 text-vez-navy"
+                          : item.status === "exists"
+                            ? "bg-vez-line/40 text-vez-mute"
+                            : item.status === "error"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-amber-50 text-amber-600"
+                      return (
+                        <li key={item.id} className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${tone}`}>
+                            {item.status === "done" || item.status === "exists" ? (
+                              <CheckCircle className="size-3" />
+                            ) : item.status === "error" ? (
+                              <XCircle className="size-3" />
+                            ) : (
+                              <Loader2 className="size-3 animate-spin" />
+                            )}
+                            {item.status === "scraping" ? "scraping…" : item.status}
+                          </span>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 truncate text-vez-ink underline decoration-vez-line hover:text-vez-navy"
+                          >
+                            {item.url}
+                          </a>
+                          {item.detail && <span className="shrink-0 text-vez-mute">— {item.detail}</span>}
+                          {item.itemId && (
+                            <a
+                              href={`/notices/${item.itemId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex shrink-0 items-center gap-1 rounded-full bg-vez-sky/20 px-2 py-0.5 text-[10px] font-medium text-vez-navy transition-colors hover:bg-vez-sky/30"
+                              title={item.title}
+                            >
+                              View notice <ExternalLink className="size-2.5" />
+                            </a>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
+                {/* Collapsible history of past quick-scrapes, persisted locally */}
+                {quickHistory.length > 0 && (
+                  <div className="mt-4 border-t border-vez-line pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setQuickHistoryOpen((v) => !v)}
+                      className="flex items-center gap-1 text-xs text-vez-mute transition-colors hover:text-vez-navy"
+                    >
+                      <History className="size-3.5" />
+                      Recent ({quickHistory.length})
+                      {quickHistoryOpen ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                    </button>
+                    {quickHistoryOpen && (
+                      <ul className="mt-2.5 max-h-48 space-y-1.5 overflow-y-auto text-xs">
+                        {quickHistory.map((h, i) => (
+                          <li key={i} className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
+                                h.status === "done"
+                                  ? "bg-vez-sky/30 text-vez-navy"
+                                  : h.status === "exists"
+                                    ? "bg-vez-line/40 text-vez-mute"
+                                    : "bg-red-50 text-red-600"
+                              }`}
+                            >
+                              {h.status}
+                            </span>
+                            <a
+                              href={h.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="min-w-0 truncate text-vez-ink underline decoration-vez-line hover:text-vez-navy"
+                            >
+                              {h.url}
+                            </a>
+                            {h.itemId && (
+                              <a
+                                href={`/notices/${h.itemId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex shrink-0 items-center gap-1 rounded-full bg-vez-sky/20 px-2 py-0.5 text-[10px] font-medium text-vez-navy transition-colors hover:bg-vez-sky/30"
+                                title={h.title}
+                              >
+                                View <ExternalLink className="size-2.5" />
+                              </a>
+                            )}
+                            <span className="ml-auto shrink-0 text-vez-mute">{new Date(h.at).toLocaleTimeString()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

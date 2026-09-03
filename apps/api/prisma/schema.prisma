@@ -247,6 +247,11 @@ model ScrapeSource {
   // When sitemap detection was last attempted. Non-null means "tried once,
   // don't re-detect every tick" (null result is cached as a null sitemapUrl).
   sitemapCheckedAt   DateTime? @map("sitemap_checked_at")
+  // True for sources auto-created by the admin "paste a link" quick-scrape
+  // flow (no listing URLs, nothing to schedule). Kept enabled so
+  // runSourceFromUrls's guard passes, but excluded from the scheduler's
+  // due-source query — see ScrapingSchedulerService.findDueSources.
+  isAdHoc           Boolean   @default(false) @map("is_ad_hoc")
   enabled           Boolean   @default(true)
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")

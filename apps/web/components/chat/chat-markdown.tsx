@@ -13,12 +13,15 @@ import remarkGfm from "remark-gfm"
  */
 export function ChatMarkdown({ content }: { content: string }) {
   return (
+    // A paragraph that is only bold text is a section heading: space it above,
+    // pull its list up close, so groups read as groups.
+    <div className="[&>p:has(>strong:only-child)]:mb-1 [&>p:has(>strong:only-child)]:mt-3 [&>p:first-child]:mt-0">
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p: ({ children }) => <p className="mb-1.5 break-words last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>,
+        p: ({ children }) => <p className="mb-2 break-words leading-relaxed last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-4 last:mb-0 marker:text-current/40">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-4 last:mb-0 marker:text-current/40">{children}</ol>,
         li: ({ children }) => <li className="break-words leading-relaxed">{children}</li>,
         strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
         a: ({ href, children }) => (
@@ -26,9 +29,9 @@ export function ChatMarkdown({ content }: { content: string }) {
             {children}
           </a>
         ),
-        h1: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
-        h2: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
-        h3: ({ children }) => <p className="mb-1 font-semibold">{children}</p>,
+        h1: ({ children }) => <p className="mb-1 mt-3 font-semibold first:mt-0">{children}</p>,
+        h2: ({ children }) => <p className="mb-1 mt-3 font-semibold first:mt-0">{children}</p>,
+        h3: ({ children }) => <p className="mb-1 mt-3 font-semibold first:mt-0">{children}</p>,
         code: ({ children }) => (
           <code className="break-all rounded bg-foreground/10 px-1 py-0.5 font-mono text-[10px]">{children}</code>
         ),
@@ -48,5 +51,6 @@ export function ChatMarkdown({ content }: { content: string }) {
     >
       {content}
     </ReactMarkdown>
+    </div>
   )
 }

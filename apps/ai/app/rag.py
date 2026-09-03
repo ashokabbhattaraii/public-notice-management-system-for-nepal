@@ -169,11 +169,75 @@ def _select_context(results: list[dict], top_k: int) -> list[dict]:
     return _merge_adjacent_chunks(selected)
 
 
+_CITATION = re.compile(r"\[(\d+)\]")
+
+
+def _drop_dangling_citations(answer: str, n_sources: int) -> str:
+    """Remove citation markers that point past the context actually supplied.
+
+    The UI numbers its source chips from the same list the prompt was built
+    from, so a "[7]" written against three context blocks resolves to
+    nothing the reader can open — a reference that looks authoritative and
+    is not. Dropping the marker leaves the prose intact and honest.
+    """
+    if not answer:
+        return answer
+    if n_sources <= 0:
+        return _CITATION.sub("", answer).strip()
+
+    dropped: list[str] = []
+
+    def _keep(match: re.Match) -> str:
+        if 1 <= int(match.group(1)) <= n_sources:
+            return match.group(0)
+        dropped.append(match.group(0))
+        return ""
+
+    cleaned = _CITATION.sub(_keep, answer)
+    if dropped:
+        logger.warning(
+            "Dropped %d out-of-range citation(s) %s (only %d context blocks)",
+            len(dropped),
+            ", ".join(sorted(set(dropped))),
+            n_sources,
+        )
+    # Removing a marker can leave " ." or a double space behind.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return re.sub(r"\s+([.,;:!?])", r"\1", cleaned).strip()
+
+
+def _page_of(chunk: dict) -> Optional[int]:
+    """Page number, wherever the store left it.
+
+    `store.search` returns indexed payload fields nested under "metadata",
+    but chunks are handled top-level elsewhere in this module. Reading only
+    the top level is what made every merged `page_range` come out as
+    [None, None] — the range was computed correctly against a key that was
+    never there."""
+    page = chunk.get("page_num")
+    if page is None:
+        page = (chunk.get("metadata") or {}).get("page_num")
+    return page
+
+
+def _section_of(chunk: dict) -> str:
+    """Section path ("Introduction > Eligibility"), from either shape."""
+    section = chunk.get("section_path")
+    if not section:
+        section = (chunk.get("metadata") or {}).get("section_path")
+    return str(section or "")
+
+
 def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
     """Merge adjacent chunks from the same document/page/section.
     Returns merged chunks with page_range metadata for citations."""
     if not chunks:
         return chunks
+
+    def _seed_range(chunk: dict) -> None:
+        if "page_range" not in chunk:
+            page = _page_of(chunk)
+            chunk["page_range"] = [page, page]
 
     merged: list[dict] = []
     current = chunks[0].copy()
@@ -182,7 +246,7 @@ def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
         # Check if chunks are from same doc and adjacent (chunk_index diff <= 1)
         same_doc = current["doc_id"] == next_chunk["doc_id"]
         adjacent = next_chunk["chunk_index"] - current["chunk_index"] <= 1
-        same_section = current.get("metadata", {}).get("section_path") == next_chunk.get("metadata", {}).get("section_path")
+        same_section = _section_of(current) == _section_of(next_chunk)
 
         if same_doc and adjacent and same_section:
             # Merge: concatenate content, update ranges
@@ -190,22 +254,22 @@ def _merge_adjacent_chunks(chunks: list[dict]) -> list[dict]:
             current["char_end"] = next_chunk.get("char_end") or current.get("char_end")
             current["chunk_index"] = current["chunk_index"]  # keep first index
             # Track page range
-            if "page_range" not in current:
-                current["page_range"] = [current.get("page_num"), current.get("page_num")]
-            next_page = next_chunk.get("page_num")
+            _seed_range(current)
+            next_page = _page_of(next_chunk)
             if next_page is not None:
-                if current["page_range"][1] != next_page:
-                    current["page_range"][1] = next_page
+                # A merged span runs from its first page to its last; seeding
+                # from a chunk with no page must not pin the low end to None.
+                if current["page_range"][0] is None:
+                    current["page_range"][0] = next_page
+                current["page_range"][1] = next_page
         else:
             # Finalize current, start new
-            if "page_range" not in current:
-                current["page_range"] = [current.get("page_num"), current.get("page_num")]
+            _seed_range(current)
             merged.append(current)
             current = next_chunk.copy()
 
     # Don't forget the last chunk
-    if "page_range" not in current:
-        current["page_range"] = [current.get("page_num"), current.get("page_num")]
+    _seed_range(current)
     merged.append(current)
 
     return merged
@@ -272,12 +336,22 @@ async def query(
             "model_used": config.GROQ_MODEL if config.GROQ_API_KEY else None,
         }
 
+    # Locators travel with the context: a model told to cite [2] can only
+    # make that citation mean something if block [2] says which page and
+    # section it came from. Without them two chunks of the same document are
+    # indistinguishable in the prompt, which is exactly when citations drift.
     context_chunks = [
-        {"content": r["content"], "title": r["metadata"].get("title", "")}
+        {
+            "content": r["content"],
+            "title": r["metadata"].get("title", ""),
+            "page_range": r.get("page_range"),
+            "section_path": _section_of(r),
+        }
         for r in results
     ]
 
     answer = await llm.generate_answer(question, context_chunks, language)
+    answer = _drop_dangling_citations(answer, len(results))
 
     model_used = config.GROQ_MODEL if config.GROQ_API_KEY else "extractive"
     logger.info(
@@ -291,6 +365,9 @@ async def query(
             "content": r["content"],
             "score": r["score"],
             "title": r["metadata"].get("title", ""),
+            # What the citation [i+1] in the answer actually points at.
+            "page_range": [p for p in (r.get("page_range") or []) if p is not None] or None,
+            "section_path": _section_of(r) or None,
         }
         for r in results
     ]

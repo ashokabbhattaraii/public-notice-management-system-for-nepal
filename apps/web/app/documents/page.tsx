@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import {
   FileText, Search, Send, Upload, Bot, User,
-  Cpu, MessageSquare, Database, ChevronRight,
+  MessageSquare, ChevronRight,
   LayoutPanelLeft, BookOpen, Copy, Trash2,
   ThumbsUp, ThumbsDown, RefreshCw, CheckCircle,
-  Clock, AlertCircle, Loader2, X, File, Download,
+  AlertCircle, Loader2, X, File, Download,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -25,7 +25,7 @@ import { toastApiError } from "@/lib/toast"
 // Titles often arrive as raw filenames ("_Hamro_Life_Bank_SRS.pdf");
 // humanize them for display in the source chips.
 function prettySourceTitle(s: RagSource): string {
-  const raw = s.title || `Chunk ${s.chunk_index + 1}`
+  const raw = s.title || "Untitled document"
   return raw
     .replace(/\.[^.]+$/, "")
     .replace(/[_-]+/g, " ")
@@ -36,22 +36,40 @@ function prettySourceTitle(s: RagSource): string {
 // One chip per document with its citation numbers combined ("[1][2]"),
 // instead of a chip per chunk repeating the same name.
 function groupSources(sources: RagSource[]) {
-  const groups = new Map<string, { title: string; refs: number[]; score: number; preview: string }>()
+  const groups = new Map<
+    string,
+    { title: string; refs: number[]; score: number; preview: string; pages: number[]; sections: string[] }
+  >()
   sources.forEach((s, i) => {
+    const pages = (s.page_range ?? []).filter((p): p is number => typeof p === "number")
+    const section = (s.section_path ?? "").trim()
     const existing = groups.get(s.doc_id)
     if (existing) {
       existing.refs.push(i + 1)
       existing.score = Math.max(existing.score, s.score)
+      existing.pages.push(...pages)
+      if (section && !existing.sections.includes(section)) existing.sections.push(section)
     } else {
       groups.set(s.doc_id, {
         title: prettySourceTitle(s),
         refs: [i + 1],
         score: s.score,
         preview: s.content.slice(0, 300),
+        pages: [...pages],
+        sections: section ? [section] : [],
       })
     }
   })
-  return [...groups.values()]
+  // A chip covering several chunks spans every page they touch.
+  return [...groups.values()].map((g) => ({
+    ...g,
+    pageLabel:
+      g.pages.length === 0
+        ? null
+        : Math.min(...g.pages) === Math.max(...g.pages)
+          ? `p. ${Math.min(...g.pages)}`
+          : `pp. ${Math.min(...g.pages)}–${Math.max(...g.pages)}`,
+  }))
 }
 
 type ViewMode = "split" | "chat" | "library"
@@ -65,10 +83,10 @@ const suggestions = [
 ]
 
 const stageLabels: Record<string, string> = {
-  extracting: "Extracting text",
-  chunking: "Chunking",
-  embedding: "Embedding",
-  indexing: "Indexing",
+  extracting: "Reading document",
+  chunking: "Preparing",
+  embedding: "Preparing",
+  indexing: "Almost ready",
 }
 
 function formatFileSize(bytes: number): string {
@@ -90,20 +108,23 @@ function formatMimeType(mime: string): string {
 
 function Markdown({ content }: { content: string }) {
   return (
+    // A paragraph that is only bold text is a section heading: give it room
+    // above and pull its list up close, so groups read as groups.
+    <div className="[&>p:has(>strong:only-child)]:mb-1.5 [&>p:has(>strong:only-child)]:mt-4 [&>p:first-child]:mt-0">
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-        ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
-        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        p: ({ children }) => <p className="mb-3 leading-relaxed last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="mb-3 list-disc space-y-1.5 pl-5 last:mb-0 marker:text-vez-mute/50">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1.5 pl-5 last:mb-0 marker:text-vez-mute/50">{children}</ol>,
+        li: ({ children }) => <li className="pl-0.5 leading-relaxed">{children}</li>,
         strong: ({ children }) => <strong className="font-semibold text-vez-ink">{children}</strong>,
         a: ({ href, children }) => (
           <a href={href} target="_blank" rel="noreferrer" className="text-vez-navy underline underline-offset-2">{children}</a>
         ),
-        h1: ({ children }) => <p className="mb-2 text-base font-semibold text-vez-ink">{children}</p>,
-        h2: ({ children }) => <p className="mb-2 text-base font-semibold text-vez-ink">{children}</p>,
-        h3: ({ children }) => <p className="mb-1.5 font-semibold text-vez-ink">{children}</p>,
+        h1: ({ children }) => <p className="mb-1.5 mt-4 text-base font-semibold text-vez-ink first:mt-0">{children}</p>,
+        h2: ({ children }) => <p className="mb-1.5 mt-4 text-base font-semibold text-vez-ink first:mt-0">{children}</p>,
+        h3: ({ children }) => <p className="mb-1.5 mt-4 font-semibold text-vez-ink first:mt-0">{children}</p>,
         code: ({ children }) => (
           <code className="rounded bg-vez-sky/20 px-1.5 py-0.5 font-mono text-[13px] text-vez-navy">{children}</code>
         ),
@@ -111,16 +132,17 @@ function Markdown({ content }: { content: string }) {
           <blockquote className="mb-2 border-l-2 border-vez-sky pl-3 text-vez-mute last:mb-0">{children}</blockquote>
         ),
         table: ({ children }) => (
-          <div className="mb-2 overflow-x-auto last:mb-0">
-            <table className="w-full border-collapse text-sm">{children}</table>
+          <div className="mb-3 -mx-1 overflow-x-auto last:mb-0">
+            <table className="w-full border-collapse text-[13px]">{children}</table>
           </div>
         ),
-        th: ({ children }) => <th className="border border-vez-line/60 bg-vez-sky/10 px-3 py-1.5 text-left font-semibold">{children}</th>,
-        td: ({ children }) => <td className="border border-vez-line/60 px-3 py-1.5 align-top">{children}</td>,
+        th: ({ children }) => <th className="whitespace-nowrap border border-vez-line/60 bg-vez-sky/10 px-3 py-2 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border border-vez-line/60 px-3 py-2 align-top">{children}</td>,
       }}
     >
       {content}
     </ReactMarkdown>
+    </div>
   )
 }
 
@@ -131,7 +153,7 @@ function EmbedToggle({ on, busy, onChange }: { on: boolean; busy: boolean; onCha
     <button
       role="switch"
       aria-checked={on}
-      aria-label={on ? "Remove from knowledge base" : "Embed into knowledge base"}
+      aria-label={on ? "Make this document unsearchable" : "Make this document searchable"}
       disabled={busy}
       onClick={onChange}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -193,7 +215,7 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
             </span>
             {isIndexed && (
               <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                <Database className="size-3" /> {doc.chunkCount} chunks
+                <CheckCircle className="size-3" /> Ready to search
               </span>
             )}
             {isFailed && (
@@ -217,11 +239,7 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
             <span className="flex items-center gap-1.5 font-medium text-vez-navy">
               <Loader2 className="size-3 animate-spin" /> {stageLabel}
             </span>
-            <span className="tabular-nums text-vez-mute">
-              {progress?.total_chunks
-                ? `${progress.processed_chunks}/${progress.total_chunks} chunks · ${percent}%`
-                : `${percent}%`}
-            </span>
+            <span className="tabular-nums text-vez-mute">{percent}%</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-vez-line/50">
             <div
@@ -234,14 +252,14 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
         <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-vez-surface/70 px-3.5 py-2.5">
           <div className="min-w-0">
             <p className="text-sm font-medium text-vez-ink">
-              {isIndexed ? "Embedded" : isFailed ? "Embedding failed" : "Not embedded"}
+              {isIndexed ? "Ready" : isFailed ? "Couldn't be prepared" : "Not ready yet"}
             </p>
             <p className="truncate text-xs text-vez-mute">
               {isIndexed
-                ? "Searchable in AI answers"
+                ? "You can ask questions about this"
                 : isFailed
-                  ? showControls ? "Toggle to retry" : "Contact admin"
-                  : showControls ? "Toggle to add to the knowledge base" : "Not yet available"}
+                  ? showControls ? "Turn off and on to try again" : "Please try uploading it again"
+                  : showControls ? "Turn on to make it searchable" : "Not yet available"}
             </p>
           </div>
           {showControls && (
@@ -257,7 +275,7 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
             onClick={onAsk}
             disabled={!isIndexed}
           >
-            <MessageSquare className="size-4" /> Ask AI
+            <MessageSquare className="size-4" /> Ask about this
           </button>
           <a
             href={`/api/files/document/${doc.id}`}
@@ -352,7 +370,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-vez-ink">Upload Document</h2>
-            <p className="mt-1 text-sm text-vez-mute">Uploads start embedding automatically</p>
+            <p className="mt-1 text-sm text-vez-mute">Ready to search a moment after upload</p>
           </div>
           <button onClick={onClose} className="rounded-full p-2 text-vez-mute transition-colors hover:bg-vez-surface hover:text-vez-ink">
             <X className="size-5" />
@@ -435,7 +453,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             className="flex h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-vez-navy text-base font-medium text-white transition-all hover:bg-vez-navy/90 disabled:opacity-40"
           >
             {uploading ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
-            {uploading ? "Uploading..." : "Upload & Embed"}
+            {uploading ? "Uploading..." : "Upload document"}
           </button>
         </div>
       </div>
@@ -466,7 +484,7 @@ export default function RagPage() {
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: "sys-1", role: "assistant",
-    content: "Hello! I'm Suchana AI - your document intelligence assistant. Ask me anything about the indexed government documents.",
+    content: "Hi! Ask me anything about your documents — I'll answer with references to where I found it.",
     timestamp: new Date().toISOString(),
   }])
   const [ratings, setRatings] = useState<Record<string, "up" | "down">>({})
@@ -475,7 +493,6 @@ export default function RagPage() {
 
   const indexedDocs = docs.filter(d => d.status === "INDEXED")
   const embeddedCount = indexedDocs.length
-  const totalChunks = indexedDocs.reduce((s, d) => s + (d.chunkCount ?? 0), 0)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -558,7 +575,7 @@ export default function RagPage() {
   )
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this document? This will remove it from the vector store.")) return
+    if (!confirm("Delete this document? You won't be able to ask questions about it anymore.")) return
     try {
       await deleteDocument(id)
       setDocs(prev => prev.filter(d => d.id !== id))
@@ -575,9 +592,9 @@ export default function RagPage() {
         ? await unembedDocument(doc.id)
         : await embedDocument(doc.id)
       setDocs(prev => prev.map(d => (d.id === doc.id ? { ...d, ...updated } : d)))
-      toast.success(doc.status === "INDEXED" ? "Document unembedded" : "Document embedding started")
+      toast.success(doc.status === "INDEXED" ? "Removed from search" : "Preparing document…")
     } catch (e) {
-      toastApiError(e, "Could not update embedding")
+      toastApiError(e, "Could not update this document")
     } finally {
       setTogglingIds(prev => {
         const next = new Set(prev)
@@ -634,32 +651,39 @@ export default function RagPage() {
   const clearChat = () => {
     setMessages([{
       id: "sys-clear", role: "assistant",
-      content: "Conversation cleared. Ask me anything about the indexed documents.",
+      content: "Conversation cleared. Ask me anything about your documents.",
       timestamp: new Date().toISOString(),
     }])
     setRatings({})
     setSelectedDocId(undefined)
   }
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  // Clamp the library pane to a sane share of the split container.
+  const clampLibWidth = useCallback((width: number) => {
+    const maxW = splitRef.current ? splitRef.current.offsetWidth * 0.6 : 720
+    return Math.min(Math.max(width, 240), maxW)
+  }, [])
+
+  // Drag to resize — pointer events cover mouse, touch and pen alike.
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault()
     resizing.current = true
-    const startX = e.clientX
+    const startX = "touches" in e ? e.touches[0].clientX : e.clientX
     const startWidth = libWidth
 
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: MouseEvent | TouchEvent) => {
       if (!resizing.current) return
-      const container = splitRef.current
-      if (!container) return
-      const maxW = container.offsetWidth * 0.6
-      const newW = Math.min(Math.max(startWidth + ev.clientX - startX, 240), maxW)
-      setLibWidth(newW)
+      const x = "touches" in ev ? ev.touches[0]?.clientX : ev.clientX
+      if (x === undefined) return
+      setLibWidth(clampLibWidth(startWidth + x - startX))
     }
 
     const onUp = () => {
       resizing.current = false
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
+      document.removeEventListener("touchmove", onMove)
+      document.removeEventListener("touchend", onUp)
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
     }
@@ -668,7 +692,21 @@ export default function RagPage() {
     document.body.style.userSelect = "none"
     document.addEventListener("mousemove", onMove)
     document.addEventListener("mouseup", onUp)
-  }, [libWidth])
+    document.addEventListener("touchmove", onMove, { passive: false })
+    document.addEventListener("touchend", onUp)
+  }, [libWidth, clampLibWidth])
+
+  // Arrow keys resize too, so the split isn't mouse-only.
+  const handleResizeKey = useCallback((e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 64 : 16
+    if (e.key === "ArrowLeft") {
+      e.preventDefault()
+      setLibWidth(w => clampLibWidth(w - step))
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault()
+      setLibWidth(w => clampLibWidth(w + step))
+    }
+  }, [clampLibWidth])
 
   const askAboutDoc = (doc: RagDocument) => {
     setSelectedDocId(doc.id)
@@ -696,13 +734,11 @@ export default function RagPage() {
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-vez-mute">
           <span className="flex items-center gap-1.5 font-medium text-vez-navy">
-            <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-            {embeddedCount} embedded
+            <span className="size-2 rounded-full bg-emerald-500" />
+            {embeddedCount} ready to search
           </span>
           <span className="text-vez-line">|</span>
-          <span>{totalChunks} chunks</span>
-          <span className="text-vez-line">|</span>
-          <span>{docs.length} total</span>
+          <span>{docs.length} {docs.length === 1 ? "document" : "documents"}</span>
         </div>
       </div>
 
@@ -772,10 +808,10 @@ export default function RagPage() {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-vez-line px-4 py-3.5 sm:px-6 sm:py-5">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-vez-navy sm:size-11">
-            <Cpu className="size-5 text-white" />
+            <Bot className="size-5 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-base font-semibold text-vez-ink">Document AI</p>
+            <p className="text-base font-semibold text-vez-ink">Ask your documents</p>
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-vez-mute sm:text-sm">
               <span className="size-2 shrink-0 rounded-full bg-emerald-500" />
               {embeddedCount} {embeddedCount === 1 ? "document" : "documents"} ready · Ask anything
@@ -821,9 +857,7 @@ export default function RagPage() {
               {msg.modelUsed === "extractive" && (
                 <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>
-                    Fallback mode - showing extracted document text. Set <code className="font-mono">GROQ_API_KEY</code> in <code className="font-mono">apps/ai/.env</code> for full AI answers.
-                  </span>
+                  <span>Showing matching text from your documents — a written answer isn&apos;t available right now.</span>
                 </div>
               )}
               {msg.sources && msg.sources.length > 0 && (
@@ -832,7 +866,9 @@ export default function RagPage() {
                   {groupSources(msg.sources).map((g, i) => (
                     <span
                       key={i}
-                      title={g.preview}
+                      title={
+                        (g.sections.length > 0 ? `${g.sections.join(" · ")}\n\n` : "") + g.preview
+                      }
                       className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-vez-sky/30 bg-vez-sky/10 px-2.5 py-1 text-xs font-medium text-vez-navy"
                     >
                       <BookOpen className="size-3 shrink-0" />
@@ -840,9 +876,14 @@ export default function RagPage() {
                         {g.refs.map(n => `[${n}]`).join("")}
                       </span>
                       <span className="max-w-40 truncate">{g.title}</span>
-                      <span className="shrink-0 rounded bg-vez-sky/25 px-1.5 py-0.5 text-[10px] font-semibold text-vez-navy/80">
-                        {Math.round(g.score * 100)}%
-                      </span>
+                      {g.pageLabel && (
+                        <span className="shrink-0 font-mono text-[10px] text-vez-navy/70">{g.pageLabel}</span>
+                      )}
+                      {g.sections[0] && (
+                        <span className="hidden max-w-32 truncate text-[10px] text-vez-navy/60 sm:inline">
+                          § {g.sections[0]}
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -920,7 +961,7 @@ export default function RagPage() {
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && sendMessage()}
-            placeholder={embeddedCount === 0 ? "Embed documents first..." : "Ask about government policies..."}
+            placeholder={embeddedCount === 0 ? "Upload a document to get started..." : "Ask a question about your documents..."}
             className="h-12 min-h-[44px] min-w-0 flex-1 rounded-xl border border-vez-line bg-vez-surface/50 px-4 text-[16px] sm:text-[15px] text-vez-ink outline-none transition-all placeholder:text-vez-mute focus:border-vez-navy focus:bg-white focus:ring-2 focus:ring-vez-sky/30 disabled:opacity-50 sm:px-5"
             disabled={embeddedCount === 0 || typing}
           />
@@ -947,39 +988,31 @@ export default function RagPage() {
 
         {/* Top bar */}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-vez-navy shadow-md sm:size-12">
-              <Cpu className="size-5 text-white" />
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-vez-navy shadow-md sm:size-12">
+              <FileText className="size-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <h1 className="text-lg font-semibold tracking-tight text-vez-ink sm:text-xl">Document Intelligence</h1>
-              </div>
-              <p className="mt-0.5 hidden text-sm text-vez-mute sm:block">
-                {embeddedCount} {embeddedCount === 1 ? "document" : "documents"} indexed · {totalChunks.toLocaleString()} searchable passages
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold tracking-tight text-vez-ink sm:text-xl">My documents</h1>
+              <p className="mt-0.5 truncate text-xs text-vez-mute sm:text-sm">
+                {embeddedCount === 0
+                  ? "Upload a document to start asking questions"
+                  : `${embeddedCount} ${embeddedCount === 1 ? "document" : "documents"} ready to search`}
               </p>
             </div>
           </div>
 
-          {/* Stats pills */}
-          <div className="hidden items-center gap-2.5 xl:flex">
-            {[
-              { icon: <CheckCircle className="size-4 text-emerald-500" />, label: "Pipeline active" },
-              { icon: <Clock className="size-4 text-vez-mute" />, label: `${docs.length} docs` },
-              { icon: <RefreshCw className="size-4 text-vez-mute" />, label: "Refresh", action: () => loadDocs() },
-            ].map(s => (
-              <button
-                key={s.label}
-                onClick={s.action}
-                className="flex items-center gap-2 rounded-lg bg-vez-surface px-4 py-2 text-sm text-vez-mute transition-colors hover:bg-vez-sky/15 hover:text-vez-navy"
-              >
-                {s.icon} {s.label}
-              </button>
-            ))}
-          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => loadDocs()}
+              aria-label="Refresh documents"
+              className="flex size-10 items-center justify-center rounded-lg bg-vez-surface text-vez-mute transition-colors hover:bg-vez-sky/15 hover:text-vez-navy sm:size-11"
+            >
+              <RefreshCw className="size-4" />
+            </button>
 
-          {/* View switcher (desktop) - 44px touch targets */}
-          <div className="hidden items-center gap-1 rounded-xl bg-vez-surface p-1.5 lg:flex">
+          {/* View switcher — tablet and up */}
+          <div className="hidden items-center gap-1 rounded-xl bg-vez-surface p-1.5 md:flex">
             {([
               { id: "library", icon: BookOpen,        label: "Library" },
               { id: "split",   icon: LayoutPanelLeft, label: "Split" },
@@ -994,39 +1027,47 @@ export default function RagPage() {
                       : "text-vez-mute hover:text-vez-navy"
                   }`}>
                   <Icon className="size-4" />
-                  {m.label}
+                  <span className="hidden lg:inline">{m.label}</span>
                 </button>
               )
             })}
+          </div>
           </div>
         </div>
 
         {/* Panels */}
         <div className="min-h-0 flex-1">
-          {/* Desktop */}
-          <div className="hidden h-full lg:block">
+          {/* Tablet and up */}
+          <div className="hidden h-full md:block">
             {view === "split" && (
               <div ref={splitRef} className="flex h-full gap-0">
-                <div className="h-full shrink-0" style={{ width: libWidth }}>
+                {/* Tablet splits evenly; desktop honours the dragged width. */}
+                <div className="h-full w-1/2 shrink-0 lg:w-[var(--lib-w)]" style={{ ["--lib-w" as string]: `${libWidth}px` }}>
                   {Library}
                 </div>
                 <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize document list"
+                  tabIndex={0}
                   onMouseDown={handleResizeStart}
-                  className="group flex h-full w-5 shrink-0 cursor-col-resize items-center justify-center"
+                  onTouchStart={handleResizeStart}
+                  onKeyDown={handleResizeKey}
+                  className="group hidden h-full w-5 shrink-0 cursor-col-resize touch-none items-center justify-center focus-visible:outline-none lg:flex"
                 >
-                  <div className="h-8 w-1 rounded-full bg-vez-line transition-colors group-hover:bg-vez-navy/40 group-active:bg-vez-navy" />
+                  <div className="h-8 w-1 rounded-full bg-vez-line transition-colors group-hover:bg-vez-navy/40 group-focus-visible:bg-vez-navy group-active:bg-vez-navy" />
                 </div>
-                <div className="h-full min-w-0 flex-1">
+                <div className="h-full min-w-0 flex-1 md:pl-3 lg:pl-0">
                   {Chat}
                 </div>
               </div>
             )}
-            {view === "library" && <div className="h-full max-w-3xl">{Library}</div>}
+            {view === "library" && <div className="mx-auto h-full max-w-3xl">{Library}</div>}
             {view === "chat" && <div className="mx-auto h-full max-w-3xl">{Chat}</div>}
           </div>
 
           {/* Mobile: one panel + bottom tabs */}
-          <div className="flex h-full flex-col gap-3 lg:hidden">
+          <div className="flex h-full flex-col gap-3 md:hidden">
             <div className="min-h-0 flex-1">
               {mobileTab === "library" ? Library : Chat}
             </div>

@@ -593,11 +593,18 @@ export class NoticesService {
    * 2. Pass results to AI service which uses them or falls back to Qdrant semantic search
    * 3. LLM generates an answer from the retrieved context
    */
-  async search(question: string, category?: string, language?: string) {
+  async search(
+    question: string,
+    category?: string,
+    language?: string,
+    skipClarification = false,
+  ) {
     // Identical chatbot queries (same question + filters) share the LLM call
     // within the TTL window — a popular question asked by many visitors
     // doesn't re-hit the AI service (and possibly Qdrant) each time.
-    const cacheKey = `search:${question}:${category ?? ''}:${language ?? ''}`;
+    // skipClarification is part of the key: the same question answers very
+    // differently with the ambiguity gate on versus bypassed.
+    const cacheKey = `search:${question}:${category ?? ''}:${language ?? ''}:${skipClarification ? 'all' : ''}`;
     const cached = this.qaCache.get(cacheKey);
     if (cached) return cached;
 
@@ -643,6 +650,9 @@ export class NoticesService {
             // The AI service orders its own Qdrant fallback by similarity,
             // which is the wrong axis for "latest"/"recent" questions.
             recency_intent: intent.wantsLatest,
+            // Set once the user has answered (or dismissed) a clarifying
+            // question, so re-asking the same thing can't loop on it.
+            skip_clarification: skipClarification,
           },
 { timeout: 45000 },
         ),
@@ -780,6 +790,40 @@ export class NoticesService {
         orderBy: { name: 'asc' },
       });
     });
+  }
+
+  /**
+   * id/title/updatedAt for the web app's public sitemap.xml.
+   *
+   * Newest first and capped: Google's per-sitemap limit is 50k URLs, and the
+   * newest notices are the ones worth recrawling. Cached like the other meta
+   * reads so a crawler hitting /sitemap.xml can't hammer the database.
+   */
+  async sitemapFeed(limit?: number) {
+    const take = Math.min(Math.max(1, limit ?? 5000), 50000);
+    return this.metaCache.remember(`sitemap:${take}`, async () => {
+      const rows = await this.prisma.scrapedItem.findMany({
+        select: { id: true, title: true, updatedAt: true, publishedAt: true },
+        // NULLs sort FIRST under a plain Postgres DESC, so undated rows would
+        // occupy the top of the window and push real recent notices out of
+        // the sitemap entirely.
+        orderBy: { publishedAt: { sort: 'desc', nulls: 'last' } },
+        take,
+      });
+      // Never publish a junk row to a search engine: an "(untitled)" page is
+      // a thin result that earns a manual action, not traffic. Same predicate
+      // the scraper admits on, so the two can't disagree.
+      return rows.filter((r) => this.isIndexableTitle(r.title));
+    });
+  }
+
+  /** A title real enough to deserve its own indexed page. */
+  private isIndexableTitle(title: string | null): boolean {
+    const clean = (title ?? '').replace(/\s+/g, ' ').trim();
+    if (clean.length < 8) return false;
+    if (/^\(?untitled\)?$/i.test(clean)) return false;
+    // Devanagari letters start at U+0904 — U+0900-0903 are combining marks.
+    return (clean.match(/[A-Za-zऄ-ॿ]/g)?.length ?? 0) >= 5;
   }
 }
 

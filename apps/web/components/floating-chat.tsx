@@ -2,12 +2,12 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
-import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText, Maximize2, Minimize2 } from "lucide-react"
+import { MessageCircle, X, Send, Bot, User, Sparkles, ExternalLink, FileText, Maximize2, Minimize2, HelpCircle } from "lucide-react"
 import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { Button } from "@/components/ui/button"
 import { CopyButton } from "@/components/ui/copy-button"
 import { cn } from "@/lib/utils"
-import { searchNotices, askNoticeQuestion, isQuotaError, NoticeSearchResponse, type QuotaDenial } from "@/lib/api"
+import { searchNotices, askNoticeQuestion, isQuotaError, NoticeSearchResponse, type QuotaDenial, type SearchClarification } from "@/lib/api"
 import { useNoticeContext } from "@/lib/notice-context"
 import { UpgradePrompt } from "@/components/billing/upgrade-prompt"
 import gsap from "gsap"
@@ -25,6 +25,12 @@ interface Message {
   content: string
   sources?: Source[]
   contextUsed?: "notice" | "general"
+  // Present instead of an answer when the question was ambiguous against the
+  // corpus; rendered as pickable choices rather than prose.
+  clarification?: SearchClarification
+  // The question that triggered the clarification, so "Show all" can re-ask
+  // it with the gate bypassed.
+  clarifiedFrom?: string
 }
 
 const GENERAL_SUGGESTIONS = [
@@ -192,7 +198,7 @@ export function FloatingChat() {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, loading])
 
-  const handleSend = useCallback(async (text?: string) => {
+  const handleSend = useCallback(async (text?: string, skipClarification = false) => {
     const query = text || input.trim()
     if (!query || loading) return
 
@@ -225,13 +231,20 @@ export function FloatingChat() {
       // not answer with vacancies. Read at send time from the URL rather than
       // via useSearchParams, which would force a Suspense boundary around
       // every page this floating widget is mounted on.
-      const result: NoticeSearchResponse = await searchNotices(query, activeCategoryFromUrl())
+      const result: NoticeSearchResponse = await searchNotices(
+        query,
+        activeCategoryFromUrl(),
+        undefined,
+        skipClarification,
+      )
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: result.answer,
         sources: result.sources?.length ? result.sources : undefined,
         contextUsed: "general",
+        clarification: result.clarification,
+        clarifiedFrom: result.clarification ? query : undefined,
       }
       setMessages(prev => [...prev, botMsg])
     } catch (e) {
@@ -402,6 +415,36 @@ export function FloatingChat() {
                         </p>
                       )}
                       <CopyButton text={msg.content} className="-ml-1.5" />
+                    </div>
+                  )}
+                  {/* Ambiguous question — offer the specific subjects the
+                      corpus can actually answer, instead of guessing one. */}
+                  {msg.clarification && msg.clarification.options.length > 0 && (
+                    <div className="mt-1.5 rounded-xl border border-border/60 bg-background/60 p-2">
+                      <p className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <HelpCircle className="size-2.5 shrink-0" /> Pick one to get an exact answer
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.clarification.options.map((opt) => (
+                          <button
+                            key={opt.query}
+                            onClick={() => handleSend(opt.query)}
+                            disabled={loading}
+                            className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] text-foreground transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:opacity-50"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                        {msg.clarifiedFrom && (
+                          <button
+                            onClick={() => handleSend(msg.clarifiedFrom, true)}
+                            disabled={loading}
+                            className="rounded-full border border-border/60 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50"
+                          >
+                            Show all
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                   {msg.sources && msg.sources.length > 0 && (

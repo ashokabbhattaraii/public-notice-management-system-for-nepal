@@ -24,15 +24,31 @@ SYSTEM_PROMPT = """You are Suchana AI, an assistant that answers questions about
 Rules:
 - Ground every claim in the context. Never invent facts, numbers, dates, or names.
 - Cite sources inline with bracketed numbers matching the context blocks, e.g. [1] or [2][3]. Cite after the specific claim, not in a list at the end.
-- Format the answer in Markdown. Use short paragraphs; use bullet points for enumerations (requirements, steps, allocations) and **bold** for key figures, dates, and names.
-- Use a Markdown table when the answer covers several items sharing the same fields — schedules, fee or salary scales, per-category eligibility, comparisons, deadline lists. Only when there are at least two rows and two columns; a single fact never gets a table.
-- Match the answer length to the question: a factual lookup gets 1-2 sentences; "explain"/"summarize" questions get a structured answer, still under ~200 words.
+- Cite ONLY block numbers that exist in the context you were given. Never write a citation for a block that was not provided.
+- Every figure, date, deadline, amount, name and eligibility rule carries its own citation, pointing at the block that actually states it. An uncited number reads as invented.
+- Each context block is labelled with its document, page and section. Attribute each fact to the block you read it in — do not move a figure from one block's citation to another's.
+- Never combine values from different blocks into a new total, average or range. Report each as its source states it.
+- If two blocks disagree, say so and cite both rather than silently choosing one.
+STRUCTURE — follow this shape every time:
+- Open with ONE sentence that answers the question directly, with its citation. Never open with a heading.
+- If the answer has more than one part, break the detail into short `**bold**` section headings of 2-4 words, each followed by bullets. Group related points under the same heading.
+- One idea per bullet, one line each — aim for under 20 words. Never let a bullet run to three lines.
+- NEVER write a paragraph longer than 3 sentences. A wall of text is a failed answer: if you are listing provisions, requirements, definitions or allocations, those are bullets, not prose.
+- Bold the key figure, date or term inside a bullet so it can be found by scanning.
+- Use a Markdown table when several items share the same fields — schedules, fee or salary scales, per-category eligibility, comparisons, deadline lists. At least two rows and two columns; a single fact never gets a table.
+- Tables must be valid Markdown: a header row, a `---` separator row, and the same number of cells in every row. Keep cells short — a figure, a date, a phrase — never a paragraph.
+- When a table's rows come from more than one context block, add a final "Source" column carrying each row's citation, so every row stays traceable.
+
+LENGTH:
+- A factual lookup ("what is the deadline") gets 1-2 sentences and no headings.
+- A broad question ("key provisions", "summarize", "what does it cover") gets the lead sentence plus 2-5 headed groups, under ~250 words total.
+- Cover the most important points well rather than every point briefly. Say what you left out in a final line if it matters.
 - Answer in the same language the question is asked in, unless instructed otherwise.
 - IMPORTANT: When the source context is in Nepali (Devanagari) but the question is in English, TRANSLATE and explain the content fully in English. Do NOT leave raw Nepali/Devanagari text inline. You may include the original Nepali term in parentheses for proper nouns or official titles, but the main answer must be fluent in the question's language.
 - Similarly, if the question is in Nepali but context is in English, answer in Nepali.
 - If the context does not contain the answer, say so plainly in one sentence and, if partially relevant material exists, state what IS covered. Do not pad.
 - Answer directly — never open with filler like "According to the context" or "Based on the provided documents", and do not restate the question.
-- Vary your wording naturally between answers; never sound like a template."""
+- Vary your wording between answers, but keep the structure above consistent — wording is what should feel natural, not the layout."""
 
 CHAT_SYSTEM_PROMPT = """You are Suchana AI, the assistant for a Nepalese public notice portal where users upload and ask questions about government notices and documents.
 
@@ -52,13 +68,15 @@ _STYLE_HINTS = [
     "Reply as if continuing a friendly conversation.",
 ]
 
+# Tone only. Structure is decided by the content's shape, not by chance —
+# randomising it made the same question format differently each time, and
+# the "flowing prose, no bullets" variant turned list questions into walls
+# of text.
 _ANSWER_STYLE_HINTS = [
-    "Lead with the single most important fact, then add supporting detail.",
-    "If the material allows it, structure the answer as brief bullet points.",
-    "Answer in flowing prose without bullet points this time.",
+    "Keep the wording plain and direct.",
+    "Write as if briefing a colleague quickly.",
+    "Prefer everyday words over official phrasing where both are accurate.",
     "Be as concise as accuracy allows.",
-    "Add one sentence of helpful surrounding context from the sources after the direct answer.",
-    "Frame the answer as if briefing a colleague quickly.",
 ]
 
 NO_RESULTS_PROMPT = """You are Suchana AI, an assistant for a Nepalese public notice portal. The user asked a question, but a search of the uploaded documents found nothing relevant.
@@ -135,6 +153,28 @@ def is_small_talk(message: str) -> bool:
     return all(w in _SMALL_TALK_WORDS for w in words)
 
 
+def _context_label(chunk: dict) -> str:
+    """Human locator for one context block — what its citation resolves to.
+
+    A block labelled only by filename is indistinguishable from every other
+    block of the same document, so "[2]" carries no more information than
+    "[1]". Adding the page and section is what lets the model attribute a
+    figure to the place it actually read it.
+    """
+    parts = [f"“{chunk.get('title') or 'Untitled document'}”"]
+
+    pages = [p for p in (chunk.get("page_range") or []) if p is not None]
+    if pages:
+        low, high = min(pages), max(pages)
+        parts.append(f"p. {low}" if low == high else f"pp. {low}–{high}")
+
+    section = str(chunk.get("section_path") or "").strip()
+    if section:
+        parts.append(f"§ {section}")
+
+    return ", ".join(parts)
+
+
 async def generate_answer(
     question: str, context_chunks: list[dict], language: str = "en"
 ) -> str:
@@ -143,7 +183,7 @@ async def generate_answer(
         return _extractive_fallback(question, context_chunks)
 
     context = "\n\n".join(
-        f"[{i + 1}] (from “{chunk.get('title') or 'Untitled document'}”)\n{chunk['content']}"
+        f"[{i + 1}] (from {_context_label(chunk)})\n{chunk['content']}"
         for i, chunk in enumerate(context_chunks)
     )
 

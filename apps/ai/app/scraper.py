@@ -22,9 +22,11 @@ better than a per-site body selector would.
 """
 
 import asyncio
+import gzip
 import random
 import json
 import re
+import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlparse
@@ -1668,18 +1670,39 @@ def _article_like_ratio(urls: list[str]) -> float:
     return article_like / len(urls)
 
 
-def _iter_sitemap_locs(root) -> list[str]:
-    """Collect <loc> values that are direct children of <url> or <sitemap>
-    elements. Extension namespace locs (image:, video:) are deliberately
-    ignored — they are media, not pages."""
-    locs: list[str] = []
+def _iter_sitemap_locs(root) -> list[tuple[str, str | None]]:
+    """Collect (loc, lastmod) for direct children of <url>/<sitemap>.
+
+    Extension namespace locs (image:, video:) are ignored — media, not pages.
+    lastmod is optional and returned raw; callers parse leniently.
+    """
+    entries: list[tuple[str, str | None]] = []
     for parent in root:
         if not ET.iselement(parent) or _local_name(parent.tag) not in ("url", "sitemap"):
             continue
+        loc = None
+        lastmod = None
         for child in parent:
-            if _local_name(child.tag) == "loc" and child.text:
-                locs.append(child.text.strip())
-    return locs
+            name = _local_name(child.tag)
+            if name == "loc" and child.text:
+                loc = child.text.strip()
+            elif name == "lastmod" and child.text:
+                lastmod = child.text.strip()
+        if loc:
+            entries.append((loc, lastmod))
+    return entries
+
+
+def _parse_lastmod(raw: str | None) -> datetime | None:
+    """W3C datetime from <lastmod>; None if absent or unparseable."""
+    if not raw:
+        return None
+    text = raw.strip()
+    try:
+        # Accept both "2026-08-01" and full ISO-8601 with offset / trailing Z.
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 class _HostUnreachable(Exception):
@@ -1688,7 +1711,59 @@ class _HostUnreachable(Exception):
     of paying the timeout again for each one."""
 
 
-async def _fetch_text(url: str) -> str | None:
+class _SitemapUnchanged(Exception):
+    """Server answered 304 — our cached copy is current, nothing to re-parse."""
+
+
+# ETag / Last-Modified per sitemap URL, so a poll that changes nothing costs
+# a 304 instead of re-downloading the whole file. Bounded: government
+# portals have a handful of sitemaps each, and a cold cache just means one
+# normal fetch.
+_SITEMAP_VALIDATORS: dict[str, dict[str, str]] = {}
+_MAX_VALIDATOR_ENTRIES = 512
+
+# Last-seen kind ('urlset' | 'sitemapindex') per URL. A 304 is only safe to
+# act on for a leaf urlset: an index can return 304 while a child sitemap's
+# contents changed underneath it, and skipping it would miss new notices.
+_SITEMAP_KIND: dict[str, str] = {}
+
+
+def _remember_validators(url: str, response: httpx.Response) -> None:
+    """Cache this response's ETag / Last-Modified for the next conditional GET."""
+    validators = {}
+    if etag := response.headers.get("etag"):
+        validators["If-None-Match"] = etag
+    if last_modified := response.headers.get("last-modified"):
+        validators["If-Modified-Since"] = last_modified
+    if not validators:
+        _SITEMAP_VALIDATORS.pop(url, None)
+        return
+    if len(_SITEMAP_VALIDATORS) >= _MAX_VALIDATOR_ENTRIES and url not in _SITEMAP_VALIDATORS:
+        _SITEMAP_VALIDATORS.pop(next(iter(_SITEMAP_VALIDATORS)), None)
+    _SITEMAP_VALIDATORS[url] = validators
+
+
+def _decode_sitemap_body(response: httpx.Response) -> str | None:
+    """Text of a sitemap response, un-gzipping .xml.gz payloads.
+
+    httpx transparently handles Content-Encoding, but a `.xml.gz` file is
+    gzip *content* served as an octet-stream — it arrives still compressed,
+    and feeding those bytes to the XML parser raises ParseError. That read
+    as "no sitemap here", so gzipped government sitemaps were cached as
+    absent and their sources fell back to full crawls forever.
+    """
+    raw = response.content
+    if raw[:2] == b"\x1f\x8b":  # gzip magic number
+        try:
+            raw = gzip.decompress(raw)
+        except (OSError, EOFError, zlib.error) as e:
+            logger.warning("Sitemap %s looked gzipped but would not decompress (%s)", response.url, type(e).__name__)
+            return None
+        return raw.decode("utf-8", errors="replace")
+    return response.text
+
+
+async def _fetch_text(url: str, headers: dict | None = None) -> str | None:
     """One polite GET. Plain httpx — no Playwright, no crawl4ai.
 
     Raises _HostUnreachable when the host itself never answered; returns None
@@ -1701,12 +1776,24 @@ async def _fetch_text(url: str) -> str | None:
         ) as client:
             response = await client.get(
                 url,
-                headers={"User-Agent": _SITEMAP_USER_AGENT, "Accept": "*/*"},
+                headers={
+                    "User-Agent": _SITEMAP_USER_AGENT,
+                    "Accept": "*/*",
+                    **(headers or {}),
+                },
             )
+        # 304 means our cached copy is still current — nothing changed.
+        if response.status_code == 304:
+            raise _SitemapUnchanged(url)
         if response.status_code != 200:
             logger.info("Sitemap fetch %s -> HTTP %d", url, response.status_code)
             return None
-        return response.text
+        _remember_validators(url, response)
+        return _decode_sitemap_body(response)
+    except (_HostUnreachable, _SitemapUnchanged):
+        # Control-flow signals for the caller — must not be swallowed by the
+        # catch-all below.
+        raise
     except (httpx.ConnectError, httpx.ConnectTimeout) as e:
         # Routine for a site that is down, firewalled, or blocking our UA —
         # a one-line warning, not the ~60-line httpx traceback this used to
@@ -1722,12 +1809,20 @@ async def _fetch_text(url: str) -> str | None:
         return None
 
 
-async def _fetch_sitemap(url: str) -> tuple[str, list[str]] | None:
-    """Fetch + parse one sitemap file. Returns (kind, locs) where kind is
+async def _fetch_sitemap(
+    url: str, conditional: bool = False
+) -> tuple[str, list[tuple[str, str | None]]] | None:
+    """Fetch + parse one sitemap file. Returns (kind, entries) where kind is
     'urlset' (leaf article URLs) or 'sitemapindex' (child sitemap URLs), or
-    None on any failure (HTTP error, non-XML, empty)."""
+    None on any failure (HTTP error, non-XML, empty).
+
+    With conditional=True, sends cached ETag/Last-Modified and raises
+    _SitemapUnchanged on a 304. Only requested for URLs last seen as a leaf
+    urlset — see _SITEMAP_KIND.
+    """
+    headers = _SITEMAP_VALIDATORS.get(url) if conditional else None
     try:
-        text = await _fetch_text(url)
+        text = await _fetch_text(url, headers)
     except _HostUnreachable:
         # Contained here so this function keeps its "None on any failure"
         # contract — its four call sites all branch on None. Only
@@ -1740,7 +1835,9 @@ async def _fetch_sitemap(url: str) -> tuple[str, list[str]] | None:
     except ET.ParseError:
         logger.info("Sitemap %s is not valid XML", url)
         return None
-    return _local_name(root.tag), _iter_sitemap_locs(root)
+    kind = _local_name(root.tag)
+    _SITEMAP_KIND[url] = kind
+    return kind, _iter_sitemap_locs(root)
 
 
 def _score_sitemap_child(url: str) -> int:
@@ -1798,9 +1895,9 @@ async def detect_sitemap(base_url: str) -> str | None:
         fetched = await _fetch_sitemap(candidate)
         if fetched is None:
             continue
-        kind, locs = fetched
+        kind, entries = fetched
         if kind == "sitemapindex":
-            for child in locs:
+            for child, _lastmod in entries:
                 leaves.append(urljoin(f"{base}/", child))
         else:
             leaves.append(candidate)
@@ -1813,13 +1910,13 @@ async def detect_sitemap(base_url: str) -> str | None:
         fetched = await _fetch_sitemap(url)
         if fetched is None:
             continue
-        kind, locs = fetched
+        kind, entries = fetched
         if kind == "sitemapindex":
             continue  # defensive; already flattened above
         # Only URLs on the same site count — KU's sitemap.xml famously lists
         # other universities' subdomains rather than its own articles — and
         # they must be article pages, not landing-page dumps.
-        same_origin = [loc for loc in locs if _is_same_origin(loc, base)]
+        same_origin = [loc for loc, _ in entries if _is_same_origin(loc, base)]
         if len(same_origin) >= _MIN_SITEMAP_LOCS and (
             _article_like_ratio(same_origin) >= _MIN_SITEMAP_ARTICLE_RATIO
         ):
@@ -1835,42 +1932,76 @@ async def detect_sitemap(base_url: str) -> str | None:
     return None
 
 
-async def check_sitemap(sitemap_url: str, known_urls: set[str] | list[str]) -> tuple[list[str], int]:
+async def check_sitemap(
+    sitemap_url: str,
+    known_urls: set[str] | list[str],
+    since: str | None = None,
+) -> tuple[list[str], int]:
     """Cheap fast-path poll: fetch the sitemap (flattening an index if the
     cached URL still points at one) and return only the <loc> entries not
     already in known_urls, plus the total number of <loc>s seen. One-to-a-few
-    GETs, no rendering — safe to run every 1–3 minutes."""
+    GETs, no rendering — safe to run every 1–3 minutes.
+
+    `since` is the source's last successful run (ISO 8601); child sitemaps
+    whose <lastmod> predates it are skipped without being fetched."""
     known = {u for u in (known_urls or []) if u}
+    cutoff = _parse_lastmod(since)
     base = sitemap_url
     all_locs: list[str] = []
     seen_files: set[str] = set()
     queue: list[str] = [sitemap_url]
     fetches = 0
+    unchanged = 0
+    stale_skipped = 0
 
     while queue and fetches < _MAX_SITEMAP_INDEX_FETCHES:
         current = queue.pop(0)
         if current in seen_files:
             continue
         seen_files.add(current)
-        fetched = await _fetch_sitemap(current)
+
+        # A 304 is only trustworthy for a leaf urlset. An index can answer 304
+        # while a child's contents changed underneath it, so re-fetch indexes.
+        use_conditional = _SITEMAP_KIND.get(current) == "urlset"
+        try:
+            fetched = await _fetch_sitemap(current, conditional=use_conditional)
+        except _SitemapUnchanged:
+            unchanged += 1
+            continue
         if fetched is None:
             continue
-        kind, locs = fetched
+        kind, entries = fetched
         fetches += 1
+
         if kind == "sitemapindex":
-            queue.extend(locs)
+            for child, lastmod in entries:
+                child_url = urljoin(current, child)
+                # Skip whole child sitemaps untouched since our last run.
+                child_mod = _parse_lastmod(lastmod)
+                if cutoff and child_mod and child_mod < cutoff:
+                    stale_skipped += 1
+                    continue
+                queue.append(child_url)
         else:
-            for loc in locs:
+            for loc, lastmod in entries:
                 absolute = urljoin(current, loc)
                 # Same-origin guard mirrors detection: URLs on other hosts
                 # (other ministries' subdomains) can never be this source's
                 # items, so they shouldn't trigger wasted full crawls.
-                if _is_same_origin(absolute, base):
-                    all_locs.append(absolute)
+                if not _is_same_origin(absolute, base):
+                    continue
+                all_locs.append(absolute)
 
     # Preserve first-seen order while dropping duplicates.
     unique_locs = list(dict.fromkeys(all_locs))
     new_urls = [u for u in unique_locs if u not in known]
+    if unchanged or stale_skipped:
+        logger.info(
+            "Sitemap check %s: %d file(s) unchanged (304), %d child sitemap(s) older than cutoff",
+            sitemap_url,
+            unchanged,
+            stale_skipped,
+        )
     return new_urls, len(unique_locs)
 
 

@@ -118,3 +118,8 @@ export class UpdateScrapeSourceDto {
   @IsUrl({ require_tld: false })
   sitemapUrl?: string | null;
 }
+
+export class QuickScrapeDto {
+  @IsUrl({ require_tld: false })
+  url: string;
+}

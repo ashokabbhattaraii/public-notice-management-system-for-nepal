@@ -17,7 +17,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   }, [error])
 
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="flex size-14 items-center justify-center rounded-full bg-destructive/10">
         <AlertTriangle className="size-6 text-destructive" />
       </div>

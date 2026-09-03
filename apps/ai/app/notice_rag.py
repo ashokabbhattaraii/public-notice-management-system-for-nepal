@@ -4,6 +4,7 @@ fallback. The LLM synthesizes an answer from the retrieved context."""
 
 import random
 
+from app import clarify
 from app import config
 from app import llm
 from app import notice_store
@@ -16,9 +17,12 @@ _NOTICES_SYSTEM_PROMPT = """You are Suchana AI, an assistant for a Nepalese publ
 Rules:
 - Ground every claim in the context. Never invent facts, numbers, dates, or names.
 - If multiple notices are relevant, synthesize the key information from each.
-- Use Markdown formatting: short paragraphs, bullet points for lists, **bold** for key facts/dates.
-- When several notices are relevant, or the answer lists items sharing the same fields (deadlines, categories, sources, fees), present them as a Markdown table with a header row. At least two rows and two columns, otherwise prose or bullets.
-- Keep answers concise (under 200 words for factual lookups, up to 300 for broader questions).
+- Open with ONE sentence that answers the question directly. Never open with a heading.
+- If the answer has more than one part, break the detail into short **bold** section headings of 2-4 words, each followed by bullets.
+- One idea per bullet, one line each — under 20 words. NEVER write a paragraph longer than 3 sentences; a wall of text is a failed answer.
+- Bold the key figure, date or term inside a bullet so it can be found by scanning.
+- When several notices are relevant, or the answer lists items sharing the same fields (deadlines, categories, sources, fees), present them as a Markdown table with a header row. At least two rows and two columns, otherwise bullets.
+- Keep answers concise (1-2 sentences for factual lookups, up to ~250 words for broader questions).
 - Answer in the same language the question is asked in. If the content is in Nepali but the question is in English, translate and explain in English.
 - Answer whenever the context is relevant, even partially. If the notices cover
   part of the question, give what they establish and then name what they do not
@@ -32,6 +36,15 @@ Rules:
 - Every notice carries a "Published" date. Use THAT date when the user asks
   when something was posted, and never present a date found inside a summary
   (often a Bikram Sambat date from the notice body) as the publication date.
+- NEVER combine figures from different notices into one total. Death tolls,
+  amounts, quotas and counts belong to the specific incident, scheme or period
+  their notice reports. Adding them together invents a number no notice states.
+- When the notices report different incidents or periods, give each figure
+  separately and say which incident, date and source it comes from. Never
+  present one incident's figure as the answer to a general question.
+- If the question asks for a single figure but the notices cover several
+  distinct events, say so plainly and list what each one reports, rather than
+  choosing one silently.
 - The context is ordered — [1] is the best match for the question. For
   "latest"/"recent" questions it is ordered newest first, so answer from the
   top of the list and give each notice's published date.
@@ -44,9 +57,9 @@ _NO_RESULTS_PROMPT = """You are Suchana AI, an assistant for a Nepalese public n
 
 Tell them so in 1-2 sentences. Suggest they try different keywords or browse the notices page. Be honest — never fabricate information about notices. Vary your wording naturally."""
 
+# Tone only — structure comes from the rules above, not from chance.
 _STYLE_HINTS = [
-    "Lead with the single most important fact.",
-    "Use brief bullet points if multiple notices are relevant.",
+    "Keep the wording plain and direct.",
     "Be as concise as accuracy allows.",
     "Frame the answer as a quick briefing.",
 ]
@@ -59,6 +72,7 @@ async def search_and_answer(
     language: str = "en",
     top_k: int = 5,
     recency_intent: bool = False,
+    skip_clarification: bool = False,
 ) -> dict:
     """Hybrid notice search: use PG keyword results if provided, otherwise
     fall back to Qdrant semantic search. Then generate an LLM answer.
@@ -69,6 +83,9 @@ async def search_and_answer(
     recency_intent: the API parsed the question as asking for the newest
                 items ("latest tender notices"). Similarity order is the wrong
                 axis for those, so the context is re-sorted by date.
+    skip_clarification: set when the user has already been asked to
+                disambiguate and chose to see everything anyway — suppresses
+                the ambiguity gate so the same question can't loop.
     """
     logger.info(
         "Notice search (pg_results=%d, category=%s, top_k=%d): %.80s",
@@ -115,6 +132,21 @@ async def search_and_answer(
     if recency_intent:
         sources = _by_published_desc(sources)
 
+    # "How many are dead?" matches flood, earthquake and road-accident
+    # notices equally well — each with a different toll. Answering from the
+    # top hit picks one at random; the gate asks which one instead. Its
+    # options come from `sources`, so every choice offered is one the corpus
+    # can actually answer.
+    if not skip_clarification and clarify.looks_underspecified(question):
+        clarification = await clarify.assess(question, sources, language)
+        if clarification:
+            return {
+                "answer": clarification["question"],
+                "clarification": clarification,
+                "sources": _source_payload(sources),
+                "model_used": _model_name(),
+            }
+
     # Published dates are part of the context: without them the model has no
     # way to answer "latest"/"when" questions and will quote whatever date it
     # finds inside a summary — typically the Bikram Sambat date printed in the
@@ -144,18 +176,23 @@ async def search_and_answer(
 
     return {
         "answer": answer,
-        "sources": [
-            {
-                "id": s.get("id", ""),
-                "title": s.get("title", ""),
-                "category": s.get("category", ""),
-                "sourceUrl": s.get("sourceUrl", ""),
-                "score": s.get("score", 1.0),
-            }
-            for s in sources
-        ],
+        "sources": _source_payload(sources),
         "model_used": _model_name(),
     }
+
+
+def _source_payload(sources: list[dict]) -> list[dict]:
+    """The subset of each retrieved notice the clients render as citations."""
+    return [
+        {
+            "id": s.get("id", ""),
+            "title": s.get("title", ""),
+            "category": s.get("category", ""),
+            "sourceUrl": s.get("sourceUrl", ""),
+            "score": s.get("score", 1.0),
+        }
+        for s in sources
+    ]
 
 
 def _semantic_search(question: str, category: str | None, top_k: int) -> list[dict]:

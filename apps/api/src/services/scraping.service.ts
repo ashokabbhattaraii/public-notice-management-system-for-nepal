@@ -197,6 +197,58 @@ export class ScrapingService {
     return { deleted: true };
   }
 
+  /**
+   * Admin "paste a link" quick-scrape: ingest one arbitrary notice / news /
+   * press-release URL without requiring a pre-configured Source. Reuses
+   * whatever Source already owns that URL's domain (configured or a prior
+   * ad-hoc one); otherwise auto-creates a minimal, disabled-from-scheduling
+   * Source for the domain so the normal detail-page crawl + persistence
+   * pipeline (runSourceFromUrls) can be reused unchanged.
+   */
+  async quickScrape(rawUrl: string) {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new BadRequestException('Not a valid URL');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new BadRequestException('URL must be http or https');
+    }
+    const url = parsed.toString();
+    const origin = parsed.origin;
+
+    const existingItem = await this.prisma.scrapedItem.findUnique({
+      where: { sourceUrl: url },
+    });
+    if (existingItem) {
+      return {
+        alreadyExists: true as const,
+        item: { id: existingItem.id, title: existingItem.title, category: existingItem.category },
+      };
+    }
+
+    let source = await this.prisma.scrapeSource.findFirst({
+      where: { baseUrl: { equals: origin, mode: 'insensitive' } },
+    });
+    let sourceCreated = false;
+    if (!source) {
+      source = await this.prisma.scrapeSource.create({
+        data: {
+          name: parsed.hostname,
+          baseUrl: origin,
+          isAdHoc: true,
+          enabled: true,
+          pollIntervalSeconds: 900,
+        },
+      });
+      sourceCreated = true;
+    }
+
+    const { runId } = await this.runSourceFromUrls(source.id, [url]);
+    return { alreadyExists: false as const, runId, sourceId: source.id, sourceCreated };
+  }
+
   // --- Run ---
 
   /**
@@ -432,6 +484,52 @@ export class ScrapingService {
   }
 
   /**
+   * Re-run detection for every source currently cached as having no sitemap.
+   *
+   * Detection runs once and the verdict is cached forever, so a source whose
+   * sitemap was unreadable at the time — gzipped `.xml.gz` files parsed as
+   * "not XML" until that was fixed, or a portal that happened to be down —
+   * is stuck paying for full crawls indefinitely. This clears those verdicts.
+   */
+  async redetectMissingSitemaps() {
+    const candidates = await this.prisma.scrapeSource.findMany({
+      where: { sitemapUrl: null, isAdHoc: false },
+      select: { id: true, name: true },
+    });
+
+    // Detection is up to three 30s probes per source, so doing this inline
+    // would hold the admin request open for minutes and time out. Returns
+    // immediately; progress lands in the logs and on the source cards.
+    void this.runRedetection(candidates);
+    return { scheduled: candidates.length };
+  }
+
+  /** Bounded-concurrency re-detection, run in the background. */
+  private async runRedetection(sources: { id: string; name: string }[]) {
+    const CONCURRENCY = 4;
+    let found = 0;
+    let failed = 0;
+    const queue = [...sources];
+
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        try {
+          const updated = await this.detectSitemap(next.id);
+          if (updated.sitemapUrl) found++;
+        } catch (err: any) {
+          failed++;
+          this.logger.warn(`Sitemap re-detection failed for ${next.name}: ${err.message}`);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    this.logger.log(
+      `Sitemap re-detection finished: ${found} found, ${failed} failed, ${sources.length} checked`,
+    );
+  }
+
+  /**
    * Cheap sitemap poll: asks the AI service for the sitemap's <loc> entries
    * that are not yet known to this source. No crawl4ai/Playwright involved.
    * Returns { sitemap_url, checked_at, new_urls, total_locs }.
@@ -454,6 +552,9 @@ export class ScrapingService {
           base_url: source.baseUrl,
           sitemap_url: source.sitemapUrl,
           known_urls: knownUrls,
+          // Lets the AI service skip child sitemaps untouched since our last
+          // successful poll instead of fetching every one of them.
+          since: source.lastRunAt?.toISOString() ?? null,
         },
         { timeout: 30000 },
       ),

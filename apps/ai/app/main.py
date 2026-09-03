@@ -945,7 +945,9 @@ async def _scrape_check(receive) -> tuple[int, dict]:
             }
 
     try:
-        new_urls, total_locs = await scraper.check_sitemap(sitemap_url, known_urls)
+        new_urls, total_locs = await scraper.check_sitemap(
+            sitemap_url, known_urls, since=data.get("since")
+        )
     except Exception as e:
         logger.exception("Sitemap check failed for %s", sitemap_url)
         return 502, {"error": f"Sitemap check failed: {str(e)}"}
@@ -1332,6 +1334,7 @@ async def _notices_search(receive) -> tuple[int, dict]:
             language=language,
             top_k=top_k,
             recency_intent=bool(data.get("recency_intent")),
+            skip_clarification=bool(data.get("skip_clarification")),
         )
         return 200, result
     except Exception as e:

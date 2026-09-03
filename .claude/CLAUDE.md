@@ -2,6 +2,53 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory Working Rules
+
+These override default behavior. Follow them on every task.
+
+### 1. Use the codebase-memory MCP first — always
+
+Reading files blindly burns tokens. Before any code exploration, use the graph:
+
+- `search_graph(name_pattern / label / qn_pattern)` — find functions, classes, routes
+- `get_code_snippet(qualified_name)` — exact source for one symbol, not the whole file
+- `trace_path(function_name, mode=calls|data_flow|cross_service)` — call chains
+- `search_code(pattern)` — graph-augmented text search
+- `get_architecture(aspects)` — project structure
+- `query_graph(query)` — complex Cypher patterns
+
+Run `index_repository` first if the project isn't indexed. Only fall back to Read/Grep/Glob for
+non-code files (configs, docs, JSON), or to read a file you're about to edit.
+
+### 2. Comments: one line, plain language
+
+Write short single-line comments. No multi-line comment blocks explaining history, rationale,
+or what the code used to do — that belongs in the commit message, not the source.
+
+```python
+# Locators are written after metadata so doc-level keys can't shadow them.
+```
+
+Not this:
+
+```python
+# Per-chunk locators, written last so a document-level metadata key
+# of the same name cannot shadow them. The chunker computes these
+# for exactly this purpose but they used to stop here: only the
+# document-level `metadata` was indexed, so every citation could...
+```
+
+Keep docstrings to one line unless the function genuinely needs args documented.
+
+### 3. Implement across all three apps when the change spans them
+
+A feature is not done in one app. When a change needs it, carry it through the full path:
+
+**apps/ai** (pipeline, endpoint) → **apps/api** (DTO, service, controller, Prisma) → **apps/web** (`lib/api.ts`, `lib/types.ts`, UI)
+
+Check each layer before declaring the work finished. If a layer genuinely doesn't need a change,
+say so explicitly rather than silently skipping it.
+
 ## Project Overview
 
 A public notice management system organized as a **Turborepo monorepo** with three apps:

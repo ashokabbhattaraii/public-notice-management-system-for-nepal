@@ -18,7 +18,7 @@ import { Roles } from '../decorators/roles.decorator';
 import { ScrapingService } from '../services/scraping.service';
 import { ScrapingSchedulerService } from '../services/scraping-scheduler.service';
 import { NoticesService } from '../services/notices.service';
-import { CreateScrapeSourceDto, UpdateScrapeSourceDto } from '../dto/scrape-source.dto';
+import { CreateScrapeSourceDto, UpdateScrapeSourceDto, QuickScrapeDto } from '../dto/scrape-source.dto';
 import { ScrapedItemCategory } from '@prisma/client';
 
 @Controller('admin/scraping')
@@ -60,6 +60,17 @@ export class ScrapingController {
     return this.scrapingService.listSources();
   }
 
+  /**
+   * Admin "paste a link" quick-scrape: ingest one arbitrary notice/news/
+   * press-release URL directly, with no Source pre-configuration required.
+   * Reuses an existing Source for the URL's domain if one exists, otherwise
+   * auto-creates a minimal ad-hoc one (see ScrapingService.quickScrape).
+   */
+  @Post('quick-scrape')
+  async quickScrape(@Body() dto: QuickScrapeDto) {
+    return this.scrapingService.quickScrape(dto.url);
+  }
+
   @Post('sources')
   async createSource(@Body() dto: CreateScrapeSourceDto) {
     return this.scrapingService.createSource(dto);
@@ -84,6 +95,12 @@ export class ScrapingController {
     @Body('categories') categories?: ('NOTICE' | 'NEWS')[],
   ) {
     return this.scrapingService.runSource(id, categories);
+  }
+
+  /** Re-detect sitemaps for every source currently cached as having none. */
+  @Post('sources/redetect-sitemaps')
+  async redetectSitemaps() {
+    return this.scrapingService.redetectMissingSitemaps();
   }
 
   /** One-time sitemap detection (robots.txt → sitemap.xml → best child).

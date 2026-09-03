@@ -652,6 +652,21 @@ export async function runAllScrapeSources(): Promise<RunAllResult> {
   })
 }
 
+/**
+ * Admin "paste a link" quick-scrape: ingest one arbitrary notice/news/
+ * press-release URL directly, with no Source pre-configuration required.
+ */
+export type QuickScrapeResult =
+  | { alreadyExists: true; item: { id: string; title: string; category: ScrapedItemCategory } }
+  | { alreadyExists: false; runId: string; sourceId: string; sourceCreated: boolean }
+
+export async function quickScrapeUrl(url: string): Promise<QuickScrapeResult> {
+  return apiFetch("/admin/scraping/quick-scrape", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  })
+}
+
 /** Admin settings: schema + effective values for the settings UI. */
 export async function fetchSettings(): Promise<SettingsView> {
   return apiFetch("/admin/settings")
@@ -843,20 +858,33 @@ export async function askNoticeQuestion(id: string, question: string): Promise<{
   })
 }
 
+/**
+ * Returned instead of an answer when the question is ambiguous against the
+ * corpus — e.g. "how many are dead?" when flood, earthquake and accident
+ * notices each report a different toll. Every option is drawn from notices
+ * that were actually retrieved, so each one is answerable.
+ */
+export interface SearchClarification {
+  question: string
+  options: { label: string; query: string }[]
+}
+
 export interface NoticeSearchResponse {
   answer: string
   sources: { id: string; title: string; category: string; sourceUrl: string; score?: number }[]
   model_used: string | null
+  clarification?: SearchClarification
 }
 
 export async function searchNotices(
   question: string,
   category?: string,
   language?: string,
+  skipClarification?: boolean,
 ): Promise<NoticeSearchResponse> {
   return apiFetch("/notices/search", {
     method: "POST",
-    body: JSON.stringify({ question, category, language }),
+    body: JSON.stringify({ question, category, language, skipClarification }),
   })
 }
 

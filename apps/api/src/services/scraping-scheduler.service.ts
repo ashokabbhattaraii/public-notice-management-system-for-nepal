@@ -34,6 +34,9 @@ class Semaphore {
   }
 }
 
+/** How long a cached "no sitemap" verdict stands before it is re-checked. */
+const SITEMAP_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * Automatic scraping scheduler.
  *
@@ -250,6 +253,7 @@ export class ScrapingSchedulerService implements OnModuleInit {
       SELECT s.*
       FROM scrape_sources s
       WHERE s.enabled = true
+        AND NOT s.is_ad_hoc
         AND (
           s.last_run_at IS NULL
           OR s.last_run_at <= now() - make_interval(
@@ -272,6 +276,25 @@ export class ScrapingSchedulerService implements OnModuleInit {
   /** Decide what one due source needs this tick: one-time sitemap detection,
    * a cheap sitemap check, or a full crawl. */
   private async pollSource(source: ScrapeSource) {
+    // A "no sitemap" verdict is cached forever, so a source whose sitemap was
+    // merely unreadable at the time (gzipped, or the portal was down) would
+    // pay for full crawls indefinitely. Re-check stale verdicts periodically
+    // so the pipeline self-heals instead of needing a manual admin action.
+    if (
+      !source.sitemapUrl &&
+      source.sitemapCheckedAt &&
+      Date.now() - source.sitemapCheckedAt.getTime() > SITEMAP_RECHECK_MS
+    ) {
+      const detected = await this.scrapingService.detectSitemap(source.id);
+      if (detected.sitemapUrl) {
+        this.logger.log(
+          `Sitemap re-detected for ${source.name}: ${detected.sitemapUrl}`,
+        );
+        return this.pollSitemap(source.id);
+      }
+      return this.pollListing(source);
+    }
+
     // Sitemap never attempted → detect exactly once and cache the verdict.
     if (!source.sitemapUrl && !source.sitemapCheckedAt) {
       const detected = await this.scrapingService.detectSitemap(source.id);

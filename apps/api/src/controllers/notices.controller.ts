@@ -45,16 +45,35 @@ export class NoticesController {
   }
 
   @Post('search')
-  async search(@Body() body: { question: string; category?: string; language?: string }) {
+  async search(
+    @Body()
+    body: {
+      question: string;
+      category?: string;
+      language?: string;
+      skipClarification?: boolean;
+    },
+  ) {
     if (!body.question?.trim()) {
       return { answer: '', sources: [], model_used: null };
     }
-    return this.noticesService.search(body.question.trim(), body.category, body.language);
+    return this.noticesService.search(
+      body.question.trim(),
+      body.category,
+      body.language,
+      body.skipClarification === true,
+    );
   }
 
   @Get('meta/category-counts')
   async categoryCounts() {
     return this.noticesService.categoryCounts();
+  }
+
+  /** Minimal id/slug/updatedAt feed for the web app's public sitemap.xml. */
+  @Get('meta/sitemap')
+  async sitemapFeed(@Query('limit') limit?: string) {
+    return this.noticesService.sitemapFeed(limit ? Number(limit) : undefined);
   }
 
   @Get('meta/sources')
