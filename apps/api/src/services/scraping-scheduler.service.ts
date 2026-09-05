@@ -63,11 +63,17 @@ export class ScrapingSchedulerService implements OnModuleInit {
   private readonly defaultConcurrency: number;
   private readonly defaultStaleRunTimeoutSeconds: number;
   private readonly defaultMinPollIntervalSeconds: number;
+  private readonly defaultMaxBackoffSeconds: number;
+  private readonly defaultFailureWindowSeconds: number;
 
   private cronExpression: string;
   private concurrency: number;
   private staleRunTimeoutSeconds: number;
   private minPollIntervalSeconds: number;
+  /** Ceiling for the consecutive-failure backoff in findDueSources. */
+  private maxBackoffSeconds: number;
+  /** How far back findDueSources counts failures when sizing the backoff. */
+  private failureWindowSeconds: number;
   private semaphore: Semaphore;
   private ticking = false;
   private lastTickAt: Date | null = null;
@@ -89,11 +95,17 @@ export class ScrapingSchedulerService implements OnModuleInit {
       Number(this.config.get<string>('SCRAPING_STALE_TIMEOUT_SECONDS')) || 3600;
     this.defaultMinPollIntervalSeconds =
       Number(this.config.get<string>('SCRAPING_MIN_POLL_INTERVAL_SECONDS')) || 60;
+    this.defaultMaxBackoffSeconds =
+      Number(this.config.get<string>('SCRAPING_MAX_BACKOFF_SECONDS')) || 21600;
+    this.defaultFailureWindowSeconds =
+      Number(this.config.get<string>('SCRAPING_FAILURE_WINDOW_SECONDS')) || 7200;
 
     this.cronExpression = this.defaultCron;
     this.concurrency = this.defaultConcurrency;
     this.staleRunTimeoutSeconds = this.defaultStaleRunTimeoutSeconds;
     this.minPollIntervalSeconds = this.defaultMinPollIntervalSeconds;
+    this.maxBackoffSeconds = this.defaultMaxBackoffSeconds;
+    this.failureWindowSeconds = this.defaultFailureWindowSeconds;
     this.semaphore = new Semaphore(this.defaultConcurrency);
   }
 
@@ -207,6 +219,14 @@ export class ScrapingSchedulerService implements OnModuleInit {
       'scraping.minPollSec',
       this.defaultMinPollIntervalSeconds,
     );
+    this.maxBackoffSeconds = await this.settings.getNumber(
+      'scraping.maxBackoffSec',
+      this.defaultMaxBackoffSeconds,
+    );
+    this.failureWindowSeconds = await this.settings.getNumber(
+      'scraping.failureWindowSec',
+      this.defaultFailureWindowSeconds,
+    );
   }
 
   /** Effective scheduler settings + last-tick state, surfaced in the admin UI. */
@@ -216,6 +236,7 @@ export class ScrapingSchedulerService implements OnModuleInit {
       concurrency: this.concurrency,
       staleRunTimeoutSeconds: this.staleRunTimeoutSeconds,
       minPollIntervalSeconds: this.minPollIntervalSeconds,
+      maxBackoffSeconds: this.maxBackoffSeconds,
       ticking: this.ticking,
       autoScraping: this.autoScraping,
       lastTickAt: this.lastTickAt?.toISOString() ?? null,
@@ -247,17 +268,43 @@ export class ScrapingSchedulerService implements OnModuleInit {
    * no live RUNNING run. Uses a raw query because the interval is a per-row
    * column (GREATEST with the politeness floor); the RUNNING-run subquery is
    * the DB-backed concurrency lock.
+   *
+   * A source that keeps failing backs off exponentially (doubling per
+   * consecutive failure since its last success, capped at maxBackoffSeconds)
+   * instead of retrying on its base interval forever. A permanently broken
+   * source used to burn thousands of runs a day, which is what starved the
+   * AI service's browser pool and took the healthy sources down with it.
    */
   private async findDueSources(): Promise<ScrapeSource[]> {
     return this.prisma.$queryRaw<ScrapeSource[]>`
       SELECT s.*
       FROM scrape_sources s
+      CROSS JOIN LATERAL (
+        SELECT count(*)::int AS consecutive_failures
+        FROM scrape_runs r
+        WHERE r.source_id = s.id
+          AND r.status = 'FAILED'
+          AND r.started_at > GREATEST(
+            COALESCE(
+              (SELECT max(ok.started_at) FROM scrape_runs ok
+               WHERE ok.source_id = s.id AND ok.status = 'SUCCESS'),
+              '-infinity'::timestamp
+            ),
+            -- Only recent failures count, so a source that was broken by an
+            -- outage on our side isn't held at the ceiling once it's fixed.
+            now() - make_interval(secs => ${this.failureWindowSeconds})
+          )
+      ) f
       WHERE s.enabled = true
         AND NOT s.is_ad_hoc
         AND (
           s.last_run_at IS NULL
           OR s.last_run_at <= now() - make_interval(
-            secs => GREATEST(s.poll_interval_seconds, ${this.minPollIntervalSeconds})
+            secs => LEAST(
+              GREATEST(s.poll_interval_seconds, ${this.minPollIntervalSeconds})
+                * POWER(2, LEAST(f.consecutive_failures, 10))::int,
+              ${this.maxBackoffSeconds}
+            )
           )
         )
         AND NOT EXISTS (

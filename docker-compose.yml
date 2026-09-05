@@ -43,7 +43,11 @@ services:
     ports:
       - "3001:3001"
 
-    mem_limit: 250m
+    mem_limit: 350m
+
+    depends_on:
+      ai:
+        condition: service_healthy
 
     restart: unless-stopped
 
@@ -77,16 +81,17 @@ services:
     # start_period is long because the first boot downloads ~1 GB from
     # HuggingFace into the ai-models volume; /health answers "warming" until
     # that completes, and only reports "ok" once the model is resident.
+    # Reduced from 900s to 600s: healthcheck should start failing faster if warmup hangs.
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)
+        - import urllib.request, json; data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)); exit(0 if data.get('status') in ('ok','warming') else 1)
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 900s
+      start_period: 600s
 
     restart: unless-stopped
 

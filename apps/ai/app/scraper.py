@@ -35,10 +35,10 @@ from xml.etree import ElementTree as ET
 import httpx
 import nepali_datetime
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 
-from app import config
+from app import browser_pool, config
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -474,7 +474,9 @@ Rules:
 
 
 async def _detect_schema_llm(html: str, category: str) -> dict | None:
-    if not config.GROQ_API_KEY:
+    # Support both single-key and rotation modes (config.GROQ_API_KEYS)
+    groq_key = config.GROQ_API_KEY or (config.GROQ_API_KEYS[0] if config.GROQ_API_KEYS else None)
+    if not groq_key:
         return None
 
     soup = BeautifulSoup(html, "html.parser")
@@ -501,7 +503,7 @@ async def _detect_schema_llm(html: str, category: str) -> dict | None:
             response = await client.post(
                 GROQ_API_URL,
                 headers={
-                    "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                    "Authorization": f"Bearer {groq_key}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
@@ -630,6 +632,10 @@ _CRAWL_MAX_ATTEMPTS = 3
 _CRAWL_BACKOFF_BASE_SECONDS = 2.0
 
 
+class BrowserUnavailable(RuntimeError):
+    """The pooled browser died — the run cannot continue on this handle."""
+
+
 def _is_transient_crawl_error(message: str | None) -> bool:
     if not message:
         return False
@@ -665,6 +671,11 @@ async def _arun_with_retry(
             # An exception leaves no result object for the caller to inspect.
             last_error = str(e)
             result = None
+
+        # A dead browser fails every remaining URL identically, so stop the run
+        # and let the pool relaunch rather than retrying against a dead handle.
+        if browser_pool.is_browser_failure(last_error):
+            raise BrowserUnavailable(last_error or "browser unavailable")
 
         if attempt == _CRAWL_MAX_ATTEMPTS or not _is_transient_crawl_error(last_error):
             break
@@ -2099,13 +2110,11 @@ async def scrape_source(
     summarize_tasks: list[asyncio.Task] = []
     semaphore = _summarize_semaphore(summarize_concurrency)
 
-    browser_config = BrowserConfig(headless=True, verbose=False)
-
     # Listing pages themselves are never items — a "Notices" link inside the
     # notices page is pagination/self-reference, not a notice.
     listing_urls = {u for u in category_urls.values() if u}
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with browser_pool.crawler_session() as crawler:
         for category, listing_url in category_urls.items():
             if not listing_url:
                 continue
@@ -2409,8 +2418,7 @@ async def scrape_sitemap_urls(
     # from the first URL so a per-item fallback is rarely needed.
     default_category, default_slug = _infer_category_from_slug(_sitemap_section(urls))
 
-    browser_config = BrowserConfig(headless=True, verbose=False)
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with browser_pool.crawler_session() as crawler:
         for index, source_url in enumerate(urls):
             if not source_url or source_url in seen_urls:
                 continue

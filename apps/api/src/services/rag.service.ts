@@ -37,6 +37,20 @@ export class RagService {
     userId?: string,
   ): Promise<RagQueryResult> {
     try {
+      // Enforce ownership before hitting AI service to avoid leaking private doc existence via AI behavior
+      if (documentId) {
+        const doc = await this.prisma.document.findUnique({
+          where: { id: documentId },
+          select: { isSystem: true, uploadedBy: true },
+        });
+        if (doc && !doc.isSystem && doc.uploadedBy !== userId) {
+          return {
+            answer: 'This document is not available for querying.',
+            sources: [],
+            model_used: 'none',
+          };
+        }
+      }
       // Determine which doc_ids this user is allowed to query
       const allowedDocIds = await this.getAllowedDocIds(userId, documentId);
 
@@ -87,14 +101,25 @@ export class RagService {
    * Get the list of document IDs the user is allowed to query.
    * - Anonymous users: only system docs
    * - Logged-in users: system docs + their own docs
-   * - If a specific documentId is provided, we trust the caller (controller
-   *   can add ownership checks if needed).
+   * - If a specific documentId is provided, the caller must have verified
+   *   ownership; this method now also enforces it as defense-in-depth.
    */
   private async getAllowedDocIds(
     userId?: string,
     specificDocId?: string,
   ): Promise<string[] | null> {
-    if (specificDocId) return null; // Single doc query, no filtering needed
+    if (specificDocId) {
+      // Defense-in-depth: even when a single doc is targeted, verify the
+      // caller is allowed to read it. Prevents ID enumeration of private docs.
+      const doc = await this.prisma.document.findUnique({
+        where: { id: specificDocId },
+        select: { isSystem: true, uploadedBy: true },
+      });
+      if (!doc) throw new Error('Document not found');
+      const allowed = doc.isSystem || (userId && doc.uploadedBy === userId);
+      if (!allowed) throw new Error('Access denied to this document');
+      return null; // Single doc query, no filtering needed
+    }
 
     const where = userId
       ? { OR: [{ isSystem: true }, { uploadedBy: userId }] }

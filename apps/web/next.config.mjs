@@ -3,10 +3,11 @@ const nextConfig = {
   output: "standalone",
   
   typescript: {
-    ignoreBuildErrors: true,
+    // Fail builds on type errors in CI/production; ignore only in dev for speed.
+    ignoreBuildErrors: process.env.NODE_ENV !== "production",
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: process.env.NODE_ENV !== "production",
   },
   async redirects() {
     return [

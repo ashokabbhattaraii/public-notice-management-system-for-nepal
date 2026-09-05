@@ -150,17 +150,24 @@ def _select_context(results: list[dict], top_k: int) -> list[dict]:
     Then merge adjacent chunks from the same document/page/section for
     coherent citations with page-range output."""
     selected: list[dict] = []
-    seen_keys: set[str] = set()
+    seen_chunk_keys: set[tuple[str, int]] = set()
+    seen_content_hashes: set[str] = set()
 
     for r in results:
         if r["score"] < config.RAG_SCORE_THRESHOLD:
             continue
-        # Overlapping chunks share their boundary text; a normalized prefix is
-        # a cheap near-duplicate signal.
-        key = " ".join(r["content"].split())[:120].lower()
-        if key in seen_keys:
+        # Primary dedup: same doc + chunk_index (exact duplicate)
+        chunk_key = (r.get("doc_id", ""), r.get("chunk_index", -1))
+        if chunk_key in seen_chunk_keys:
             continue
-        seen_keys.add(key)
+        seen_chunk_keys.add(chunk_key)
+        # Secondary dedup: hash of normalized full content (handles re-indexed
+        # chunks) — only drops exact content duplicates, not shared prefixes.
+        import hashlib
+        content_hash = hashlib.md5(" ".join(r["content"].split()).lower().encode()).hexdigest()
+        if content_hash in seen_content_hashes:
+            continue
+        seen_content_hashes.add(content_hash)
         selected.append(r)
         if len(selected) >= top_k:
             break

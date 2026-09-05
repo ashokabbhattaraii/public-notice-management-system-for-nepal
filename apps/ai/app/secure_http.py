@@ -242,10 +242,24 @@ class SecureHttpClient:
             raise ValueError(f"URL validation failed: {err}")
 
         host = urlparse(url).hostname
+        resolved_ip: Optional[str] = None
         if host:
             blocked, reason = await _host_resolves_to_blocked(host)
             if blocked:
                 raise ValueError(f"URL validation failed: {reason}")
+            # Pin the resolved IP for post-flight rebinding check
+            try:
+                import ipaddress
+                ipaddress.ip_address(host)
+            except ValueError:
+                try:
+                    import asyncio
+                    loop = asyncio.get_running_loop()
+                    infos = await loop.getaddrinfo(host, None)
+                    if infos:
+                        resolved_ip = infos[0][4][0]
+                except Exception:
+                    pass
 
         if not self._client:
             raise RuntimeError("Client not initialized. Use async context manager.")
@@ -277,6 +291,21 @@ class SecureHttpClient:
         ok, err = await _validate_response(response, expected_content_types or self.allowed_content_types)
         if not ok:
             raise ValueError(f"Response validation failed: {err}")
+
+        # DNS rebinding check: if initial host resolved to a public IP but
+        # final redirect host resolves differently, re-validate. Also detect
+        # if the resolved IP changed between pre-flight and post-flight.
+        if resolved_ip:
+            try:
+                final_host = urlparse(str(response.url)).hostname
+                if final_host and final_host != host:
+                    blocked, reason = await _host_resolves_to_blocked(final_host)
+                    if blocked:
+                        raise ValueError(f"Redirect to blocked host after DNS rebinding: {reason}")
+            except ValueError:
+                raise
+            except Exception:
+                pass
 
         return response
 

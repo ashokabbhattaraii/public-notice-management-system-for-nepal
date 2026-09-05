@@ -344,6 +344,17 @@ export class ScrapingService {
       orderBy: { createdAt: 'asc' },
     });
 
+    // One query for all active RUNNING runs instead of N sequential findActiveRun calls
+    const activeRuns = await this.prisma.scrapeRun.findMany({
+      where: {
+        status: ScrapeRunStatus.RUNNING,
+        startedAt: { gte: new Date(Date.now() - this.staleRunTimeoutSeconds * 1000) },
+        sourceId: { not: null },
+      },
+      select: { sourceId: true },
+    });
+    const activeSourceIds = new Set(activeRuns.map((r) => r.sourceId!));
+
     const results: {
       sourceId: string;
       sourceName: string;
@@ -356,14 +367,15 @@ export class ScrapingService {
         results.push({ sourceId: source.id, sourceName: source.name, runId: null, status: 'disabled' });
         continue;
       }
-      const active = await this.findActiveRun(source.id);
-      if (active) {
+      if (activeSourceIds.has(source.id)) {
         results.push({ sourceId: source.id, sourceName: source.name, runId: null, status: 'already-running' });
         continue;
       }
       try {
         const { runId } = await this.runSource(source.id, categories);
         results.push({ sourceId: source.id, sourceName: source.name, runId, status: 'scheduled' });
+        // Mark as active immediately to avoid double-scheduling within this same batch loop
+        activeSourceIds.add(source.id);
       } catch {
         // A source could race into a RUNNING state between the check above
         // and runSource — never fail the whole batch for that.

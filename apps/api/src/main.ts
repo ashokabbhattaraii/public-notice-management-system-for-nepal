@@ -33,6 +33,24 @@ async function bootstrap() {
   // gzip/brotli response compression — biggest single win for JSON payloads.
   app.use(compression({ threshold: 1024 }));
 
+  // CSRF hardening: state-changing requests must carry Origin/Referer from an allowed web origin.
+  // Cookie-authenticated POST/PUT/PATCH/DELETE without a valid Origin is likely a cross-site form submission.
+  // Bearer-token requests (Authorization header) are exempt — they require JS and are not auto-sent by browsers.
+  app.use((req: any, res: any, next: any) => {
+    const method = req.method?.toUpperCase();
+    const needsCsrfCheck = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    const hasBearer = !!req.headers.authorization?.startsWith('Bearer ');
+    const hasCookie = !!req.headers.cookie?.includes('pnm_token');
+    if (needsCsrfCheck && hasCookie && !hasBearer) {
+      const origin = req.headers.origin || req.headers.referer || '';
+      const allowed = filteredOrigins.some((o) => origin.startsWith(o));
+      if (!allowed && origin) {
+        return res.status(403).json({ statusCode: 403, message: 'CSRF check failed: invalid origin', error: 'Forbidden' });
+      }
+    }
+    next();
+  });
+
   // Strict CORS: only the configured web origins may call the API, with
   // credentials (cookies) and the headers the app actually uses. Origins are
   // taken from WEB_ORIGIN (comma-separated) so production can list the real
@@ -40,19 +58,24 @@ async function bootstrap() {
   // The live production domains are always allowed so a missing/stale
   // WEB_ORIGIN in the deployed env can't break the browser app.
   const productionOrigins = ['https://suchanaai.tech', 'https://www.suchanaai.tech'];
+  const isProd = process.env.NODE_ENV === 'production';
 
   const webOrigins = Array.from(
     new Set(
-      (process.env.WEB_ORIGIN ?? 'http://localhost:3535')
+      (process.env.WEB_ORIGIN ?? (isProd ? '' : 'http://localhost:3535'))
         .split(',')
         .map((origin) => origin.trim())
         .filter(Boolean)
         .concat(productionOrigins),
     ),
   );
+  // In production, localhost should never be an allowed origin unless explicitly set
+  const filteredOrigins = isProd
+    ? webOrigins.filter((o) => !o.includes('localhost') || (process.env.WEB_ORIGIN ?? '').includes('localhost'))
+    : webOrigins;
 
   app.enableCors({
-    origin: webOrigins,
+    origin: filteredOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],

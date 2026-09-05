@@ -307,6 +307,8 @@ model ScrapedItem {
   @@index([category])
   @@index([publishedAt])
   @@index([sourceId])
+  @@index([category, publishedAt])
+  @@index([sourceId, publishedAt])
   @@map("scraped_items")
 }
 
@@ -571,4 +573,14 @@ model UsageEvent {
   @@index([userId, createdAt])
   @@index([metric, createdAt])
   @@map("usage_events")
+}
+
+// Revoked JWT hashes — DB-backed for cross-restart / multi-replica safety.
+// See TokenRevocationService.
+model RevokedToken {
+  tokenHash String   @id @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("revoked_tokens")
 }

@@ -124,6 +124,17 @@ OCR_MAX_CONCURRENCY: int = _env_int("OCR_MAX_CONCURRENCY", 1)
 # sent per-run by the API; this only applies when the API passes no value.
 SUMMARIZE_CONCURRENCY: int = _env_int("SUMMARIZE_CONCURRENCY", 2)
 
+# Process-wide cap on concurrent headless-browser crawl sessions. Every scrape
+# used to launch its own Chromium; with the scheduler polling ~30 sources the
+# constant launch/teardown churn exhausted the host's process table and every
+# run died with "[Errno 11] Resource temporarily unavailable". Sessions now
+# share one pooled browser and queue behind this semaphore.
+SCRAPE_BROWSER_CONCURRENCY: int = _env_int("SCRAPE_BROWSER_CONCURRENCY", 2)
+
+# Recycle the pooled browser after this many sessions so a slow Chromium leak
+# can't grow unbounded in a long-lived process.
+SCRAPE_BROWSER_MAX_SESSIONS: int = _env_int("SCRAPE_BROWSER_MAX_SESSIONS", 200)
+
 UPLOAD_DIR: str = _env("UPLOAD_DIR", "./data/uploads")
 
 # The live production domains are always allowed so a missing/stale

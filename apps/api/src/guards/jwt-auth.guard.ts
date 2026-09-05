@@ -17,8 +17,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   async canActivate(context: any) {
     const req = context.switchToHttp().getRequest();
     const token = extractToken(req);
-    if (token && this.revoked.isRevoked(token)) {
-      throw new UnauthorizedException('Session was revoked — sign in again');
+    if (token) {
+      const revoked = await (this.revoked.isRevokedAsync
+        ? this.revoked.isRevokedAsync(token)
+        : (this.revoked.isRevoked(token) as any));
+      if (revoked) throw new UnauthorizedException('Session was revoked — sign in again');
     }
     return (await super.canActivate(context)) as boolean;
   }

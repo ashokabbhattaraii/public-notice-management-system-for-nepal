@@ -38,10 +38,10 @@ export class AuthController {
   // Revoke the current session server-side and drop the session cookie.
   // Idempotent: safe to call without a valid session (client logout cleanup).
   @Post('logout')
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Res({ passthrough: true }) res: Response) {
     const token = extractToken(res.req as any);
     if (token) {
-      this.revoked.revoke(token);
+      await this.revoked.revoke(token);
     }
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };

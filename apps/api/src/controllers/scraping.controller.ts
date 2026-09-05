@@ -137,8 +137,8 @@ export class ScrapingController {
       dateTo,
       sortBy,
       sortOrder,
-      page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 20,
+      page: Math.max(1, parseInt(page ?? '1', 10) || 1),
+      limit: Math.min(100, Math.max(1, parseInt(limit ?? '20', 10) || 20)),
     });
   }
 
@@ -192,8 +192,8 @@ export class ScrapingController {
     return this.scrapingService.listRuns({
       sourceId,
       status,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
+      page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
+      limit: limit ? Math.min(100, Math.max(1, parseInt(limit, 10) || 20)) : undefined,
     });
   }
 

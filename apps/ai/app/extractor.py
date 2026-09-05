@@ -52,11 +52,17 @@ def _check_tesseract() -> bool:
     return _TESSERACT_AVAILABLE
 
 
+_TESSERACT_LANGS_CACHE_TIME: float | None = None
+_TESSERACT_LANGS_TTL_SECONDS = 300
+
 def _get_tesseract_langs() -> list[str]:
-    """Get list of available Tesseract languages on the system."""
-    global _TESSERACT_LANGS_CACHE
-    if _TESSERACT_LANGS_CACHE is not None:
-        return _TESSERACT_LANGS_CACHE
+    """Get list of available Tesseract languages on the system (cached 5m)."""
+    global _TESSERACT_LANGS_CACHE, _TESSERACT_LANGS_CACHE_TIME
+    import time
+    now = time.time()
+    if _TESSERACT_LANGS_CACHE is not None and _TESSERACT_LANGS_CACHE_TIME is not None:
+        if now - _TESSERACT_LANGS_CACHE_TIME < _TESSERACT_LANGS_TTL_SECONDS:
+            return _TESSERACT_LANGS_CACHE
 
     try:
         result = subprocess.run(
@@ -70,11 +76,13 @@ def _get_tesseract_langs() -> list[str]:
             lines = result.stdout.strip().split("\n")
             if len(lines) > 1:
                 _TESSERACT_LANGS_CACHE = lines[1:]
+                _TESSERACT_LANGS_CACHE_TIME = now
                 return _TESSERACT_LANGS_CACHE
     except Exception as e:
         logger.warning("Failed to list Tesseract languages: %s", e)
 
     _TESSERACT_LANGS_CACHE = []
+    _TESSERACT_LANGS_CACHE_TIME = now
     return _TESSERACT_LANGS_CACHE
 
 
@@ -546,8 +554,15 @@ def _extract_pdf(path: Path) -> dict:
             best[0],
             sparse,
         )
-        if _OCR_SEMAPHORE._value <= 0:  # noqa: SLF001 — best-effort log only
-            logger.info("OCR queue full (max %d concurrent) — waiting for a slot", config.OCR_MAX_CONCURRENCY)
+        # Non-blocking check if semaphore is exhausted (threading.Semaphore has no public peek)
+        try:
+            acquired = _OCR_SEMAPHORE.acquire(blocking=False)
+            if acquired:
+                _OCR_SEMAPHORE.release()
+            else:
+                logger.info("OCR queue full (max %d concurrent) — waiting for a slot", config.OCR_MAX_CONCURRENCY)
+        except Exception:
+            pass
         with _OCR_SEMAPHORE:
             ocr = _ocr_pdf(path, page_count or 1)
         if ocr["text"].strip():

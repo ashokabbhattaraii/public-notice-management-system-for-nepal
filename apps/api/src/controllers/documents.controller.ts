@@ -43,11 +43,17 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 /**
- * Embeddable document ceiling. Every uploaded file is chunked and embedded
- * (CPU-bound, and the AI container runs under a hard memory limit), so the cap
- * is a capacity decision, not a storage one. Override with MAX_UPLOAD_MB.
+ * Embeddable document ceiling. This is the *infrastructure* hard cap — the
+ * largest file the AI pipeline (memory, Qdrant) can handle. Per-plan limits
+ * (5 MB FREE, up to maxUploadMb for paid tiers) are enforced separately by
+ * QuotaService.assertCanAddDocument, which returns 402 with upgrade guidance.
+ * Set to the maximum of all plan maxUploadMb values so a paid user is never
+ * blocked by this ceiling before the plan-aware check.
+ *
+ * Default 20 MB covers all current tiers; raise via MAX_UPLOAD_MB env if a
+ * plan is configured larger.
  */
-export const MAX_FILE_SIZE_MB = Number(process.env.MAX_UPLOAD_MB ?? 5);
+export const MAX_FILE_SIZE_MB = Number(process.env.MAX_UPLOAD_MB ?? 20);
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 /**
@@ -120,10 +126,9 @@ export class DocumentsController {
       );
     }
 
-    // Plan enforcement: document count and the per-tier upload size. Checked
-    // before any work so a refused upload never reaches S3 or consumes
-    // allowance. Throws 402 with a `quota` body the UI turns into a targeted
-    // upgrade prompt.
+    // Multer's hard cap is the infrastructure ceiling; the plan-aware limit
+    // gives the user a 402 with quota details and an upgrade CTA. Check the
+    // plan first so the error is actionable (Multer's 413 is generic).
     await this.quota.assertCanAddDocument(user.id, file.size);
 
     // Compute SHA-256 hash for deduplication
@@ -146,16 +151,28 @@ export class DocumentsController {
     // content already works independently via the fileHash column below.
     const docId = uuidv4();
 
-    const document = await this.documentsService.create({
-      id: docId,
-      title: dto.title,
-      filename: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: file.size,
-      buffer: file.buffer,
-      uploadedBy: user.id,
-      fileHash: fileHash,
-    });
+    let document;
+    try {
+      document = await this.documentsService.create({
+        id: docId,
+        title: dto.title,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        buffer: file.buffer,
+        uploadedBy: user.id,
+        fileHash: fileHash,
+      });
+    } catch (e: any) {
+      // Race: another concurrent upload with same hash won the unique constraint
+      if (e?.code === 'P2002' && e?.meta?.target?.includes('file_hash')) {
+        const raced = await this.documentsService.findByHash(fileHash);
+        if (raced) {
+          return { ...raced, deduplicated: true };
+        }
+      }
+      throw e;
+    }
 
     // Recorded only once the document exists — a deduplicated or rejected
     // upload must not spend allowance.

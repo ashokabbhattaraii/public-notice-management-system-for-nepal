@@ -8,6 +8,7 @@ from typing import Optional
 from urllib.parse import unquote
 
 from app import ai_config_sync
+from app import browser_pool
 from app import chunker
 from app import config
 from app import embeddings
@@ -283,6 +284,7 @@ async def _handle_lifespan(scope, receive, send):
                 warmup_task.cancel()
             if ai_config_task and not ai_config_task.done():
                 ai_config_task.cancel()
+            await browser_pool.shutdown()
             await send({"type": "lifespan.shutdown.complete"})
             return
 

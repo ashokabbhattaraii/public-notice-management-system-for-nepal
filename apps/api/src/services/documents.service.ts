@@ -123,16 +123,40 @@ export class DocumentsService {
   async remove(id: string): Promise<void> {
     const document = await this.findOne(id);
 
-    // Try to remove from AI service vector store
-    try {
-      await firstValueFrom(
-        this.httpService.delete(`${this.aiServiceUrl}/documents/${id}`),
-      );
-    } catch (err: any) {
-      this.logger.warn(
-        `Failed to delete document ${id} from AI service: ${err.message}`,
-      );
-      // Continue with local deletion even if AI service fails
+    // Try to remove from AI service vector store with retries.
+    // If AI is temporarily down, we still delete S3/DB but queue a
+    // background retry so orphan vectors don't linger in Qdrant.
+    let vectorDeleted = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await firstValueFrom(
+          this.httpService.delete(`${this.aiServiceUrl}/documents/${id}`, {
+            timeout: 5000,
+          }),
+        );
+        vectorDeleted = true;
+        break;
+      } catch (err: any) {
+        const status = err.response?.status;
+        // 404 means already gone — treat as success
+        if (status === 404) {
+          vectorDeleted = true;
+          break;
+        }
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        this.logger.warn(
+          `Failed to delete document ${id} from AI service after 3 attempts: ${err.message}`,
+        );
+      }
+    }
+
+    if (!vectorDeleted) {
+      // Fire-and-forget background reconciliation: retry after 30s and 5m
+      setTimeout(() => void this.retryVectorDelete(id, 1), 30_000);
+      setTimeout(() => void this.retryVectorDelete(id, 2), 5 * 60_000);
     }
 
     // Delete the file from S3 (best-effort — deleteObject swallows its own errors)
@@ -140,6 +164,21 @@ export class DocumentsService {
 
     // Delete from database
     await this.prisma.document.delete({ where: { id } });
+  }
+
+  private async retryVectorDelete(id: string, attempt: number): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.httpService.delete(`${this.aiServiceUrl}/documents/${id}`, {
+          timeout: 5000,
+        }),
+      );
+      this.logger.log(`Background vector delete succeeded for ${id} (attempt ${attempt})`);
+    } catch (err: any) {
+      const status = err.response?.status;
+      if (status === 404) return; // already gone
+      this.logger.warn(`Background vector delete failed for ${id} attempt ${attempt}: ${err.message}`);
+    }
   }
 
   /** Re-embed a document's file into the vector store. */
@@ -410,18 +449,25 @@ export class DocumentsService {
    * client-side timeout, to catch a late-arriving success and correct a
    * stale FAILED status. Bounded: gives up after ~10 extra minutes, matching
    * the original processing budget.
+   *
+   * In-memory setTimeout is lost on API restart — the stale FAILED row remains
+   * but is self-healing: the next /documents/:id/progress poll also checks
+   * Qdrant, and an explicit re-embed resolves it. For durability across
+   * restarts, a periodic cron could scan FAILED docs older than 5m.
    */
   private scheduleReconciliation(documentId: string, attempt = 0): void {
     const maxAttempts = 20;
     const intervalMs = 30_000;
     if (attempt >= maxAttempts) {
-      this.logger.warn(`Reconciliation for document ${documentId} gave up after ${maxAttempts} attempts`);
+      this.logger.warn(`Reconciliation for document ${documentId} gave up after ${maxAttempts} attempts — will remain FAILED until manual re-embed`);
       return;
     }
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       void this.reconcileOnce(documentId, attempt);
     }, intervalMs);
+    // Don't block process exit on this timer
+    if (timer.unref) timer.unref();
   }
 
   private async reconcileOnce(documentId: string, attempt: number): Promise<void> {

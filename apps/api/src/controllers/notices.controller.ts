@@ -29,6 +29,8 @@ export class NoticesController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    const parsedPage = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const parsedLimit = limit ? Math.min(100, Math.max(1, parseInt(limit, 10) || 20)) : undefined;
     return this.noticesService.findAll({
       category,
       sourceId,
@@ -39,8 +41,8 @@ export class NoticesController {
       urgency,
       sortBy,
       sortOrder,
-      page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : undefined,
+      page: parsedPage,
+      limit: parsedLimit,
     });
   }
 
@@ -73,7 +75,8 @@ export class NoticesController {
   /** Minimal id/slug/updatedAt feed for the web app's public sitemap.xml. */
   @Get('meta/sitemap')
   async sitemapFeed(@Query('limit') limit?: string) {
-    return this.noticesService.sitemapFeed(limit ? Number(limit) : undefined);
+    const parsedLimit = limit ? Math.min(50000, Math.max(1, parseInt(limit, 10) || 5000)) : undefined;
+    return this.noticesService.sitemapFeed(parsedLimit);
   }
 
   @Get('meta/sources')

@@ -68,21 +68,38 @@ export class QuotaService {
     throw new QuotaExceededException(denial);
   }
 
-  /** Monthly AI questions: RAG chat, notice Q&A and the public chatbot. */
+  /** Monthly AI questions: RAG chat, notice Q&A and the public chatbot.
+   *  Uses FOR UPDATE on the counter row to serialize concurrent checks for the
+   *  same user/month.
+   */
   async assertCanAskAi(userId: string): Promise<void> {
     const { plan, limits } = await this.plans.effectivePlanFor(userId);
     if (limits.maxAiQuestionsPerMonth === null) return;
 
-    const used = await this.usage.currentCount(userId, UsageMetric.AI_QUESTION);
-    if (used >= limits.maxAiQuestionsPerMonth) {
-      this.deny({
-        kind: 'ai_questions',
-        limit: limits.maxAiQuestionsPerMonth,
-        used,
-        tier: plan.tier,
-        message: `You've used all ${limits.maxAiQuestionsPerMonth} AI questions included in ${plan.name} this month. Upgrade for a bigger allowance.`,
+    const periodStart = this.usage.currentPeriodStart();
+    await this.prisma.$transaction(async (tx) => {
+      // Lock the counter row if it exists; otherwise lock the user row to serialize first creation.
+      const existing = await tx.usageCounter.findUnique({
+        where: { userId_metric_periodStart: { userId, metric: UsageMetric.AI_QUESTION, periodStart } },
+        select: { count: true },
       });
-    }
+      if (existing) {
+        await tx.$executeRaw`SELECT 1 FROM "usage_counters" WHERE user_id = ${userId}::uuid AND metric = ${UsageMetric.AI_QUESTION}::"UsageMetric" AND period_start = ${periodStart}::timestamptz FOR UPDATE`;
+      } else {
+        await tx.$executeRaw`SELECT 1 FROM "users" WHERE id = ${userId}::uuid FOR UPDATE`;
+      }
+      const used = existing?.count ?? 0;
+      const limit = limits.maxAiQuestionsPerMonth!;
+      if (used >= limit) {
+        this.deny({
+          kind: 'ai_questions',
+          limit,
+          used,
+          tier: plan.tier,
+          message: `You've used all ${limit} AI questions included in ${plan.name} this month. Upgrade for a bigger allowance.`,
+        });
+      }
+    });
   }
 
   recordAiQuestion(userId: string, context?: Record<string, unknown>) {
@@ -92,6 +109,10 @@ export class QuotaService {
   /**
    * Documents are a *stock*, not a flow: the cap is on how many a user keeps
    * embedded at once, so deleting one frees a slot.
+   *
+   * Uses SELECT FOR UPDATE on the user row to serialize concurrent uploads
+   * for the same user — prevents TOCTOU where two parallel requests both see
+   * count=limit-1 and both succeed.
    */
   async assertCanAddDocument(userId: string, fileSizeBytes?: number): Promise<void> {
     const { plan, limits } = await this.plans.effectivePlanFor(userId);
@@ -111,16 +132,21 @@ export class QuotaService {
 
     if (limits.maxDocuments === null) return;
 
-    const owned = await this.prisma.document.count({ where: { uploadedBy: userId } });
-    if (owned >= limits.maxDocuments) {
-      this.deny({
-        kind: 'documents',
-        limit: limits.maxDocuments,
-        used: owned,
-        tier: plan.tier,
-        message: `${plan.name} includes ${limits.maxDocuments} documents and you have ${owned}. Delete one or upgrade to add more.`,
-      });
-    }
+    // Serialize per-user document count checks via row-level lock.
+    const docLimit = limits.maxDocuments!;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT 1 FROM "users" WHERE id = ${userId}::uuid FOR UPDATE`;
+      const owned = await tx.document.count({ where: { uploadedBy: userId } });
+      if (owned >= docLimit) {
+        this.deny({
+          kind: 'documents',
+          limit: docLimit,
+          used: owned,
+          tier: plan.tier,
+          message: `${plan.name} includes ${docLimit} documents and you have ${owned}. Delete one or upgrade to add more.`,
+        });
+      }
+    });
   }
 
   recordDocumentUpload(userId: string, context?: Record<string, unknown>) {
@@ -132,16 +158,20 @@ export class QuotaService {
     const { plan, limits } = await this.plans.effectivePlanFor(userId);
     if (limits.maxAlertRules === null) return;
 
-    const owned = await this.prisma.alertRule.count({ where: { userId } });
-    if (owned >= limits.maxAlertRules) {
-      this.deny({
-        kind: 'alert_rules',
-        limit: limits.maxAlertRules,
-        used: owned,
-        tier: plan.tier,
-        message: `${plan.name} includes ${limits.maxAlertRules} alert rules and you have ${owned}. Delete one or upgrade for more.`,
-      });
-    }
+    const ruleLimit = limits.maxAlertRules!;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT 1 FROM "users" WHERE id = ${userId}::uuid FOR UPDATE`;
+      const owned = await tx.alertRule.count({ where: { userId } });
+      if (owned >= ruleLimit) {
+        this.deny({
+          kind: 'alert_rules',
+          limit: ruleLimit,
+          used: owned,
+          tier: plan.tier,
+          message: `${plan.name} includes ${ruleLimit} alert rules and you have ${owned}. Delete one or upgrade for more.`,
+        });
+      }
+    });
   }
 
   /**

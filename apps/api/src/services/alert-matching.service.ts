@@ -107,8 +107,12 @@ export class AlertMatchingService {
           user: { whatsappAlertsEnabled: true, whatsappVerified: true },
         },
         include: { user: true },
+        take: 5000, // safe cap; log if truncated to surface needed pagination
       });
       if (rules.length === 0) return;
+      if (rules.length >= 5000) {
+        this.logger.warn(`Alert evaluate hit cap 5000 rules for item ${item.id} — some rules were not checked; consider pagination`);
+      }
 
       // A user should get at most one message per notice, even if several of
       // their rules independently match it — first match wins.

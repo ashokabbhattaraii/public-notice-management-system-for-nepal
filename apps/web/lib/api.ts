@@ -332,9 +332,21 @@ export function formatPlanPrice(cents: number, currency: string): string {
  * per host, so a poll timer that fires again before its previous request came
  * back (slow API, backgrounded tab) queues duplicates until nothing else — a
  * chat query, a page load — can get through. Identical GETs therefore share
- * one request instead of stacking.
+ * one request instead of stacking. Entries auto-expire after 8s to prevent a
+ * hung request from blocking retries indefinitely.
  */
-const inFlightGets = new Map<string, Promise<unknown>>()
+const inFlightGets = new Map<string, { promise: Promise<unknown>; startedAt: number }>()
+const IN_FLIGHT_TTL_MS = 8000
+
+function getPending<T>(path: string): Promise<T> | undefined {
+  const entry = inFlightGets.get(path)
+  if (!entry) return undefined
+  if (Date.now() - entry.startedAt > IN_FLIGHT_TTL_MS) {
+    inFlightGets.delete(path)
+    return undefined
+  }
+  return entry.promise as Promise<T>
+}
 
 /** Authenticated fetch - attaches the bearer token when present. */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -343,11 +355,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   // must not be handed a shared promise someone else can abort.
   if (method !== "GET" || init.signal) return requestJson<T>(path, init)
 
-  const pending = inFlightGets.get(path) as Promise<T> | undefined
+  const pending = getPending<T>(path)
   if (pending) return pending
 
-  const request = requestJson<T>(path, init).finally(() => inFlightGets.delete(path))
-  inFlightGets.set(path, request)
+  const startedAt = Date.now()
+  const request = requestJson<T>(path, init).finally(() => {
+    // Only delete if we are still the owner (prevents deleting a newer retry)
+    const cur = inFlightGets.get(path)
+    if (cur?.startedAt === startedAt) inFlightGets.delete(path)
+  })
+  inFlightGets.set(path, { promise: request, startedAt })
   return request
 }
 
@@ -483,13 +500,23 @@ export async function uploadDocument(file: File, title: string): Promise<RagDocu
   form.append("file", file)
   form.append("title", title)
 
-  const res = await fetch(`${API_URL}/documents`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  })
-  if (!res.ok) await throwApiError(res)
-  return res.json()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000)
+  try {
+    const res = await fetch(`${API_URL}/documents`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+      signal: controller.signal,
+    })
+    if (!res.ok) await throwApiError(res)
+    return res.json()
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new NetworkError("Upload timed out — the server took too long to respond. Please try again.")
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function fetchDocuments(

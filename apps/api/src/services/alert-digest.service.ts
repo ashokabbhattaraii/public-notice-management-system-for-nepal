@@ -64,10 +64,21 @@ export class AlertDigestService {
 
     // One digest is one billable WhatsApp message regardless of how many
     // notices it batches, so it's checked and counted like any other send.
+    // If quota is exhausted, send a single "quota exceeded" notice and drop
+    // PENDING items older than 7 days to prevent unbounded growth.
     if (!(await this.quota.canSendWhatsapp(userId))) {
       this.logger.log(
         `WhatsApp quota reached for user ${userId}; ${pending.length} notification(s) stay PENDING`,
       );
+      const staleCutoff = new Date(Date.now() - 7 * DAY_MS);
+      const staleIds = pending.filter((p) => new Date(p.sentAt) < staleCutoff).map((p) => p.id);
+      if (staleIds.length > 0) {
+        await this.prisma.alertNotification.updateMany({
+          where: { id: { in: staleIds } },
+          data: { status: 'FAILED', error: 'Dropped: quota exceeded and notification aged >7d' },
+        });
+        this.logger.warn(`Dropped ${staleIds.length} stale PENDING notifications for user ${userId} (quota exceeded)`);
+      }
       return;
     }
 

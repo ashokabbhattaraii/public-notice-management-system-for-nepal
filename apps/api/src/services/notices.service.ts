@@ -46,6 +46,9 @@ export class NoticesService {
     Number(process.env.NOTICES_META_CACHE_MS ?? 60_000),
   );
 
+  // Debounce view increments to avoid Postgres flood
+  private static readonly viewThrottle = new Map<string, number>();
+
   // Single-flight guard around view-triggered AI enrichment (PDF OCR, LLM
   // summarization). Without it, N users opening the same unanalyzed notice
   // fire N identical AI calls in the same window. Failure backoff (default
@@ -143,9 +146,24 @@ export class NoticesService {
     });
     if (!notice) throw new NotFoundException(`Notice ${id} not found`);
 
-    this.prisma.scrapedItem
-      .update({ where: { id }, data: { views: { increment: 1 } } })
-      .catch(() => undefined);
+    // Throttle view increments: at most once per 30s per notice to prevent
+    // burst traffic (popular notice shared on social) from flooding Postgres
+    // with concurrent increment queries. Best-effort in-memory debounce.
+    const now = Date.now()
+    const last = (NoticesService.viewThrottle.get(id) ?? 0)
+    if (now - last > 30000) {
+      NoticesService.viewThrottle.set(id, now)
+      this.prisma.scrapedItem
+        .update({ where: { id }, data: { views: { increment: 1 } } })
+        .catch(() => undefined);
+      // Prune throttle map to prevent unbounded growth
+      if (NoticesService.viewThrottle.size > 5000) {
+        for (const [k, t] of NoticesService.viewThrottle.entries()) {
+          if (now - t > 60000) NoticesService.viewThrottle.delete(k)
+          if (NoticesService.viewThrottle.size <= 4000) break
+        }
+      }
+    }
 
     // PDF-only notice: contentText comes from OCR, so trigger extraction in
     // the background (legacy notices scraped before extraction was added to

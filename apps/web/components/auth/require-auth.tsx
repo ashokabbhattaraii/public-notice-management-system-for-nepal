@@ -31,6 +31,8 @@ export function RequireAuth({
     if (!user) {
       const target = `/login?redirect=${encodeURIComponent(pathname + (window.location.search ?? ""))}`
       router.replace(target)
+      // Clear any forged token that passed the lax edge check but failed API validation
+      try { localStorage.removeItem("pnm_token"); document.cookie = "pnm_token=; path=/; max-age=0; SameSite=Lax" } catch {}
     } else if (admin && user.role !== "admin") {
       router.replace("/dashboard")
     }

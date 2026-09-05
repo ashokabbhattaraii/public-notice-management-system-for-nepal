@@ -303,9 +303,10 @@ function DocCard({ doc, progress, toggleBusy, canManage, onToggleEmbed, onDelete
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 
-// Must match MAX_UPLOAD_MB on the API — every uploaded file is chunked and
-// embedded, so the ceiling is about embedding capacity, not storage.
-const MAX_UPLOAD_MB = 5
+// Infrastructure hard cap — per-plan limits (FREE 5 MB, paid up to 20+ MB)
+// are enforced server-side via quota (402). Client pre-check uses the hard
+// ceiling to fail fast; the server returns a quota-specific 402 with upgrade CTA.
+const MAX_UPLOAD_MB = 20
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {

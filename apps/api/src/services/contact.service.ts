@@ -79,17 +79,32 @@ export class ContactService {
       }
     }
 
-    // Rate limit by IP
+    // Rate limit by IP (distributed-safe)
     if (meta.ip) {
-      this.enforceRateLimit(meta.ip);
+      await this.enforceRateLimit(meta.ip);
     }
 
-    // Rate limit by email
-    const lastEmail = this.emailThrottle.get(email) ?? 0;
-    if (Date.now() - lastEmail < this.EMAIL_COOLDOWN_MS) {
-      throw new BadRequestException(
-        `Please wait a minute before sending another message from ${email}.`,
-      );
+    // Rate limit by email: DB-backed (distributed) + in-memory fast path
+    try {
+      const recentByEmail = await this.prisma.contactMessage.findFirst({
+        where: { email, createdAt: { gt: new Date(Date.now() - this.EMAIL_COOLDOWN_MS) } },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recentByEmail) {
+        throw new BadRequestException(
+          `Please wait a minute before sending another message from ${email}.`,
+        );
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      this.logger.warn(`Email throttle DB check failed, falling back to memory: ${(e as Error).message}`);
+      const lastEmail = this.emailThrottle.get(email) ?? 0;
+      if (Date.now() - lastEmail < this.EMAIL_COOLDOWN_MS) {
+        throw new BadRequestException(
+          `Please wait a minute before sending another message from ${email}.`,
+        );
+      }
     }
     this.emailThrottle.set(email, Date.now());
 
@@ -206,9 +221,28 @@ export class ContactService {
     }
   }
 
-  private enforceRateLimit(ip: string) {
+  private async enforceRateLimit(ip: string) {
     const now = Date.now();
     const windowStart = now - this.WINDOW_MS;
+
+    // Distributed-safe check: count recent rows in DB (survives restart, multi-replica).
+    // Kept alongside the in-memory fast path to avoid DB pressure under normal volume.
+    try {
+      const since = new Date(windowStart);
+      const dbCount = await this.prisma.contactMessage.count({
+        where: { ip, createdAt: { gt: since } },
+      });
+      if (dbCount >= this.MAX_PER_WINDOW) {
+        throw new BadRequestException(
+          'Too many messages from this address. Please try again later.',
+        );
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      // DB unavailable — fall back to in-memory check below
+      this.logger.warn(`Contact rate-limit DB check failed, falling back to memory: ${(e as Error).message}`);
+    }
+
     const timestamps = (this.rateLimit.get(ip) ?? []).filter((t) => t > windowStart);
     if (timestamps.length >= this.MAX_PER_WINDOW) {
       throw new BadRequestException(

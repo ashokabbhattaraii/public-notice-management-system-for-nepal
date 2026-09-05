@@ -16,12 +16,20 @@ import { TokenRevocationModule } from '../common/token-revocation.module';
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
-        signOptions: {
-          expiresIn: (config.get<string>('JWT_EXPIRES_IN') ?? '7d') as `${number}d`,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret || secret === 'change-me-in-production' || secret.length < 32) {
+          throw new Error(
+            'JWT_SECRET must be set to a strong random value (>=32 chars). Refusing to start with default/weak secret.',
+          );
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (config.get<string>('JWT_EXPIRES_IN') ?? '7d') as `${number}d`,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
 import { TokenRevocationService } from './token-revocation.service';
 
 /**
@@ -17,6 +18,7 @@ import { TokenRevocationService } from './token-revocation.service';
  */
 @Global()
 @Module({
+  imports: [PrismaModule],
   providers: [TokenRevocationService],
   exports: [TokenRevocationService],
 })

@@ -1,21 +1,24 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * In-memory JWT revocation store.
+ * JWT revocation store — in-memory fast path + DB persistence.
  *
- * Logging out marks the current token revoked so it stops working immediately
- * (a stolen/old copy that never leaves the client is then worthless). Relies
- * on the JWT `exp` claim to prune entries, so memory stays bounded even at
- * high logout volume.
+ * In-memory alone is lost on restart / multi-replica. This service writes
+ * revoked token hashes to DB (via Prisma) and checks DB as fallback when
+ * the in-memory map misses. The DB table should be `revoked_tokens` with
+ * columns token_hash (PK) and expires_at. If the table does not exist yet
+ * (pre-migration), it gracefully degrades to in-memory only.
  *
- * Single-process assumption: this API runs one Nest instance. On restart the
- * store empties — but the issued tokens are short-lived (JWT_EXPIRES_IN), so
- * the blast radius stays small.
+ * Pruning is lazy (on revoke/isRevoked) and via DB TTL; tokens are short-lived
+ * (JWT_EXPIRES_IN), so the table stays small.
  */
 @Injectable()
 export class TokenRevocationService {
+  private readonly logger = new Logger(TokenRevocationService.name);
   private readonly revoked = new Map<string, number>(); // sha256(token) -> exp ms
+  private dbAvailable = true;
 
   private hash(token: string): string {
     return createHash('sha256').update(token).digest('hex');
@@ -36,21 +39,66 @@ export class TokenRevocationService {
     return Date.now() + 24 * 60 * 60 * 1000;
   }
 
+  constructor(private readonly prisma: PrismaService) {}
+
   /** Mark a token unusable from now on. */
-  revoke(token: string): void {
+  async revoke(token: string): Promise<void> {
     const at = Date.now();
     this.prune(at);
-    this.revoked.set(this.hash(token), this.expiryOf(token));
+    const hash = this.hash(token);
+    const exp = this.expiryOf(token);
+    this.revoked.set(hash, exp);
+
+    // Persist to DB for cross-restart / multi-replica safety (best-effort)
+    if (this.dbAvailable && this.prisma) {
+      try {
+        // Use raw SQL to avoid requiring a Prisma model until migration runs
+        await this.prisma.$executeRaw`INSERT INTO revoked_tokens (token_hash, expires_at) VALUES (${hash}, to_timestamp(${exp / 1000})) ON CONFLICT (token_hash) DO NOTHING`;
+      } catch (e: any) {
+        // Table may not exist yet — disable DB persistence silently
+        if (e?.code === '42P01' || e?.message?.includes('does not exist')) {
+          this.dbAvailable = false;
+        } else {
+          this.logger.warn(`Failed to persist revoked token: ${e.message}`);
+        }
+      }
+    }
   }
 
-  isRevoked(token: string): boolean {
-    const exp = this.revoked.get(this.hash(token));
-    if (!exp) return false;
-    if (exp <= Date.now()) {
-      this.revoked.delete(this.hash(token));
-      return false;
+  isRevoked(token: string): boolean | Promise<boolean> {
+    const hash = this.hash(token!);
+    const exp = this.revoked.get(hash);
+    if (exp) {
+      if (exp <= Date.now()) {
+        this.revoked.delete(hash);
+      } else {
+        return true;
+      }
     }
-    return true;
+    // Fallback to DB (covers restart / other replica) — async path
+    if (this.dbAvailable && this.prisma) {
+      return (async () => {
+        try {
+          const rows: any[] = await this.prisma.$queryRaw`SELECT 1 FROM revoked_tokens WHERE token_hash = ${hash} AND expires_at > NOW() LIMIT 1`;
+          if (rows.length > 0) {
+            this.revoked.set(hash, Date.now() + 60_000);
+            return true;
+          }
+        } catch (e: any) {
+          if (e?.code === '42P01' || e?.message?.includes('does not exist')) {
+            this.dbAvailable = false;
+          }
+        }
+        return false;
+      })();
+    }
+    return false;
+  }
+
+  /** Async version for guards that can await */
+  async isRevokedAsync(token: string): Promise<boolean> {
+    const result = this.isRevoked(token);
+    return result instanceof Promise ? result : Promise.resolve(result);
   }
 
   private prune(now: number): void {

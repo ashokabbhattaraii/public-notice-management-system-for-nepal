@@ -12,13 +12,30 @@ export const TOKEN_COOKIE = "pnm_token"
  * The cookie is mirrored from the token store on sign-in and cleared on
  * logout/401; the expiry check below only decodes the JWT payload (no secret)
  * so tampered tokens still pass through to the client guard + API, which
- * enforce real authorization.
+ * enforce real authorization. Forged tokens therefore still render the shell
+ * but no data loads (RequireAuth + API 401 will bounce). Admin pages also
+ * have a server-component auth check as defense-in-depth.
+ *
+ * Additional hardening: reject tokens with obviously fake structure (wrong
+ * header, missing iat, exp far in future >30 days) to reduce the window where
+ * a hand-crafted JWT renders protected UI.
  */
 function tokenCookieIsLive(token: string | undefined): boolean {
   if (!token) return false
   const parts = token.split(".")
   if (parts.length !== 3) return false
   try {
+    const headerJson = JSON.parse(
+      decodeURIComponent(
+        atob(parts[0].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (parts[0].length % 4)) % 4))
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join(""),
+      ),
+    )
+    // Reject tokens not using expected alg
+    if (headerJson.alg !== "HS256") return false
+
     const pad = parts[1].replace(/-/g, "+").replace(/_/g, "/")
     const json = decodeURIComponent(
       atob(pad + "=".repeat((4 - (pad.length % 4)) % 4))
@@ -27,7 +44,13 @@ function tokenCookieIsLive(token: string | undefined): boolean {
         .join(""),
     )
     const payload = JSON.parse(json)
-    if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) return false
+    if (typeof payload.exp !== "number" || typeof payload.iat !== "number") return false
+    if (payload.exp * 1000 <= Date.now()) return false
+    // Reject tokens with exp >30 days in future (likely forged; real tokens are 7d)
+    const maxExp = Date.now() + 30 * 24 * 60 * 60 * 1000
+    if (payload.exp * 1000 > maxExp) return false
+    // sub must be a UUID-like string
+    if (typeof payload.sub !== "string" || payload.sub.length < 10) return false
     return true
   } catch {
     return false

@@ -29,6 +29,11 @@ export class UsageService {
     return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1));
   }
 
+  /** Instance helper for transaction-scoped checks. */
+  currentPeriodStart(): Date {
+    return UsageService.periodStart();
+  }
+
   static periodEnd(at: Date = new Date()): Date {
     return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1));
   }

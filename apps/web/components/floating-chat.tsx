@@ -555,38 +555,59 @@ function activeCategoryFromUrl(): string | undefined {
 
 /**
  * Heuristic to determine if a user's question is about the currently viewed
- * notice or a general/unrelated query. Returns true if likely about the
- * current notice.
+ * notice or a general corpus query. Returns true ONLY if the query clearly
+ * refers to the current notice; defaults to false (general search) to avoid
+ * misrouting "latest tender notices" to a single vacancy notice.
  */
 function isNoticeRelatedQuery(query: string, noticeTitle: string): boolean {
-  const q = query.toLowerCase()
+  const q = query.toLowerCase().trim()
 
-  // Explicit signals that the user is asking about something else
+  // Explicit general-corpus signals — never route to single-notice Q&A
   const generalPatterns = [
-    /^(show|find|list|search|get)\s+(me\s+)?(all|latest|recent|other|new)/,
-    /other notices/,
-    /different (notice|topic)/,
-    /what('s| is) (new|happening|latest)/,
-    /how many notices/,
+    /^(show|find|list|search|get)\s+(me\s+)?(all|latest|recent|other|new)\b/,
+    /\bother notices\b/,
+    /\bdifferent (notice|topic)\b/,
+    /\bwhat('s| is) (new|happening|latest)\b/,
+    /\bhow many notices\b/,
+    /\b(latest|recent|newest) .*(tender|vacancy|notice|circular|job)\b/,
+    /\btender notices\b/,
+    /\bvacancy\b.*\bnotices\b/,
   ]
-  if (generalPatterns.some(p => p.test(q))) return false
+  if (generalPatterns.some((p) => p.test(q))) return false
 
-  // Explicit signals about "this" notice
-  const thisNoticePatterns = [
-    /\b(this|the|current)\s+(notice|document|pdf|circular|tender|announcement)/,
-    /\b(it|its|it's)\b/,
-    /^(what|who|when|where|how|why|is|are|does|do|can|should|tell me|explain|summarize|summarise)/,
-    /deadline|due date|last date/,
-    /eligib|qualif|require|criteria/,
-    /apply|application|submit/,
-    /affect|impact|concern/,
-    /contact|phone|email|address/,
-    /fee|cost|amount|salary|payment/,
+  // Strong single-notice signals: explicit deixis or pronoun referring to "this"
+  const strongNoticePatterns = [
+    /\b(this|the|current)\s+(notice|document|pdf|circular|tender|announcement|news)\b/,
+    /\bthis notice\b/,
+    /\bcurrent notice\b/,
   ]
-  if (thisNoticePatterns.some(p => p.test(q))) return true
+  if (strongNoticePatterns.some((p) => p.test(q))) return true
 
-  // If the query is short and question-like, assume it's about the current notice
-  if (q.length < 60 && (q.endsWith("?") || q.split(" ").length <= 8)) return true
+  // Title keyword overlap: query mentions distinctive words from the notice title
+  const titleWords = noticeTitle
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 8)
+  if (titleWords.length > 0 && titleWords.some((w) => q.includes(w))) {
+    // Mentioning the notice's subject + a detail question = likely about this notice
+    const detailPatterns = [
+      /deadline|due date|last date/,
+      /eligib|qualif|require|criteria/,
+      /apply|application|submit/,
+      /fee|cost|amount|salary|payment/,
+      /what.*about|tell me|explain|summarize|summarise/,
+    ]
+    if (detailPatterns.some((p) => p.test(q))) return true
+  }
 
-  return true
+  // Pronouns like "it/its" are too ambiguous alone — only treat as notice-related
+  // when combined with a detail keyword; otherwise default to general search.
+  const pronounWithDetail =
+    /\b(it|its|it's)\b/.test(q) &&
+    /deadline|due date|apply|eligib|require|fee|contact|affect|meaning|about/.test(q)
+  if (pronounWithDetail) return true
+
+  // Default: corpus search. Prevents "latest X" on vacancy page from answering from that one notice.
+  return false
 }
